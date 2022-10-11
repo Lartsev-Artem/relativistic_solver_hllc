@@ -1,0 +1,6 @@
+/.vs
+/x64
+/solver_hllc_illum_cuda/x64
+/solver_hllc_illum_cuda/solver_hllc_illum_cuda.vcxproj 
+/solver_hllc_illum_cuda/solver_hllc_illum_cuda.vcxproj.filters
+/solver_hllc_illum_cuda/solver_hllc_illum_cuda.vcxproj.user

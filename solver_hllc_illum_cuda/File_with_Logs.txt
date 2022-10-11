@@ -1,0 +1,21 @@
+Error:= 1
+Time of iter: 1.54246
+End iter_count number: 0
+Error:= 1
+Time of iter: 4.55713
+End iter_count number: 1
+Error:= 1
+Time of iter: 3.06431
+End iter_count number: 2
+Error:= 1
+Time of iter: 3.2241
+End iter_count number: 3
+Error:= 1
+Time of iter: 2.8856
+End iter_count number: 4
+Error:= 1
+Time of iter: 2.88587
+End iter_count number: 5
+Error:= 1
+Time of iter: 2.61403
+End iter_count number: 6
