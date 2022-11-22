@@ -966,6 +966,7 @@ size_t WriteFileSolution(const std::string& main_dir, const std::vector<Type>& v
 	fwrite(vector_div_impuls.data(), sizeof(Vector3), n, f);
 	fclose(f);
 
+#ifndef RHLLC
 	n = vector_U.size();
 	std::vector<Type> density(n);
 	std::vector<Type> pressure(n);
@@ -981,6 +982,7 @@ size_t WriteFileSolution(const std::string& main_dir, const std::vector<Type>& v
 		const Type v = velocity[i].norm();
 		pressure[i] = (vector_U[i](4) - v * v * d / 2.)* (gamma1 - 1);
 	}
+#endif
 
 	f = fopen((main_dir + "density.bin").c_str(), "wb");
 	n = density.size();
@@ -1169,7 +1171,7 @@ Type NormIllumOmp(const std::vector<Type>& Illum, const std::vector<Type>& Illum
 	{
 		Type buf;
 #pragma omp for
-		for (size_t i = 0; i < n; i++)
+		for (int i = 0; i < n; i++)
 		{
 			buf = fabs(Illum[i] - Illum2[i]);// / fabs(Illum[i]);
 
@@ -1715,7 +1717,7 @@ size_t ReadCompactFastGridDataOptMemory(const int count_dir, const int N, const 
 }
 
 
-size_t ReadCompactFastGridData(const int count_dir, const int N,
+size_t ReadCompactFastGridData(const int count_dir, const int N, const Str_Type& file_logs,
 	Str_Type& name_file_in_faces, Str_Type& name_file_out_faces, Str_Type& name_file_count_out_faces, Str_Type& name_file_local_x0, Str_Type& name_file_x,
 	Str_Type& name_file_s, Str_Type& name_file_id_neighbors, Str_Type& name_file_centers,
 	Str_Type& name_file_dist_try, Str_Type& name_file_id_try, Str_Type& name_file_res, Str_Type& name_file_sizes, Str_Type& name_file_graph,
@@ -1723,32 +1725,70 @@ size_t ReadCompactFastGridData(const int count_dir, const int N,
 	std::vector<cell>& grid, std::vector<int>& neighbours_id_face, std::vector<ShortId>& OutC,
 	std::vector<ShortId>& Out, std::vector<ShortId>& In, std::vector<Type>& S, std::vector<Vector3>& X, std::vector<Vector2>& X0,
 	std::vector<Type>& res_inner_bound, std::vector<int>& id_try_surface, vector<int>& sorted_id_cell,
-	vector<int>& ShiftOut, vector<int>& ShiftRes, vector<int>& ShiftX0, vector<int>& ShiftTry) {
+	vector<uint64_t>& ShiftOut, vector<uint64_t>& ShiftRes, vector<uint64_t>& ShiftX0, vector<int>& ShiftTry) {
+
+#ifdef WRITE_LOG
+	ofstream ofile;
+#endif
 
 	ShiftOut.resize(count_dir); ShiftRes.resize(count_dir); ShiftX0.resize(count_dir); ShiftTry.resize(count_dir);
  	FILE* f;
 	f = fopen((name_file_shift_out + ".bin").c_str(), "rb");	
-	fread_unlocked(ShiftOut.data(), sizeof(int), ShiftOut.size(), f);
+	fread_unlocked(ShiftOut.data(), sizeof(uint64_t), ShiftOut.size(), f);
 	fclose(f);
+
+#ifdef WRITE_LOG		
+	ofile.open(file_logs, std::ios::app);
+	ofile << "reading  ShiftOut file\n";
+	ofile.close();
+#endif
 
 	f = fopen((name_file_shift_res + ".bin").c_str(), "rb");
-	fread_unlocked(ShiftRes.data(), sizeof(int), ShiftRes.size(), f);
+	fread_unlocked(ShiftRes.data(), sizeof(uint64_t), ShiftRes.size(), f);
 	fclose(f);
+
+#ifdef WRITE_LOG		
+	ofile.open(file_logs, std::ios::app);
+	ofile << "reading  ShiftRes file\n";
+	ofile.close();
+#endif
 
 	f = fopen((name_file_shift_x0 + ".bin").c_str(), "rb");
-	fread_unlocked(ShiftX0.data(), sizeof(int), ShiftX0.size(), f);
+	fread_unlocked(ShiftX0.data(), sizeof(uint64_t), ShiftX0.size(), f);
 	fclose(f);
 
+#ifdef WRITE_LOG		
+	ofile.open(file_logs, std::ios::app);
+	ofile << "reading  ShiftX0 file\n";
+	ofile.close();
+#endif
+
+#ifdef TRY_SHIFT
 	f = fopen((name_file_shift_try + ".bin").c_str(), "rb");
 	fread_unlocked(ShiftTry.data(), sizeof(int), ShiftTry.size(), f);
 	fclose(f);
+#endif
 
 	printf("Read Shift files\n");
 
- 
+#if ONE_GRAPH
  	f = fopen((name_file_graph + ".bin").c_str(), "rb");
 	fread_unlocked(sorted_id_cell.data(), sizeof(int), sorted_id_cell.size(), f);
 	fclose(f);
+#else
+
+	for (size_t i = 0; i < count_dir; i++)
+	{
+		f = fopen((name_file_graph+std::to_string(i) + ".bin").c_str(), "rb");
+		fread_unlocked(sorted_id_cell.data() + i*size_grid, sizeof(int), size_grid, f);
+		fclose(f);
+	}
+#ifdef WRITE_LOG		
+	ofile.open(file_logs, std::ios::app);
+	ofile << "reading  graph file\n";
+	ofile.close();
+#endif
+#endif
 
 	printf("Read graph files\n");
 
@@ -1756,6 +1796,11 @@ size_t ReadCompactFastGridData(const int count_dir, const int N,
 	int countX, countX0, countOutC, countOut, countIn, countS, countRes, countTry;
 	ReadSizes(name_file_sizes, countX, countX0, countOutC, countOut, countIn, countS, countRes, countTry);
 
+#ifdef WRITE_LOG		
+	ofile.open(file_logs, std::ios::app);
+	ofile << "reading  size file\n";
+	ofile.close();
+#endif
 
 	//name_file_id_neighbors
   	f = fopen((name_file_id_neighbors + ".bin").c_str(), "rb");
@@ -1764,6 +1809,12 @@ size_t ReadCompactFastGridData(const int count_dir, const int N,
 	neighbours_id_face.resize(size, -5);
 	fread_unlocked(neighbours_id_face.data(), sizeof(int), size, f);	
 	fclose(f);
+
+#ifdef WRITE_LOG		
+	ofile.open(file_logs, std::ios::app);
+	ofile << "reading  neighbors file\n";
+	ofile.close();
+#endif
 
 	printf("Read neighbors files\n");
  
@@ -1777,19 +1828,38 @@ size_t ReadCompactFastGridData(const int count_dir, const int N,
 	X.resize(countX);
 	X0.resize(countX0);
  
+#ifdef WRITE_LOG		
+	ofile.open(file_logs, std::ios::app);
+	ofile << "reading  resize file\n";
+	ofile.close();
+#endif
+
 	f = fopen((name_file_res + ".bin").c_str(), "rb");
 	fread_unlocked(res_inner_bound.data(), sizeof(Type), countRes, f);
 	fclose(f);
+
+#ifdef WRITE_LOG		
+	ofile.open(file_logs, std::ios::app);
+	ofile << "reading  res_inner_bound file\n";
+	ofile.close();
+#endif
  
+#ifdef TRY_SHIFT
  	f = fopen((name_file_id_try + ".bin").c_str(), "rb");
 	fread(id_try_surface.data(), sizeof(int), countTry, f);
 	fclose(f);
-
+#endif
 	printf("Read try, res files\n");
 
  	f = fopen((name_file_s + ".bin").c_str(), "rb");
 	fread_unlocked(S.data(), sizeof(Type), S.size(), f);
 	fclose(f);
+
+#ifdef WRITE_LOG		
+	ofile.open(file_logs, std::ios::app);
+	ofile << "reading  fileS file\n";
+	ofile.close();
+#endif
  
 	printf("Read s files\n");
 
@@ -1797,15 +1867,32 @@ size_t ReadCompactFastGridData(const int count_dir, const int N,
 	fread(OutC.data(), sizeof(ShortId), OutC.size(), f);
 	fclose(f);
 
+#ifdef WRITE_LOG		
+	ofile.open(file_logs, std::ios::app);
+	ofile << "reading  count_out_faces file\n";
+	ofile.close();
+#endif
+
 
   f = fopen((name_file_out_faces + ".bin").c_str(), "rb");
   fread(Out.data(), sizeof(ShortId), Out.size(), f);
 	fclose(f);
 
+#ifdef WRITE_LOG		
+	ofile.open(file_logs, std::ios::app);
+	ofile << "reading  out_faces file\n";
+	ofile.close();
+#endif
 
   f = fopen((name_file_in_faces + ".bin").c_str(), "rb");
   fread(In.data(), sizeof(ShortId), In.size(), f);
 	fclose(f);
+
+#ifdef WRITE_LOG		
+	ofile.open(file_logs, std::ios::app);
+	ofile << "reading  in_faces file\n";
+	ofile.close();
+#endif
 
 	printf("Read in out files\n");
 
@@ -1813,14 +1900,25 @@ size_t ReadCompactFastGridData(const int count_dir, const int N,
   fread(X.data(), sizeof(Vector3), X.size(), f);
 	fclose(f);
 
+#ifdef WRITE_LOG		
+	ofile.open(file_logs, std::ios::app);
+	ofile << "reading  X file\n";
+	ofile.close();
+#endif
+
 	printf("Read x files\n");
 
   
   f = fopen((name_file_local_x0 + ".bin").c_str(), "rb");
   if (!f) { printf("Err x0\n"); return 1; }
   fread(X0.data(), sizeof(Vector2), X0.size(), f);
- 
 	fclose(f);
+
+#ifdef WRITE_LOG		
+	ofile.open(file_logs, std::ios::app);
+	ofile << "reading  X0 file\n";
+	ofile.close();
+#endif
 
 	printf("Read x0 files\n");
 
@@ -1831,6 +1929,13 @@ int ReadCentersOfTetra(const std::string name_file_centers, std::vector<Vector3>
 
 	FILE* f;
 	f = fopen(name_file_centers.c_str(), "rb");
+
+	if (!f)
+	{
+		printf("File centers wasn't opened\n %s\n", name_file_centers.c_str());
+		return 1;
+	}
+
 	int n;
 	fread_unlocked(&n, sizeof(int), 1, f);
 

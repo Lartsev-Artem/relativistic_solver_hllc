@@ -8,7 +8,7 @@ int CalculateIllum(const std::string& main_dir, bool& use_cuda, const int cuda_m
 	std::vector<cell>& grid, const std::vector<int>& neighbours_id_faces, const std::vector<ShortId>& OutC,
 	const std::vector<ShortId>& Out, const std::vector<ShortId>& In, const std::vector<Type>& S, const std::vector<Vector3>& X, const std::vector<Vector2>& X0,
 	const std::vector<Type>& res_inner_bound, const std::vector<int>& id_try_surface, const vector<int>& sorted_id_cell,
-	const vector<int>& ShiftOut, const vector<int>& ShiftRes, const vector<int>& ShiftX0, const vector<int>& ShiftTry,
+	const vector<uint64_t>& ShiftOut, const vector<uint64_t>& ShiftRes, const vector<uint64_t>& ShiftX0, const vector<int>& ShiftTry,
 	const std::vector<VectorX>& U_full)
 {
 	
@@ -165,7 +165,7 @@ int CalculateIllumOptMemory(const std::string& main_dir, bool& use_cuda, const i
 	std::vector<cell>& grid, const std::vector<int>& neighbours_id_faces, const std::vector<ShortId>& OutC,
 	const std::vector<ShortId>& Out, const std::vector<ShortId>& In,  std::vector<Type>& S,  std::vector<Vector3>& X,  std::vector<Vector2>& X0,
 	const std::vector<Type>& res_inner_bound, const std::vector<int>& id_try_surface, const vector<int>& sorted_id_cell,
-	const vector<int>& ShiftOut, const vector<int>& ShiftRes, const vector<int>& ShiftX0, const vector<int>& ShiftTry,
+	const vector<uint64_t>& ShiftOut, const vector<uint64_t>& ShiftRes, const vector<uint64_t>& ShiftX0, const vector<int>& ShiftTry,
 	const std::vector<VectorX>& U_full)
 {
 

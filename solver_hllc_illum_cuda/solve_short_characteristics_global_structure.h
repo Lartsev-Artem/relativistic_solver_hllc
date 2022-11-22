@@ -45,6 +45,14 @@ struct cell {
 	}
 };
 
+enum eBoundaryTypes
+{
+	eBound_FreeBound = -1,
+	eBound_LockBound = -2,
+	eBound_OutSource = -3,
+	eBound_InnerSource = -4
+};
+
 
 #define PI 3.14159265358979323846
 const double eps = 1e-14;
@@ -93,7 +101,8 @@ extern std::vector<int>id_try_surface;
 
 const Type res_on_inner_bound = 5;
 
-const double gamma1 = 1.66666; // 5. / 3;  // показатель адиабаты
+const double gamma1 = 5. / 3; // 5. / 3;  // показатель адиабаты
+const double gamma_g = gamma1 / (gamma1 - 1);
 
 
 #ifdef SAVE_DUMP_HLLC

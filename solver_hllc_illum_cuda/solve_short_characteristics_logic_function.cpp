@@ -4,22 +4,23 @@ Type CalculateIllumeOnInnerFace(const int num_cell, const int num_direction, con
 	const std::vector<Vector2>&X0, 
 	 std::vector<cell>& grid, const std::vector<int>& neighbours_id_face,
 	int& id_try_pos, int& pos_in_res, int& posX0, 
-	const int ShiftRes, const int ShiftX0, const int ShiftTry) {
+	const uint64_t ShiftRes, const uint64_t ShiftX0, const int ShiftTry) {
 	Type I_x0 = 0;
 	
-	if (neighbours_id_face[num_cell * 4 + num_in_face] == -3) // дно конуса
+	if (neighbours_id_face[num_cell * 4 + num_in_face] ==  eBound_OutSource) // дно конуса
 	{
 		grid[num_cell].nodes_value[num_in_face] = Vector3(30, 30, 30);
 		return 30;
 	}
-	else if (neighbours_id_face[num_cell * 4 +  num_in_face] == -1) 
+	else if (neighbours_id_face[num_cell * 4 +  num_in_face] == eBound_FreeBound ||
+		neighbours_id_face[num_cell * 4 + num_in_face] == eBound_LockBound )
 	{
 		grid[num_cell].nodes_value[num_in_face] = Vector3(0, 0, 0);
 		/*Граничные условия*/
 		//I_x0 = BoundaryFunction(num_cell, x, direction, illum_old, directions, squares);
 		return I_x0;
 	}
-	else if (neighbours_id_face[num_cell * 4 + num_in_face] == -2) // внутренняя граница
+	else if (neighbours_id_face[num_cell * 4 + num_in_face] == eBound_InnerSource) // внутренняя граница
 	{		
 		id_try_pos++;
 		grid[num_cell].nodes_value[num_in_face] = Vector3(res_on_inner_bound, res_on_inner_bound, res_on_inner_bound);
@@ -81,14 +82,14 @@ Type CurGetIllum(const int cur_id, const int cur_direction, const Vector3 x, con
 	const vector<Type>& int_scattering, const vector<VectorX>& U) {
 	
 	
-	if (class_file_vtk == -10) // для конуса (считаем, что излучающая часть не изменяется в зависимости от газораспределения)
+	if (class_file_vtk == 10) // для конуса (считаем, что излучающая часть не изменяется в зависимости от газораспределения)
 	{
 		Type Q = 0;
 		Type alpha = 0.5;
 		Type betta = 0.5;
 		Type S = int_scattering[cur_direction * size_grid + cur_id];
 
-		//
+		
 		//if (x[0] < 0.06) // излучающий слой
 		//{
 		//	Q = 10; alpha = 1;  betta = 2; 
@@ -111,7 +112,7 @@ Type CurGetIllum(const int cur_id, const int cur_direction, const Vector3 x, con
 	}
 
 	// HLLC + Illum
-	if (class_file_vtk == -10) // для конуса
+	if (class_file_vtk == 11) // для конуса
 	{
 
 		Type S = int_scattering[cur_direction * size_grid + cur_id];

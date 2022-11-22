@@ -20,7 +20,7 @@ int CalculateIllum(const std::string& main_dir, bool& use_cuda, const int cuda_m
 	std::vector<cell>& grid, const std::vector<int>& neighbours_id_faces, const std::vector<ShortId>& OutC,
 	const std::vector<ShortId>& Out, const std::vector<ShortId>& In, const std::vector<Type>& S, const std::vector<Vector3>& X, const std::vector<Vector2>& X0,
 	const std::vector<Type>& res_inner_bound, const std::vector<int>& id_try_surface, const vector<int>& sorted_id_cell,
-	const vector<int>& ShiftOut, const vector<int>& ShiftRes, const vector<int>& ShiftX0, const vector<int>& ShiftTry,
+	const vector<uint64_t>& ShiftOut, const vector<uint64_t>& ShiftRes, const vector<uint64_t>& ShiftX0, const vector<int>& ShiftTry,
 	const std::vector<VectorX>& U_full);
 
 int CalculateIllumOptMemory(const std::string& main_dir, bool& use_cuda, const int cuda_mod, const Type accuracy, const int max_number_of_iter,
@@ -29,12 +29,13 @@ int CalculateIllumOptMemory(const std::string& main_dir, bool& use_cuda, const i
 	std::vector<cell>& grid, const std::vector<int>& neighbours_id_faces, const std::vector<ShortId>& OutC,
 	const std::vector<ShortId>& Out, const std::vector<ShortId>& In, std::vector<Type>& S, std::vector<Vector3>& X, std::vector<Vector2>& X0,
 	const std::vector<Type>& res_inner_bound, const std::vector<int>& id_try_surface, const vector<int>& sorted_id_cell,
-	const vector<int>& ShiftOut, const vector<int>& ShiftRes, const vector<int>& ShiftX0, const vector<int>& ShiftTry,
+	const vector<uint64_t>& ShiftOut, const vector<uint64_t>& ShiftRes, const vector<uint64_t>& ShiftX0, const vector<int>& ShiftTry,
 	const std::vector<VectorX>& U_full);
 #endif
 template<typename Type>
 size_t ReadStartSettings(std::string name_file_settings, Type& class_file_vtk, std::string& name_file_vtk,
-	std::string& name_file_sphere_direction, std::string& out_file_grid_vtk, std::string& main_dir/* ,
+	std::string& name_file_sphere_direction, std::string& out_file_grid_vtk, std::string& main_dir,
+	std::string& solve_direction/* ,
 	std::string& name_file_in_faces, std::string& name_file_out_faces, std::string& name_file_count_out_faces, std::string& name_file_local_x0, std::string& name_file_x,
 	std::string& name_file_s, std::string& name_file_id_neighbors, std::string& name_file_centers,
 	std::string& name_file_dist_try, std::string& name_file_id_try, std::string& name_file_res, std::string& name_file_sizes*/) {
@@ -55,6 +56,8 @@ size_t ReadStartSettings(std::string name_file_settings, Type& class_file_vtk, s
 	getline(ifile, out_file_grid_vtk);
 	
 	getline(ifile, main_dir);
+
+	getline(ifile, solve_direction);
 	//getline(ifile, name_file_graph);
 	
 	/*getline(ifile, name_file_in_faces);

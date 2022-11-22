@@ -44,6 +44,10 @@ Type FormTimeStepToHLLC(const int n, const Type h, const Type k, const std::vect
 int BoundDataToHLLC(const std::vector<Normals>& normals, const std::vector<int>& neighbours_id_faces,
 	const std::vector<Vector3> centers, std::vector<VectorX>& U_array)
  {
+#if defined RHLLC
+
+	return 0;
+#endif
 
 #if defined Sphere
 
@@ -76,6 +80,10 @@ int BoundDataToHLLC(const std::vector<Normals>& normals, const std::vector<int>&
 				}
 			}
 	}
+#endif
+
+#if defined Jet
+	return 0;
 #endif
 
 #if defined Cone   //// задание константы на левой границе для конуса
@@ -116,6 +124,31 @@ int BoundDataToHLLC(const std::vector<Normals>& normals, const std::vector<int>&
 	{
 		buf << 1, 0, 3, 0, 6.286;
 		U_full_prev[el] = buf;
+	}
+#endif
+#if defined Step
+	VectorX buf(5);
+	for (size_t num_cell = 0; num_cell < size_grid; num_cell++)
+	{
+		for (size_t i = 0; i < 4; i++) // по граням
+		{
+			const int neig = neighbours_id_faces[4 * num_cell + i];
+			{
+				if (neig ==  eBound_FreeBound)
+					if ((normals[num_cell].n[i] - Vector3(-1, 0, 0)).norm() < 1e-5)
+					{
+						// звук - sqrt(gamma*p/rho)
+						//pressure[i] = (vector_U[i](4) - v * v * d / 2.)* (gamma1 - 1);
+						Type  d = 1;
+						Type  v = 1.2; //~a-0.36 -> 3M
+						Type  p = 0.1;
+						double e = p / (gamma1 - 1) + d * v * v / 2;
+						buf << d, d* v, 0, 0, e;// 6.286;
+						U_array[num_cell] = buf;
+						break;
+					}
+			}
+		}	
 	}
 #endif
 
@@ -647,7 +680,7 @@ int main(int argc, char* argv[])
 	std::string name_file_settings = "";
 	int max_number_of_iter = 1;
 	Type accuracy = 1e-5;
-	bool use_cuda = true;
+	bool use_cuda =  true;
 	const int cuda_mod = 1; //1 - все массивы, 0 - min
 
 	if (argc <= 1)
@@ -663,12 +696,38 @@ int main(int argc, char* argv[])
 	std::string name_file_vtk;
 	std::string name_file_sphere_direction;
 	std::string out_file_grid_vtk;
+	std::string solve_direction;
 
-	std:string main_dir;
+std:string main_dir;
+#ifdef WRITE_LOG
+	ofstream ofile;
+	ofile.open(main_dir + "File_with_Logs_solve.txt");
+	ofile.close();
+#endif
 
-	if (ReadStartSettings(name_file_settings, class_file_vtk, name_file_vtk, name_file_sphere_direction, out_file_grid_vtk, main_dir))
+	if (ReadStartSettings(name_file_settings, class_file_vtk, name_file_vtk, name_file_sphere_direction, out_file_grid_vtk, main_dir, solve_direction))
 		ERR_RETURN("Error reading the start settings\n")
 
+#ifdef WRITE_LOG		
+	ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+	ofile << "start settings\n";
+	ofile.close();
+#endif
+
+
+#if defined HLLC_1D && !defined RHLLC_1D
+
+	HLLC_1d(main_dir);
+	printf("HLLC 1d end\n");
+	return 0;
+#endif
+
+#ifdef RHLLC_1D
+
+	RHLLC_1d(main_dir);
+	printf("RHLLC 1d end\n");
+	return 0;
+#endif
 	std::string name_file_graph = main_dir + "graph";
 	std::string name_file_solve = main_dir + "Solve";
 
@@ -710,8 +769,8 @@ int main(int argc, char* argv[])
 
 	for (size_t i = 0; i < max_number_of_iter; i++)
 	{
-		std::string file_solve = main_dir + "Solve" + std::to_string(i);
-		std::string vtk_file_solve = main_dir + "Solve" + std::to_string(i) + ".vtk";
+		std::string file_solve = solve_direction + "Solve" + std::to_string(i);
+		std::string vtk_file_solve = solve_direction + "Solve" + std::to_string(i) + ".vtk";
 		if (ReBuildDataArrayFullSave(0, name_file_vtk, vtk_file_solve, file_solve, true))
 		{
 			printf("Error ReBuild\n");
@@ -836,7 +895,7 @@ int main(int argc, char* argv[])
 	}
 
 	return 0;
-	std::ofstream ofile(main_res_file+".txt");
+	ofile.open(main_res_file+".txt");
 	if (!ofile.is_open()) ERR_RETURN("File result wasn't opened\n");
 
 	for (size_t i = 0; i < max_number_of_iter; i++)
@@ -879,6 +938,11 @@ int main(int argc, char* argv[])
 	if (ReadDataArray(class_file_vtk, main_dir, density, absorp_coef, rad_en_loose_rate, velocity, pressure, size_grid, true))
 		ERR_RETURN("Error reading the data array vtk\n")
 
+#ifdef WRITE_LOG		
+	ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+	ofile << "reading the data array\n";
+	ofile.close();
+#endif
 	//---------------Начальные данные для HLLC---------------------------------//
 	std::vector<Vector3> centers;
 #ifndef ONLY_ILLUM
@@ -891,7 +955,62 @@ int main(int argc, char* argv[])
 		pressure.resize(n);
 		velocity.resize(n);
 
-#if 1 //Cone
+#if defined RHLLC
+		for (size_t i = 0; i < size_grid; i++)
+		{
+			Type x = centers[i][0];
+			if (x < 0.5)
+			{
+				density[i] = 1;
+				pressure[i] = 1;
+				velocity[i] = Vector3(0.9, 0, 0);
+			}
+			else
+			{
+				density[i] = 1;
+				pressure[i] = 10;
+				velocity[i] = Vector3(0, 0, 0);
+			}
+	/*		Type x = centers[i][0];
+			if (x < 0.5)
+			{
+				density[i] = 1;
+				pressure[i] = 10;
+				velocity[i] = Vector3(-0.6, 0, 0);
+			}
+			else
+			{
+				density[i] = 10;
+				pressure[i] = 20;
+				velocity[i] = Vector3(0.5, 0, 0);
+			}*/
+			/*if (centers[i][0] < 0.5) {
+				density[i] = 1;
+				pressure[i] = 1;
+				velocity[i] = Vector3(0, 0, 0);
+			}
+			else {
+				density[i] = 0.125;
+				pressure[i] = 0.1;
+				velocity[i] = Vector3(0, 0, 0);
+			}*/
+		}		
+		
+#endif
+
+#if defined Jet
+		for (size_t i = 0; i < size_grid; i++)
+		{			
+			const Type betta = 0.1;
+			const Type a = 1;
+			const Type b = 0.001;
+			Type x = centers[i][0];
+			density[i] = a * exp(-x * x / betta) + b;
+			pressure[i] = a * exp(-x * x / betta) + (1e-5);
+			velocity[i] = Vector3(1e-4, 0, 0);
+		}
+#endif
+#if (defined Cone || defined Sphere) && (!defined Jet)
 		for (size_t i = 0; i < size_grid; i++)
 		{			
 			{
@@ -902,12 +1021,12 @@ int main(int argc, char* argv[])
 			}
 		}
 #endif
-#if STAIR
+#if defined Step
 		for (size_t i = 0; i < size_grid; i++)
 		{			
-				density[i] = 0.5;
-				pressure[i] = 0.05;
-				velocity[i] = Vector3(0, 3, 0);			
+				density[i] = 0.1;
+				pressure[i] = 0.01;
+				velocity[i] = Vector3(0, 0, 0);			
 		}
 #endif
 #if Plane
@@ -936,7 +1055,7 @@ int main(int argc, char* argv[])
 			}
 		}
 #endif
-#if SODA
+#if defined Cube  && !defined RHLLC//SODA
 		for (size_t i = 0; i < size_grid; i++)
 		{
 			if (centers[i][0] < 0.5) {
@@ -950,6 +1069,20 @@ int main(int argc, char* argv[])
 				velocity[i] = Vector3(0, 0, 0);
 			}
 
+			//Type x = centers[i][0];
+			//if (x < 0.5)
+			//{
+			//	density[i] = 2;
+			//	pressure[i] = 25;
+			//	velocity[i] = Vector3(0, 0, 0);
+			//}
+			//else
+			//{
+			//	density[i] = 1;
+			//	pressure[i] = 1;
+			//	velocity[i] = Vector3(0, 0, 0);
+			//}
+
 		}
 #endif
 	}
@@ -957,6 +1090,11 @@ int main(int argc, char* argv[])
 		_clock += omp_get_wtime();
 	std::cout << "\n Reading time of the vtk_grid file: " << _clock << "\n";
 
+#ifdef WRITE_LOG		
+	ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+	ofile << "Init_hllc\n";
+	ofile.close();
+#endif
 
 	//------------------------------ Illume section-----------------------------
 	vector<Vector3> directions;
@@ -967,6 +1105,12 @@ int main(int argc, char* argv[])
 		ERR_RETURN("Error reading the sphere direction\n")
 		_clock += omp_get_wtime();
 	std::cout << "\n Reading time of the sphere_direction file: " << _clock << "\n";
+
+#ifdef WRITE_LOG		
+	ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+	ofile << "reading sphere_direction\n";
+	ofile.close();
+#endif
 
 	const int count_directions = directions.size();
 	const int count_cells = size_grid;
@@ -981,9 +1125,9 @@ int main(int argc, char* argv[])
 	std::vector<Vector3> X;
 	std::vector<Vector2> X0;
 
-	std::vector<int> ShiftOut;
-	std::vector<int> ShiftRes;
-	std::vector<int> ShiftX0;
+	std::vector<uint64_t> ShiftOut;
+	std::vector<uint64_t> ShiftRes;
+	std::vector<uint64_t> ShiftX0;
 	std::vector<int> ShiftTry;
 
 	std::vector<Normals> normals;
@@ -1004,10 +1148,15 @@ int main(int argc, char* argv[])
 	if (ReadSimpleFileBin(name_file_id_neighbors + ".bin", neighbours_id_faces)) ERR_RETURN("Error reading file neighbours\n")
 	//if (ReadSimpleFile("D:\\Desktop\\FilesCourse\\graphSet\\inner_bound.txt", inner_bound)) ERR_RETURN("Error reading file inner_bound\n")
 		
+#ifdef WRITE_LOG		
+		ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+	ofile << "reading simple files\n";
+	ofile.close();
+#endif
 			
 #ifndef ONLY_HLLC  
 	_clock = -omp_get_wtime();
-	if (ReadCompactFastGridData(count_directions, size_grid, name_file_in_faces, name_file_out_faces, name_file_count_out_faces,
+	if (ReadCompactFastGridData(count_directions, size_grid, main_dir + "File_with_Logs_solve.txt", name_file_in_faces, name_file_out_faces, name_file_count_out_faces,
 		name_file_local_x0, name_file_x, name_file_s, name_file_id_neighbors, name_file_centers,
 		name_file_dist_try, name_file_id_try, name_file_res, name_file_sizes, name_file_graph, name_file_shift_out, name_file_shift_res,
 		name_file_shift_x0, name_file_shift_try, grid, neighbours_id_faces, OutC, Out, In, S, X, X0,
@@ -1018,6 +1167,12 @@ int main(int argc, char* argv[])
 	std::cout << "\n Reading time of the data_grid file: " << _clock << "\n";	
 #endif
 
+#ifdef WRITE_LOG		
+	ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+	ofile << "reading  data_grid file\n";
+	ofile.close();
+#endif
+
 #ifdef SAVE_DUMP_HLLC
 	size_dump = (size_grid * 5 + 1) * 5;
 	dump.resize(size_dump);
@@ -1026,8 +1181,8 @@ int main(int argc, char* argv[])
 	bad_hllc_flag = false;
 #endif
 
-	std::vector<Type> Illum(4 * count_cells * count_directions, 0);
-	std::vector<Type> int_scattering(count_cells* count_directions, 0);
+	std::vector<Type> Illum; // (4 * count_cells * count_directions, 0);
+	std::vector<Type> int_scattering; // (count_cells* count_directions, 0);
 
 	vector<Type> energy; // (size_grid, 0);
 	vector<Vector3> stream; //(size_grid, Vector3(0,0,0));
@@ -1064,24 +1219,46 @@ int main(int argc, char* argv[])
 
 
 	//---------------------------------------HLLC section--------------------------------------------------------------
-	Type print_timer = 0.01;
 	Type cur_timer = 10;  // больше print_timer для вывода первого шага
-
+#ifdef ONLY_HLLC
 	Type tau = 1e-5;
+	Type CFL = 0.1;
+	Type print_timer = 0.01;
+#else
+	Type tau = 1e-8;
+	Type CFL = 0.001;
+	Type print_timer = 1e-5;
+#endif
+
 	Type t = 0.0;	
-	const Type T =  3.5; // 0.5;
+	Type T =  0.7;
 #if defined Sphere
 	const Type h = 0.0128079221422811;
-#elif defined Cone
-	const Type h = 0.0032396496530313; 
+#elif defined Cone && !defined Jet
+	//const Type h = 0.0032396496530313; // test grid
+	const Type h = 0.0022530803678209; //grid: 112023 cells
+#elif defined Jet
+	const Type h = 0.0012548169651948;
+#elif defined Cube
+	//const Type h = 0.0007123669658939; // Soda1d_2
+	//const Type h  = 0.0010828369115320; // Soda1d
+	const Type h = 0.0006357639115888; // Soda1d_3
+#elif defined Step
+	const Type h = 0.0018751819368151;
+	T = 5;
+	CFL = 0.5;
+	print_timer = 0.1;
 #endif	
-	Type CFL = 0.3;
+	
 
 	std::vector<VectorX> U_full_prev;
 #ifndef ONLY_ILLUM
 	U_full.resize(size_grid, VectorX(5));	//  может не пройти инициализация VectorX!!
-
+#if defined RHLLC
+	ReBuildDataForHLLCRel(size_grid, U_full_prev);
+#else
 	if (ReBuildDataForHLLC(size_grid, U_full_prev)) ERR_RETURN("Error rebuild data to HLLC\n")
+#endif
 #endif
 	//------------------------------------------------------------------------------------------------------------
 
@@ -1099,7 +1276,7 @@ int main(int argc, char* argv[])
 
 	//------------------------------------------------------------------------------------------------------------
 	std::vector<int> bound_cells;
-#ifndef ONLY_ILLUM
+#if 0 // ONLY_ILLUM (отдельный массив по границам. Должно обрабатываться в потоках)
 	for (int i = 0; i < neighbours_id_faces.size(); i++)
 	{
 		if (neighbours_id_faces[i] < 0) // все границы. 
@@ -1113,25 +1290,6 @@ int main(int argc, char* argv[])
 	std::unique(bound_cells.begin(), bound_cells.end());
 #endif
 
-	{
-		/*for (int i = 0; i < 4; i++)
-		{		
-			printf("%d: %lf  %lf  %lf\n", i, normals[10766].n[i][0], normals[10766].n[i][1], normals[10766].n[i][2]);
-			printf("%lf\n", normals[10766].n[i].norm());
-		}
-		printf("\n");
-
-		for (int i = 0; i < 4; i++)
-		{
-			printf("%lf\n", squares_cell[4 * 10766 + i]);
-		}
-		printf("\n");
-
-		printf("%lf\n", volume[10766]);
-		return 0;*/
-	}
-	
-
 	//------------------------------------------------------------------------------------------------------------
 	int res_count = 0; // счётчик решений	
 	Type full_time = -omp_get_wtime();
@@ -1141,15 +1299,18 @@ int main(int argc, char* argv[])
 
 		if (cur_timer >= print_timer)
 		{
-			std::string file_solve = main_dir + "Solve" + std::to_string(res_count); //(count / step);
+			std::string file_solve = solve_direction +"Solve" + std::to_string(res_count); //(count / step);
 			WriteStepTimeSolve(file_solve, 0, Illum, energy, stream, impuls, div_stream, div_impuls, U_full_prev);
 			cur_timer = 0;
 			res_count++;
 
 			printf("\n t= %f,  tau= %lf,  res_step= %d\n", t, tau, res_count);			
 		}
-		
+#ifdef RHLLC
+		HLLC_Rel(tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev);
+#else
 		HLLC(size_grid, tau, bound_cells, neighbours_id_faces, normals, squares_cell, volume, U_full_prev);
+#endif
 
 #ifdef SAVE_DUMP_HLLC
 		dump[w_ptr] = start_section--; w_ptr = (w_ptr + 1) % size_dump;
@@ -1175,34 +1336,35 @@ int main(int argc, char* argv[])
 #endif
 
 #ifndef ONLY_HLLC
-		static bool exist = false;
-		if (!exist)
-		{
-			CalculateIllum(main_dir, use_cuda, cuda_mod, accuracy, max_number_of_iter, directions, Illum, int_scattering, squares,
-				grid, neighbours_id_faces, OutC, Out, In, S, X, X0,
-				res_inner_bound, id_try_surface, sorted_id_cell, ShiftOut, ShiftRes, ShiftX0, ShiftTry, U_full);
 
-			CalculateIllumParam(size_grid, count_directions,
-				directions, squares, normals, squares_cell, volume,
-				Illum, energy, stream, impuls, div_stream, div_impuls);
-			exist = true;
-		}
-		if(t > flew_time)
-			SolveIllumAndHLLC(size_grid, tau, U_full, energy, energy, stream, stream, div_stream, div_impuls);
-		
+		CalculateIllum(main_dir, use_cuda, cuda_mod, accuracy, max_number_of_iter, directions, Illum, int_scattering, squares,
+			grid, neighbours_id_faces, OutC, Out, In, S, X, X0,
+			res_inner_bound, id_try_surface, sorted_id_cell, ShiftOut, ShiftRes, ShiftX0, ShiftTry, U_full);
+
+		CalculateIllumParam(size_grid, count_directions,
+			directions, squares, normals, squares_cell, volume,
+			Illum, energy, stream, impuls, div_stream, div_impuls);
+
+		SolveIllumAndHLLC(size_grid, tau, U_full, energy, energy, stream, stream, div_stream, div_impuls);
+				
 		//energy.swap(prev_energy);
 		//stream.swap(prev_stream);
 #endif
-
+#ifndef RHLLC
 		U_full_prev.swap(U_full);
+#endif
 		t += tau;
 		cur_timer += tau;
 		
 		// ---------------формирование шага по времени--------------------//
+#ifdef RHLLC
+		tau = FormTimeStepToRHLLC(size_grid, h, CFL);
+#else
 		tau = FormTimeStepToHLLC(size_grid, h, CFL, U_full_prev); 			
+#endif
 		if (tau < 0)
 		{
-			printf("Error tau = %lf", tau);
+			printf("Error tau = %lf\n", tau);
 			break;
 		}
 
@@ -1223,7 +1385,7 @@ int main(int argc, char* argv[])
 		ClearDevice(cuda_mod);
 	}
 
-	WriteStepTimeSolve(main_dir + "Solve" + std::to_string(res_count), 0, Illum, energy, stream, impuls, div_stream, div_impuls, U_full_prev);
+	WriteStepTimeSolve(solve_direction + "Solve" + std::to_string(res_count), 0, Illum, energy, stream, impuls, div_stream, div_impuls, U_full_prev);
 #endif // USE_VTK
 
 	std::cout << "End programm\n";
@@ -1238,7 +1400,10 @@ int WriteStepTimeSolve(const std::string& main_dir, const int num_dir_to_illum,
 	const std::vector<Type>& Illum, const std::vector<Type>& energy, std::vector<Vector3>& stream, vector<Matrix3>& impuls,
 	const std::vector<Type>& div_stream, const vector<Vector3>& div_impuls, const std::vector<VectorX>& U_full) {
 
-	std::vector<Type> illum(size_grid);
+	std::vector<Type> illum;
+	
+#ifndef ONLY_HLLC
+	illum.resize(size_grid, 0);
 	const int i = num_dir_to_illum;
 		for (size_t j = 0; j < size_grid; j++)
 		{
@@ -1246,7 +1411,7 @@ int WriteStepTimeSolve(const std::string& main_dir, const int num_dir_to_illum,
 			Type I = (Illum[N] + Illum[N + 1] + Illum[N + 2] + Illum[N + 3]) / 4;
 			illum[j] = I;
 		}
-
+#endif
 
 #ifdef USE_VTK
 	//WriteFileSolution(out_file_grid_vtk, illum, energy, stream, impuls, name_file_vtk);

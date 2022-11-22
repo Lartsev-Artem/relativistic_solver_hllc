@@ -2,20 +2,33 @@
 #define SHORT_CHARACTERISTICS_HEADER_H
 
 #define ONLY_HLLC
+
 //#define ONLY_ILLUM
 
+#define RHLLC
+
+//#define HLLC_1D
+
+#define RHLLC_1D
+
+#define ONLY_RHLL
+
 #define WRITE_LOG
+
+//#define DBG_OUTPUT
 
 //#define USE_VTK
 
 //#define SAVE_DUMP_HLLC
 
 // виды геометрии
+//#define Jet
 //#define Cone
 //#define Const_1d
-#define Sphere
+//#define Sphere
 //#define Ellips
-
+#define Cube
+//#define Step
 
 #ifdef USE_VTK
 #define ReBuildSolve

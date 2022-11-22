@@ -112,7 +112,7 @@ Type IntegarteDirection(const int num_cell, const vector<Type>& Illum, const vec
 int ReadSizes(const std::string& name_file_size, int& countX, int& countX0, int& countOutC,
 	int& countOut, int& countIn, int& countS, int& countRes, int& countTry);
 
-size_t ReadCompactFastGridData(const int count_dir, const int N,
+size_t ReadCompactFastGridData(const int count_dir, const int N, const Str_Type& file_logs,
 	Str_Type& name_file_in_faces, Str_Type& name_file_out_faces, Str_Type& name_file_count_out_faces, Str_Type& name_file_local_x0, Str_Type& name_file_x,
 	Str_Type& name_file_s, Str_Type& name_file_id_neighbors, Str_Type& name_file_centers,
 	Str_Type& name_file_dist_try, Str_Type& name_file_id_try, Str_Type& name_file_res, Str_Type& name_file_sizes, Str_Type& name_file_graph,
@@ -120,7 +120,7 @@ size_t ReadCompactFastGridData(const int count_dir, const int N,
 	std::vector<cell>& grid, std::vector<int>& neighbours_id_face, std::vector<ShortId>& OutC,
 	std::vector<ShortId>& Out, std::vector<ShortId>& In, std::vector<Type>& S, std::vector<Vector3>& X, std::vector<Vector2>& X0,
 	std::vector<Type>& res_inner_bound, std::vector<int>& id_try_surface, vector<int>& sorted_id_cell,
-	vector<int>& ShiftOut, vector<int>& ShiftRes, vector<int>& ShiftX0, vector<int>& ShiftTry);
+	vector<uint64_t>& ShiftOut, vector<uint64_t>& ShiftRes, vector<uint64_t>& ShiftX0, vector<int>& ShiftTry);
 
 size_t ReadCompactFastGridDataOptMemory(const int count_dir, const int N, const Str_Type& main_dir,
 	Str_Type& name_file_in_faces, Str_Type& name_file_out_faces, Str_Type& name_file_count_out_faces, Str_Type& name_file_local_x0, Str_Type& name_file_x,

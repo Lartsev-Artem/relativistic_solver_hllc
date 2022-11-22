@@ -9,7 +9,7 @@
 Type CalculateIllumeOnInnerFace(const int num_cell, const int num_direction, const int num_in_face, const Vector3& x, const std::vector<Vector2>& X0,
 	 std::vector<cell>& grid, const std::vector<int>& neighbours_id_face,
 	int& id_try_pos, int& pos_in_res, int& posX0,
-	const int ShiftRes, const int ShiftX0, const int ShiftTry);
+	const uint64_t ShiftRes, const uint64_t ShiftX0, const int ShiftTry);
 
 Type CurGetIllum(const int cur_id, const int cur_direction, const Vector3 x, const Type s, const Type I_node_prev,
 	const vector<Type>& int_scattering);
