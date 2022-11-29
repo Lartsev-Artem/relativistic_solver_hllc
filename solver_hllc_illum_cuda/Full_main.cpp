@@ -45,7 +45,43 @@ int BoundDataToHLLC(const std::vector<Normals>& normals, const std::vector<int>&
 	const std::vector<Vector3> centers, std::vector<VectorX>& U_array)
  {
 #if defined RHLLC
+#if !defined Cylinder // jet 2d
 
+	VectorX buf(5);
+	for (size_t num_cell = 0; num_cell < size_grid; num_cell++)
+	{
+		for (size_t i = 0; i < 4; i++) // по граням
+		{
+			const int neig = neighbours_id_faces[4 * num_cell + i];
+
+			if (neig == eBound_OutSource)
+			{
+				const Vector3 velocity(0.99, 0, 0);
+				const Type pressure = 0.01;
+				const Type d = 0.1;
+
+				const Type v = velocity.dot(velocity);
+				const Type Gamma = 1. / sqrt(1 - v);
+				const Type h = 1 + gamma_g * pressure / d;
+				const Type dhGG = d * h * Gamma * Gamma;
+
+				buf[0] = Gamma * d;
+
+				buf[1] = dhGG * velocity[0];
+				buf[2] = dhGG * velocity[1];
+				buf[3] = dhGG * velocity[2];
+
+				buf[4] = dhGG - pressure;
+
+				U_array[num_cell] = buf;
+				break;
+			}
+
+		}
+	}
+
+	return 0;
+#endif
 	return 0;
 #endif
 
@@ -955,7 +991,25 @@ std:string main_dir;
 		pressure.resize(n);
 		velocity.resize(n);
 
-#if defined RHLLC
+#if defined Cylinder 
+		for (size_t i = 0; i < size_grid; i++)
+		{
+			Vector3 x = centers[i];
+			if (Vector2(x[1], x[2]).norm() < 0.3 && x[0] < 0.5)
+			{
+				density[i] = 0.1;
+				pressure[i] = 0.01;
+				velocity[i] = Vector3(0.99, 0, 0);
+			}
+			else
+			{
+				density[i] = 10;
+				pressure[i] = 0.01;
+				velocity[i] = Vector3(0, 0, 0);
+			}
+		}
+#endif
+#if defined RHLLC && defined Cube
 		for (size_t i = 0; i < size_grid; i++)
 		{
 			Type x = centers[i][0];
@@ -1114,6 +1168,7 @@ std:string main_dir;
 
 	const int count_directions = directions.size();
 	const int count_cells = size_grid;
+	printf("\nReal size task = %d\n", size_grid);
 
 	std::vector<int> neighbours_id_faces;
 	std::vector<Vector3> nodes_value;
@@ -1152,6 +1207,25 @@ std:string main_dir;
 		ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
 	ofile << "reading simple files\n";
 	ofile.close();
+#endif
+
+#if defined HLLC_2D
+
+	HLLC2d(main_dir, centers, neighbours_id_faces, normals, squares_cell, volume);
+	printf("End 2d hllc\n");
+	return 0;
+
+#elif defined RHLLC_2D
+#ifdef USE_MPI
+	MPI_Init(&argc, &argv);
+
+	MPI_RHLLC(main_dir, centers, neighbours_id_faces, normals, squares_cell, volume);
+	return 0;
+#else
+	RHLLC2d(main_dir, centers, neighbours_id_faces, normals, squares_cell, volume);
+	printf("End 2d hllc\n");
+	return 0;
+#endif
 #endif
 			
 #ifndef ONLY_HLLC  
@@ -1222,7 +1296,7 @@ std:string main_dir;
 	Type cur_timer = 10;  // больше print_timer для вывода первого шага
 #ifdef ONLY_HLLC
 	Type tau = 1e-5;
-	Type CFL = 0.1;
+	Type CFL = 0.7;
 	Type print_timer = 0.01;
 #else
 	Type tau = 1e-8;
@@ -1242,12 +1316,20 @@ std:string main_dir;
 #elif defined Cube
 	//const Type h = 0.0007123669658939; // Soda1d_2
 	//const Type h  = 0.0010828369115320; // Soda1d
-	const Type h = 0.0006357639115888; // Soda1d_3
+	const Type h = 0.0010307259619874; // Soda1d_3
 #elif defined Step
 	const Type h = 0.0018751819368151;
 	T = 5;
 	CFL = 0.5;
 	print_timer = 0.1;
+#elif defined Cylinder
+	const Type h = 0.0066864401941437;
+	T = 10;
+	CFL = 0.05;
+	print_timer = 0.1;
+#else
+	const Type h = 1;
+	printf("Bad geometry define\n");
 #endif	
 	
 

@@ -12,6 +12,7 @@ struct ConVal {
 	Type d;
 	Type v;
 	Type p;
+
 };
 
 struct Flux {
@@ -56,14 +57,14 @@ static double MakeRotateCoef(int num_face)
 
 ConVal RHLLC_flux(const int num_cell) {
 	
-	Vector3 SumF;
+	Vector3 SumF(0,0,0);
 	ConVal U = U_full_1d_prev[num_cell];
 	PhysVal W = W_full_1d_prev[num_cell];
 
 	Vector3 F;
 
-	ConVal U_R;
-	ConVal U_L;
+	Vector3 U_R;
+	Vector3 U_L;
 
 	PhysVal W_R;
 	PhysVal W_L;
@@ -75,24 +76,24 @@ ConVal RHLLC_flux(const int num_cell) {
 			//todo: поворот
 			if (neig < 0) // левая граница
 			{
-				U_R = U;
+				U_R = Vector3( U.d,U.v, U.p);
 				W_R = W;
 			}
 			else if (neig == size_g) // правая граница
 			{
-				U_R = U;
+				U_R = Vector3(U.d, U.v, U.p);
 				W_R = W;
 			}
 			else
 			{
-				U_R = U_full_1d_prev[neig];
+				U_R = Vector3(U_full_1d_prev[neig].d, U_full_1d_prev[neig].v, U_full_1d_prev[neig].p); ;
 				W_R = W_full_1d_prev[neig];
 			}
 		}
 
 		const Type T = MakeRotateCoef(i);
-		U_L = U;  U_L.v *= T;
-		U_R = U_R; U_R.v *= T;
+		U_L = Vector3(U.d, T*U.v, U.p);
+		U_R(1) *= T;
 
 		W_L = W;  W_L.v *= T;
 		W_R = W_R; W_R.v *= T;
@@ -140,43 +141,38 @@ ConVal RHLLC_flux(const int num_cell) {
 
 		if (lambda_R <= 0) // если верно выполнить всегда
 		{
-			F.d = U_R.d * Vel_R; //D*v_x
-			F.v = U_R.v * Vel_R + p_R; //mx*vx+p			
-			F.p = U_R.v;
+			F(0) = U_R(0) * Vel_R[0]; //D*v_x
+			F(1) = U_R(1) * Vel_R[0] + p_R; //mx*vx+p			
+			F(2) = U_R(1);
 			//continue;
 			c0++; // для hllc этот код срабатывает на 8 принте для задачи soda
 		}
 		else if (lambda_L >= 0) // выполнить либо по условию либо для всех границ
 		{
-			F.d = U_L.d * Vel_L; //D*v_x
-			F.v = U_L.v * Vel_L + p_L; //mx*vx+p
-			F.p = U_L.v;
+			F(0) = U_L(0) * Vel_L[0]; //D*v_x
+			F(1) = U_L(1) * Vel_L[0] + p_L; //mx*vx+p			
+			F(2) = U_L(1);
 			//continue;
 			c1++;
 		}
 		else
 		{
 			//====================Расчёт потоков и приближений hll=========================================//
-			Flux F_L;
-			Flux F_R;
-			ConVal U_hll;
-			Flux F_hll;
+			Vector3 F_L;
+			Vector3 F_R;
+			Vector3 U_hll;
+			Vector3 F_hll;
 
-			F_R.d = U_R.d * Vel_R; //D*v_x
-			F_R.v = U_R.v * Vel_R + p_R; //mx*vx+p			
-			F_R.p = U_R.v;
+			F_R(0) = U_R(0) * Vel_R[0]; //D*v_x
+			F_R(1) = U_R(1) * Vel_R[0] + p_R; //mx*vx+p			
+			F_R(2) = U_R(1);
 
-			F_L.d = U_L.d * Vel_L; //D*v_x
-			F_L.v = U_L.v * Vel_L + p_L; //mx*vx+p			
-			F_L.p = U_L.v;
+			F_L(0) = U_L(0) * Vel_L[0]; //D*v_x
+			F_L(1) = U_L(1) * Vel_L[0] + p_L; //mx*vx+p			
+			F_L(2) = U_L(1);
 
-			F_hll.d = (lambda_R * F_L.d - lambda_L * F_R.d + (lambda_R * lambda_L * (U_R.d - U_L.d))) / (lambda_R - lambda_L);
-			F_hll.v = (lambda_R * F_L.v - lambda_L * F_R.v + (lambda_R * lambda_L * (U_R.v - U_L.v))) / (lambda_R - lambda_L);
-			F_hll.p = (lambda_R * F_L.p - lambda_L * F_R.p + (lambda_R * lambda_L * (U_R.p - U_L.p))) / (lambda_R - lambda_L);
-
-			U_hll.d = (lambda_R * U_R.d - lambda_L * U_L.d + (F_L.d - F_R.d)) / (lambda_R - lambda_L);
-			U_hll.v = (lambda_R * U_R.v - lambda_L * U_L.v + (F_L.v - F_R.v)) / (lambda_R - lambda_L);
-			U_hll.p = (lambda_R * U_R.p- lambda_L * U_L.p + (F_L.p - F_R.p)) / (lambda_R - lambda_L);
+			F_hll = (lambda_R * F_L - lambda_L * F_R + (lambda_R * lambda_L * (U_R - U_L))) / (lambda_R - lambda_L);
+			U_hll = (lambda_R * U_R - lambda_L * U_L + (F_L - F_R)) / (lambda_R - lambda_L);
 
 			
 #ifdef ONLY_RHLL
@@ -186,9 +182,9 @@ ConVal RHLLC_flux(const int num_cell) {
 			//============================================================================================//
 #ifndef ONLY_RHLL		
 //=========================Поиск скорости промежуточной волны===============================//
-			const Type a = F_hll.p;			//F_E^hll
-			const Type b = -U_hll.p - F_hll.v; // (E_hll + F_mx^hll)
-			const Type c = U_hll.v;			//mx_hll
+			const Type a = F_hll(2);			//F_E^hll
+			const Type b = -U_hll(2) - F_hll(1); // (E_hll + F_mx^hll)
+			const Type c = U_hll(1);			//mx_hll
 
 #if 1 // как описано в Mignone...
 			Type quad = -0.5 * (b + SIGN(b) * sqrt(b * b - 4 * a * c));
@@ -200,20 +196,20 @@ ConVal RHLLC_flux(const int num_cell) {
 				{
 					c2++;
 					//============================Поиск промежуточного давления ===================================//
-					const Type _p = -F_hll.p * _lambda + F_hll.v;
+					const Type _p = -F_hll(2) * _lambda + F_hll(1);
 					//============================================================================================//
 
 					//==========================Финальный поток HLLC=============================================//
-					ConVal _U_L;
+					Vector3 _U_L;
 					const Type dif_L = 1.0 / (lambda_L - _lambda);
 
-					_U_L.d = (U_L.d * (lambda_L - Vel_L)) * dif_L;
-					_U_L.v = (U_L.v * (lambda_L - Vel_L) + _p - p_L) * dif_L;					
-					_U_L.p = (U_L.p * (lambda_L - Vel_L) + _p * _lambda - p_L * Vel_L) * dif_L;
+					_U_L(0) = (U_L(0) * (lambda_L - Vel_L(0))) * dif_L;
+					_U_L(1) = (U_L(1) * (lambda_L - Vel_L(0)) + _p - p_L) * dif_L;
+					_U_L(2) = (U_L(2) * (lambda_L - Vel_L(0)) + _p * _lambda - p_L * Vel_L(0)) * dif_L;
 
-					F.d = F_L.d + lambda_L * (_U_L.d - U_L.d);
-					F.v = F_L.v + lambda_L * (_U_L.v - U_L.v);
-					F.p = F_L.p + lambda_L * (_U_L.p - U_L.p);
+					F(0) = F_L(0) + lambda_L * (_U_L(0) - U_L(0));
+					F(1) = F_L(1) + lambda_L * (_U_L(1) - U_L(1));
+					F(2) = F_L(2) + lambda_L * (_U_L(2) - U_L(2));
 
 					//============================================================================================//
 				}
@@ -221,40 +217,36 @@ ConVal RHLLC_flux(const int num_cell) {
 				{
 					c3++;
 					//============================Поиск промежуточного давления ===================================//
-					const Type _p = -F_hll.p * _lambda + F_hll.v;
+					const Type _p = -F_hll(2) * _lambda + F_hll(1);
 					//============================================================================================//
-					ConVal _U_R;
+					Vector3 _U_R;
 					const Type dif_R = 1.0 / (lambda_R - _lambda);
 
-					_U_R.d = (U_R.d * (lambda_R - Vel_R)) * dif_R;
-					_U_R.v = (U_R.v * (lambda_R - Vel_R) + _p - p_R) * dif_R;					
-					_U_R.p = (U_R.p * (lambda_R - Vel_R) + _p * _lambda - p_R * Vel_R) * dif_R;
+					_U_R(0) = (U_R(0) * (lambda_R - Vel_R(0))) * dif_R;
+					_U_R(1) = (U_R(1) * (lambda_R - Vel_R(0)) + _p - p_R) * dif_R;
+					_U_R(2) = (U_R(2) * (lambda_R - Vel_R(0)) + _p * _lambda - p_R * Vel_R(0)) * dif_R;
 
-					F.d = F_R.d + lambda_R * (_U_R.d - U_R.d);
-					F.v = F_R.v + lambda_R * (_U_R.v - U_R.v);
-					F.p = F_R.p + lambda_R * (_U_R.p - U_R.p);
+					F(0) = F_R(0) + lambda_R * (_U_R(0) - U_R(0));
+					F(1) = F_R(1) + lambda_R * (_U_R(1) - U_R(1));
+					F(2) = F_R(2) + lambda_R * (_U_R(2) - U_R(2));
 				}
 			}
 #endif
 		}
-
-
 		
-		F.v *= T;
-		SumF.d += F.d;
-		SumF.v += F.v;
-		SumF.p += F.p;
-
+		F(1) *= T;
+		SumF += F;
 		
-		F_full[num_cell * 2 + i] = F;
+		Flux buf; buf.d = F(0); buf.v = F(1); buf.p = F(2);
+		F_full[num_cell * 2 + i] = buf;
 
 	}// for
 
 	//cout << "ready flew\n" << SumF << '\n';
-	U.d -= (SumF.d * tau / h);
-	U.v -= (SumF.v * tau / h);
-	U.p -= (SumF.p * tau / h);
-
+	U.d -= (SumF(0) * tau / h);
+	U.v -= (SumF(1) * tau / h);
+	U.p -= (SumF(2) * tau / h);
+	
 	return U;
 }
 

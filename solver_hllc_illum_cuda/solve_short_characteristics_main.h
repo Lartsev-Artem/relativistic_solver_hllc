@@ -119,6 +119,7 @@ size_t ReadSimpleFileBin(const Str_Type name_file, std::vector<T>& data_array) {
 	data_array.resize(n);
 	fread_unlocked(data_array.data(), sizeof(T), n, f);
 
+	printf("read simple data: %s \n", name_file.c_str());
 	return 0;
 }
 

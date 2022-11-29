@@ -7,11 +7,17 @@
 
 #define RHLLC
 
+//#define HLLC_2D
+
+#define RHLLC_2D
+
 //#define HLLC_1D
 
-#define RHLLC_1D
+//#define RHLLC_1D
 
-#define ONLY_RHLL
+//#define ONLY_RHLL
+
+#define USE_MPI
 
 #define WRITE_LOG
 
@@ -27,8 +33,9 @@
 //#define Const_1d
 //#define Sphere
 //#define Ellips
-#define Cube
+//#define Cube
 //#define Step
+//#define Cylinder
 
 #ifdef USE_VTK
 #define ReBuildSolve

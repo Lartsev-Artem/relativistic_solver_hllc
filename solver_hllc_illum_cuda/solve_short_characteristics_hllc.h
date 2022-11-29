@@ -33,5 +33,25 @@ int HLLC_1d(std::string& main_dir);
 int RHLLC_1d(std::string& main_dir);
 #endif
 
+#ifdef HLLC_2D
+int HLLC2d(std::string& main_dir,
+	const std::vector<Vector3>& centerts, const std::vector<int>& neighbours_id_faces,
+	const std::vector<Normals>& normals, const std::vector<Type>& squares_cell, const std::vector<Type>& volume);
+#endif
+
+#ifdef RHLLC_2D
+int RHLLC2d(std::string& main_dir,
+	const std::vector<Vector3>& centerts, const std::vector<int>& neighbours_id_faces,
+	const std::vector<Normals>& normals, const std::vector<Type>& squares_cell, const std::vector<Type>& volume);
+
+#ifdef USE_MPI
+
+int MPI_RHLLC(std::string& main_dir,
+	std::vector<Vector3>& centerts, std::vector<int>& neighbours_id_faces,
+	std::vector<Normals>& normals, std::vector<Type>& squares_cell, std::vector<Type>& volume);
+#endif
+#endif
+
+
 
 #endif

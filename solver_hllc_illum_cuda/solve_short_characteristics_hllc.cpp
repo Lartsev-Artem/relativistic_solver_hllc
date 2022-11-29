@@ -8,10 +8,10 @@
 std::vector<int> b_right;
 std::vector<int> b_left;
 
-int c0 = 0; 
-int c1 = 0;
-int c2 = 0;
-int c3 = 0;
+static int c0 = 0;
+static int c1 = 0;
+static int c2 = 0;
+static int c3 = 0;
 VectorX GetPhysVal( Type p0, const VectorX& U);
 
 int ReBuildDataForHLLC(const int N, std::vector<VectorX>& data) {
@@ -81,7 +81,6 @@ inline void MakeRotationMatrix(const Vector3& n, Eigen::MatrixXd& T) {
 	}
 	
 }
-
 
 VectorX HLLC_stepToOMP(const int num_cell, const Type tau, const std::vector<int>& neighbours_id_faces, const std::vector<Normals>& normals,
 	const std::vector<Type>& squares_cell, const std::vector<Type>& volume, const std::vector<VectorX>& U_full_prev) {
@@ -505,6 +504,10 @@ int HLLC(const int N, const Type tau, const std::vector<int>& bound_cells, const
 			for (int i = 0; i < N; i++)
 			{
 				buf = HLLC_stepToOMP(i, tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev);
+
+				//buf[1] = Vector3(buf[1], buf[2], buf[3]).norm();
+				//buf[2] = 0;
+				//buf[3] = 0;
 #pragma omp critical
 				{
 					U_full[i] = buf;
@@ -1238,12 +1241,12 @@ VectorX RHLLC_stepToOMPGit(const int num_cell, const Type tau, const std::vector
 				W_R = W;
 				neig = num_cell * 4 + i;
 				break;
-			case eBound_InnerSource:
+			case eBound_OutSource://eBound_InnerSource:
 				U_R = U;
 				W_R = W;
 				neig = num_cell * 4 + i;
 				break;
-			case eBound_OutSource:
+			case eBound_InnerSource://eBound_OutSource:
 				MakeRotationMatrix(normals[num_cell].n[i], T);
 				tU = T * U;
 				tU[1] = -tU[1];
@@ -1648,13 +1651,17 @@ void HLLC_Rel(const Type tau, const std::vector<int>& neighbours_id_faces, const
 		{
 			//buf = HLLC_stepToOMPRel(i, tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev); // -> U_full		
 			buf = RHLLC_stepToOMPGit(i, tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev); // -> U_full		
+#ifdef Cube
+			// Для 1d задачи Сода. 
+			// СЛИШКОМ СИЛЬНЫЕ КОЛЕБАНИЯ ПО Y,Z. что-то не так!!!!!!!!!!!!!!!!!!!!
+			buf[1] = Vector3(buf[1], buf[2], buf[3]).norm();
+			buf[2] = 0;
+			buf[3] = 0; 
+#endif
 
 #pragma omp critical
 			{
- 				U_full[i] = buf;
-				// Для задачи SODA:
-					//U_full[i][2] = 0;
-					//U_full[i][3] = 0;
+ 				U_full[i] = buf;		
 			}
 		}
 	}

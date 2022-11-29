@@ -1123,7 +1123,7 @@ int ReadNormalFile(const std::string& name_file_normals, std::vector<Normals>& n
 	}	
 	fclose(f);
 
-
+	printf("Normals read\n");
 
 
 	//std::ifstream ifile;

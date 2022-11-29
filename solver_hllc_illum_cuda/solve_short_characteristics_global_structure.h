@@ -113,4 +113,14 @@ extern int start_section;
 extern bool bad_hllc_flag;
 #endif
 
+#ifdef USE_MPI
+#include "mpi.h"
+#define RETURN(a) return a;
+#define MPI_END MPI_Finalize();
+#define MPI_RETURN(a) { MPI_END RETURN(a) }
+#else
+#define MPI_RETURN(a) return a;
+#endif //USE_MPI
+
+
 #endif
