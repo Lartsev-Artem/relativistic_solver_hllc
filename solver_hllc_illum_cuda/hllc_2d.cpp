@@ -40,6 +40,8 @@ int WriteFileSolution(const std::string& main_dir, const std::vector<Type>& dens
 	fwrite(&n, sizeof(int), 1, f);
 	fwrite(velocity.data(), sizeof(Vector3), n, f);
 	fclose(f);
+
+	return 0;
 }
 
 int WriteSolution(const int n, const std::string main_dir, const std::vector<Vector4>& U_full)

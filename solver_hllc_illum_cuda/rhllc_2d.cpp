@@ -51,6 +51,8 @@ static int WriteFileSolution(const std::string& main_dir, const std::vector<Type
 	fwrite(&n, sizeof(int), 1, f);
 	fwrite(velocity.data(), sizeof(Vector3), n, f);
 	fclose(f);
+
+	return 0;
 }
 
 static  int WriteSolution(const int n, const std::string main_dir, const std::vector<Vector4>& W)
@@ -347,6 +349,213 @@ Vector4 RHLLC_stepToOMP2d(const int num_cell, const Type tau, const std::vector<
 	/*U_full[num_cell] =*/ return (U - SumF * tau / volume[num_cell]);
 }
 
+
+Vector4 RHLLC_stepToMpi2d(const int num_cell, const Type tau, const std::vector<int>& neighbours_id_faces, const std::vector<Normals>& normals,
+	const std::vector<Type>& squares_cell, const std::vector<Type>& volume,
+	const std::vector<Vector4>&U_full_2d_prev, const std::vector<Vector4>& W_full_2d) {
+
+	Vector4 SumF = Vector4::Zero();  // интеграл по поверхности от F (т.е. Sum{F*n*dS}
+	const Vector4 U = U_full_2d_prev[num_cell];
+	Vector4 F = Vector4::Zero();
+
+	Vector4 U_R;
+	Vector4 U_L;
+
+	Vector4 W = W_full_2d[num_cell];
+	Vector4 W_R;
+	Vector4 W_L;
+
+	Matrix4 T = Matrix4::Zero();
+
+	for (size_t i = 0; i < 3; i++) // по граням
+	{
+		const int neig = neighbours_id_faces[3 * num_cell + i];
+		{ // эта скобочка нужна. Т.к. далее могут быть наложения имен переменных. 
+			// todo: переписать lock bound и free_bound на функции + оптимизация
+			Type d, v, pressure;
+			Vector3 vel;
+			switch (neig)
+			{
+			case eBound_FreeBound:
+				U_R = U;
+				W_R = W;
+				break;
+			//case -10:
+				//return Vector4(0, 0, 0, 0);  // плохо. Вообще не надо допускать такую ячейку
+			default:
+				if (neig < 0)
+				{
+					printf("Err bound in HLLC %d, %d\n", num_cell, neig);
+					exit(1);
+				}
+
+				U_R = U_full_2d_prev[neig / 3];
+				W_R = W_full_2d[neig / 3];
+
+				break;
+			}
+		}
+
+		MakeRotationMatrix(normals[num_cell].n[i], T);
+		// здесь одна матрица поворота или с разным знаком?????
+		U_L = T * U;
+		U_R = T * U_R;
+
+		W_L = T * W;
+		W_R = T * W_R;
+
+		//==================== Кэшируем физические переменные слева и справа============================//
+		// нормальная сокорость
+		const Vector2 Vel_L(W_L[1], W_L[2]);// , 0);  //T * velocity[num_cell];
+		const Vector2 Vel_R(W_R[1], W_R[2]);// , 0);  //T * velocity[neig / 4];
+
+		const Type d_L = W_L(0);
+		const Type d_R = W_R(0);
+
+		const Type p_L = W_L(3);
+		const Type p_R = W_R(3);
+
+		const Type VV_L = Vel_L.dot(Vel_L);
+		const Type VV_R = Vel_R.dot(Vel_R);
+
+		//========================================================================================//
+
+		//=========================Вычисляем релятивистикие параметры============================//				
+		const Type g_L = 1. / sqrt(1 - VV_L);	// фактор Лоренца
+		const Type g_R = 1. / sqrt(1 - VV_R);
+
+		const Type h_L = 1 + gamma_g * p_L / d_L; // энтальпия
+		const Type h_R = 1 + gamma_g * p_R / d_R;
+
+		const Type cs_L = sqrt((gamma1 * p_L) / (d_L * h_L)); // скорость звука
+		const Type cs_R = sqrt((gamma1 * p_R) / (d_R * h_R));
+
+		const Type sigmaS_L = (cs_L * cs_L) / (g_L * g_L * (1 - cs_L * cs_L)); // что-то для расчета собственных чисел HHL
+		const Type sigmaS_R = (cs_R * cs_R) / (g_R * g_R * (1 - cs_R * cs_R));
+
+		//========================================================================================//
+
+		const Type sqr_L = sqrt(sigmaS_L * (1 - Vel_L[0] * Vel_L[0] + sigmaS_L));
+		const Type sqr_R = sqrt(sigmaS_R * (1 - Vel_R[0] * Vel_R[0] + sigmaS_R));
+
+		// здесь встречалась альтернатива сравнения с нулем min(0,L), max(0,R)
+		const Type lambda_L = min((Vel_L[0] - sqr_L) / (1 + sigmaS_L), (Vel_R[0] - sqr_R) / (1 + sigmaS_R));
+		const Type lambda_R = max((Vel_L[0] + sqr_L) / (1 + sigmaS_L), (Vel_R[0] + sqr_R) / (1 + sigmaS_R));
+
+		if (lambda_R <= 0) // если верно выполнить всегда
+		{
+			F(0) = U_R[0] * Vel_R[0]; //D*v_x
+			F(1) = U_R[1] * Vel_R[0] + p_R; //mx*vx+p
+			F(2) = U_R[2] * Vel_R[0];
+			//F(3) = U_R[3] * Vel_R[0];
+			F(3) = U_R[1];
+			//continue;
+			c0++; // для hllc этот код срабатывает на 8 принте для задачи soda
+		}
+		else if (lambda_L >= 0) // выполнить либо по условию либо для всех границ
+		{
+			F(0) = U_L[0] * Vel_L[0]; //D*v_x
+			F(1) = U_L[1] * Vel_L[0] + p_L; //mx*vx+p
+			F(2) = U_L[2] * Vel_L[0];
+			//F(3) = U_L[3] * Vel_L[0];
+			F(3) = U_L[1];
+			//continue;
+			c1++;
+		}
+		else
+		{
+			//====================Расчёт потоков и приближений hll=========================================//
+			Vector4 F_L;
+			Vector4 F_R;
+			Vector4 U_hll;
+			Vector4 F_hll;
+
+			F_R(0) = U_R[0] * Vel_R[0]; //D*v_x
+			F_R(1) = U_R[1] * Vel_R[0] + p_R; //mx*vx+p
+			F_R(2) = U_R[2] * Vel_R[0];
+			//F_R(3) = U_R[3] * Vel_R[0];
+			F_R(3) = U_R[1];
+
+			F_L(0) = U_L[0] * Vel_L[0]; //D*v_x
+			F_L(1) = U_L[1] * Vel_L[0] + p_L; //mx*vx+p
+			F_L(2) = U_L[2] * Vel_L[0];
+			//F_L(3) = U_L[3] * Vel_L[0];
+			F_L(3) = U_L[1];
+
+			F_hll = (lambda_R * F_L - lambda_L * F_R + (lambda_R * lambda_L * (U_R - U_L))) / (lambda_R - lambda_L);
+			U_hll = (lambda_R * U_R - lambda_L * U_L + (F_L - F_R)) / (lambda_R - lambda_L);
+
+#ifdef ONLY_RHLL
+			F = F_hll;
+#endif
+
+			//============================================================================================//
+#ifndef ONLY_RHLL		
+//=========================Поиск скорости промежуточной волны===============================//
+			const Type a = F_hll[3];			//F_E^hll
+			const Type b = -U_hll[3] - F_hll[1]; // (E_hll + F_mx^hll)
+			const Type c = U_hll[1];			//mx_hll
+
+#if 1 // как описано в Mignone...
+			Type quad = -0.5 * (b + SIGN(b) * sqrt(b * b - 4 * a * c));
+			Type _lambda = c / quad;
+
+#endif		
+			{
+				if (_lambda >= 0.0)
+				{
+					c2++;
+					//============================Поиск промежуточного давления ===================================//
+					const Type _p = -F_hll[3] * _lambda + F_hll[1];
+					//============================================================================================//
+
+					//==========================Финальный поток HLLC=============================================//
+					Vector4 _U_L;
+					const Type dif_L = 1.0 / (lambda_L - _lambda);
+
+					_U_L[0] = (U_L[0] * (lambda_L - Vel_L[0])) * dif_L;
+					_U_L[1] = (U_L[1] * (lambda_L - Vel_L[0]) + _p - p_L) * dif_L;
+					_U_L[2] = (U_L[2] * (lambda_L - Vel_L[0])) * dif_L;
+					//_U_L[3] = (U_L[3] * (lambda_L - Vel_L[0])) * dif_L;
+					_U_L[3] = (U_L[3] * (lambda_L - Vel_L[0]) + _p * _lambda - p_L * Vel_L[0]) * dif_L;
+
+					F = F_L + lambda_L * (_U_L - U_L);
+
+					//============================================================================================//
+				}
+				else //(_S <= 0)
+				{
+					c3++;
+					//============================Поиск промежуточного давления ===================================//
+					const Type _p = -F_hll[3] * _lambda + F_hll[1];
+					//============================================================================================//
+					Vector4 _U_R;
+					const Type dif_R = 1.0 / (lambda_R - _lambda);
+
+					_U_R[0] = (U_R[0] * (lambda_R - Vel_R[0])) * dif_R;
+					_U_R[1] = (U_R[1] * (lambda_R - Vel_R[0]) + _p - p_R) * dif_R;
+					_U_R[2] = (U_R[2] * (lambda_R - Vel_R[0])) * dif_R;
+					//_U_R[3] = (U_R[3] * (lambda_R - Vel_R[0])) * dif_R;
+					_U_R[3] = (U_R[3] * (lambda_R - Vel_R[0]) + _p * _lambda - p_R * Vel_R[0]) * dif_R;
+
+					F = F_R + lambda_R * (_U_R - U_R);
+				}
+			}
+#endif
+		}
+
+		Vector4 buf = F;
+		F = (T.transpose()) * buf;
+
+		SumF += F * squares_cell[3 * num_cell + i];
+
+	}// for
+
+
+	/*U_full[num_cell] =*/ return (U - SumF * tau / volume[num_cell]);
+}
+
+
 static int CheckState(const std::vector<Vector4>& W)
 {
 	for (size_t i = 0; i < size_grid; i++)
@@ -370,12 +579,80 @@ static int CheckState(const std::vector<Vector4>& W)
 
 static int ReBuildPhysicValue(const Vector4& U, Vector4& W)
 {
+	Vector2 v(W(1), W(2));
 
+	const Type vv = v.dot(v);
+	const Type d = W(0);
+	Type Gamma0 = 1. / sqrt(1 - vv);
+	const Type h = 1 + gamma_g * W(3) / d;
+
+	Type W0 = d * h * Gamma0 * Gamma0; //U[0] * Gamma0 * h;
+
+	Vector2 m(U[1], U[2]);
+	Type mm = m.dot(m);
+
+	Type p = W(3);
+
+
+	Type D = U[0];
+	Type E = U[3];
+
+	int  cc = 0;
+
+	Type err = 1;
+	do
+	{
+		err = W0;
+
+		Type fW = W0 - p - E;
+
+		Type dGdW = -(Gamma0 * Gamma0 * Gamma0) * mm / (2 * W0 * W0 * W0);
+		Type dFdW = 1 - ((Gamma0 * (1 + D * dGdW) - 2 * W0 * dGdW) / (Gamma0 * Gamma0 * Gamma0 * gamma_g));
+		W0 -= (fW / dFdW);
+
+		Gamma0 = 1. / sqrt(1 - mm / (W0 * W0));
+
+		p = (W0 - D * Gamma0) / (Gamma0 * Gamma0 * gamma_g);
+
+		v[0] = m[0] / W0;
+		v[1] = m[1] / W0;
+		//v[2] = m[2] / W0;
+
+		err -= W0;
+		cc++;
+	} while (fabs(err / W0) > 1e-14);
+
+	if (p < 0 || D < 0 || std::isnan(p) || std::isnan(D))
+	{
+		printf("Error (p = %lf, d= %lf)",  p, D / Gamma0);
+		return 1;
+	}
+
+	W(0) = D / Gamma0;
+	W(1) = v(0);
+	W(2) = v(1);
+	W(3) = p;
 
 	return 0;
 }
 
 static int ReBuildPhysicValue(const  std::vector<Vector4>& U, std::vector<Vector4>& W) {
+
+	const int size = U.size();
+
+	for (int num_cell = 0; num_cell < size; num_cell++)
+	{
+		if (ReBuildPhysicValue(U[num_cell], W[num_cell]))
+		{
+			printf("Error cell= %d\n", num_cell);
+			MPI_RETURN(1);
+		}
+	}
+
+	return 0;
+}
+
+static int ReBuildPhysicValueold(const  std::vector<Vector4>& U, std::vector<Vector4>& W) {
 
 	for (size_t num_cell = 0; num_cell < size_grid; num_cell++)
 	{
@@ -568,12 +845,25 @@ int MPI_RHLLC(std::string& main_dir,
 	MPI_Comm_size(MPI_COMM_WORLD, &np);
 	MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
+	Vector4 a;	
+	MPI_Datatype MPI_EigenVector4;
+	int len[2] = { base + 1, 1 };
+	const int offset = ((uint32_t*)a.data()) - ((uint32_t*)&a);
+	MPI_Aint pos[2] = { offset ,sizeof(Vector4) };
+	MPI_Datatype typ[2] = { MPI_DOUBLE, MPI_UB };
+	MPI_Type_struct(2, len, pos, typ, &MPI_EigenVector4);
+	MPI_Type_commit(&MPI_EigenVector4);
+	//
 	printf("Run\n");
 
 	std::vector<Vector4> W_full_2d;
 	std::vector<Vector4> U_full_2d;
 	std::vector<Vector4> U_full_2d_prev;
-	int size_local;
+	
+	std::vector<Vector4> W_full_2d_local;
+	std::vector<Vector4> U_full_2d_local;
+	std::vector<Vector4> U_full_2d_prev_local;
+
 
 	// вычисление сдвигов и числа тел на узел
 	std::vector<int> send_count;
@@ -581,20 +871,40 @@ int MPI_RHLLC(std::string& main_dir,
 	//if(np > 1)
 	{
 		const int npp = np > 1 ? np - 1 : 1;
-		send_count.resize(npp, size_grid / npp);
-		disp.resize(npp, 0);
-		for (int i = 1; i < npp; i++)
-			disp[i] = i * (size_grid / npp);
+		send_count.resize(np, size_grid / npp); send_count[0] = 0;
+		disp.resize(np, 0);
+		for (int i = 2; i < np; i++)
+			disp[i] = (i-1) * (size_grid / npp);
 
 		if (size_grid % npp) { // если число процессов не кратно размерности задачи 
-			for (int i = 0; i < size_grid % npp; i++) // первые процессы берут на единицу больше тел
+			for (int i = 1; i < size_grid % npp; i++) // первые процессы берут на единицу больше тел
 				++send_count[i];
 
-			for (int i = 1; i < npp; i++) // смещения для процессов за ними увеличивается начиная со второго
+			for (int i = 2; i < npp; i++) // смещения для процессов за ними увеличивается начиная со второго
 				++disp[i];
 		}
 	}
 
+#ifndef WRITE_LOG
+	{
+		if (myid == 0)
+		{
+			printf("disp= ");
+			for (auto el : disp)
+				printf("%d ", el);
+
+			printf("\nsend_count= ");
+			for (auto el : send_count)
+				printf("%d ", el);
+			printf("\n");
+
+		}
+	}
+
+	printf("np= %d, myid= %d\n", np, myid);
+	//np = 4, disp= 0 0 5 8 send_count = 0 5 4 4
+#endif
+	
 	std::vector<int> neighbours_id_faces_local;
 	std::vector<Normals> normals_local;
 	std::vector<Type> squares_cell_local;
@@ -612,18 +922,22 @@ int MPI_RHLLC(std::string& main_dir,
 	}
 	else
 	{
-		neighbours_id_faces_local.resize(base * send_count[myid - 1]);
-		normals_local.resize(send_count[myid - 1]);
-		squares_cell_local.resize(base * send_count[myid - 1]);
-		volume_local.resize(send_count[myid - 1]);
+		neighbours_id_faces_local.resize(base * send_count[myid]);
+		normals_local.resize(send_count[myid]);
+		squares_cell_local.resize(base * send_count[myid]);
+		volume_local.resize(send_count[myid]);
+
+		U_full_2d_local.resize(send_count[myid]);
+		U_full_2d_prev_local.resize(send_count[myid]);
+		W_full_2d_local.resize(send_count[myid]);
 	}	
 		
 		/// На других узлах переменные так normals... так же будут заполнены. На каждом узле в отдельности 
 		// мы проводим перенумерацию и затем на всех, кроме управляющего удаляем исходные массивы
 	if (myid != 0 && np > 1)
 	{
-		const int size_node = send_count[myid - 1];
-		const int shift_node = disp[myid - 1];
+		const int size_node = send_count[myid];
+		const int shift_node = disp[myid];
 		int id = 0;
 
 		for (int i = shift_node; i < size_node; i++)
@@ -677,7 +991,7 @@ int MPI_RHLLC(std::string& main_dir,
 	 {
 		 id_cells_node0.reserve(size_grid);	
 
-		 for (size_t id = 0; id < np - 1; id++) // по всем узлам
+		 for (size_t id = 1; id < np; id++) // по всем узлам
 		 {
 			 const int shift_node = disp[id];
 			 const int size_node = send_count[id];
@@ -699,7 +1013,7 @@ int MPI_RHLLC(std::string& main_dir,
 			 }
 		 }
 
-		 std::unique(id_cells_node0.begin(), id_cells_node0.end());  // могуть быт повторы
+		 std::unique(id_cells_node0.begin(), id_cells_node0.end());  // могуть быт повторы		 
 	 }
 	 else if (np == 1)
 	 {
@@ -709,112 +1023,256 @@ int MPI_RHLLC(std::string& main_dir,
 			 id_cells_node0[i] = i;  // вся сетка
 		 }		 
 	 }
+
+	 if (myid == 0)
+	 {
+		 U_full_2d_local.resize(id_cells_node0.size());
+	 }
 	 //--------------------------------------------до while(T)_--------------------
 
-	 //debug
-	 {
-		 if (myid == 0)
-		 {
-			 for (size_t i = 0; i < neighbours_id_faces_local.size(); i++)
-			 {
-				 printf("p=%d  id= %d\n", myid, neighbours_id_faces_local[i]);
-			 }
-		 }
-
-		 MPI_Request rq;
-		 MPI_Status st;
-		 
-		 MPI_Wait(&rq, &st);
-
-		 if (myid == 1)
-		 {
-			 for (size_t i = 0; i < neighbours_id_faces_local.size(); i++)
-			 {
-				 printf("p=%d  id= %d\n", myid, neighbours_id_faces_local[i]);
-			 }
-		 }
-
-	 }
-
-	 if (myid == 0 && np > 1)
+	
 	 {
 		 // и себе тоже-> блок себя удалить, если np!= 1? 
-		 MPI_Scatterv(W_full_2d.data(), send_count.data(), disp.data(), MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		 MPI_Scatterv(U_full_2d_prev.data(), send_count.data(), disp.data(), MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		 MPI_Scatterv(U_full_2d.data(), send_count.data(), disp.data(), MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+		 MPI_Scatterv(W_full_2d.data(), send_count.data(), disp.data(), MPI_EigenVector4, W_full_2d_local.data(), send_count[myid], MPI_EigenVector4, 0, MPI_COMM_WORLD);
+		 MPI_Scatterv(U_full_2d_prev.data(), send_count.data(), disp.data(), MPI_EigenVector4,  U_full_2d_prev_local.data(), send_count[myid], MPI_EigenVector4, 0, MPI_COMM_WORLD);
+		 MPI_Scatterv(U_full_2d.data(), send_count.data(), disp.data(), MPI_EigenVector4,  U_full_2d_local.data(), send_count[myid], MPI_EigenVector4, 0, MPI_COMM_WORLD);
 	 }
+
+
 
 	 // Расчет
 
 	 Type t = 0;
-	 const Type T = 0.5;	 
+	 const Type T = 0.1;	 
 	 Type print_time = 0.01;
 	 Type cur_time = 10;	 
 	 Type tau;
 
+	 // ------------------------------------------ Основной расчёт------------------------------------------
+	 int sol_cnt = 0;
+	 int count = 0;
+
+#ifndef WRITE_LOG
+	 if (myid == 1)
+	 {
+		 ofstream ofile;
+		 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+		 ofile << "\n neighbours_id_faces_local size= "<< W_full_2d_local.size() << "\n";
+
+		 for (auto &el: neighbours_id_faces_local)
+		 {
+			 ofile << el << "  ";
+		 }
+		 ofile << "\n\n";
+		 ofile.close();
+	 }
+#endif
+
+
+#ifndef WRITE_LOG
 	 if (myid == 0)
 	 {
-		 tau = 1e-4;
+		 ofstream ofile;
+		 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+		 ofile << "\n after gather W_full_2d size= " << W_full_2d.size() << "\n";
+
+		 for (auto& el : W_full_2d)
+		 {
+			 ofile << el << "  ";
+		 }
+		 ofile << "\n\n";
+		 ofile.close();
 	 }
-	 else
+#endif
+	 //MPI_RETURN(0);
+
+
+	 while (t < T)
 	 {
+
+		 if (myid == 0)
+		 {
+			 tau = 1e-4;
+		 }
+
 		 MPI_Bcast(&tau, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);  // заготовка под переменный шаг
-	 }
+		 
 
-	 if (myid == 0) // на главном узле хранится полный объем данных
-	 {
-		 const int N = id_cells_node0.size();
-
-		 for (int id = 0; id < N; id++)// можно omp
+#ifdef WRITE_LOG
+		 if (myid == 1)
 		 {
-			 const int i = id_cells_node0[id];
+			 ofstream ofile;
+			 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
 
-			 U_full_2d[i] = RHLLC_stepToOMP2d(i, tau, neighbours_id_faces, normals, squares_cell, volume);
-
-			 ReBuildPhysicValue(U_full_2d, W_full_2d);
+			 ofile << "MPI_Bcast time\n";
+			 ofile.close();
 		 }
+#endif
 
-		 // будет время от других узлов
-
-		 if (cur_time >= print_time)
+		 if (myid == 0) // на главном узле хранится полный объем данных
 		 {
-			 if (WriteSolution(sol_cnt, main_dir + "Solve\\", W_full_2d))
+
+			 // будет время от других узлов
+			 if (cur_time >= print_time)
 			 {
-				 MPI_RETURN(1);
+				 if (WriteSolution(sol_cnt, main_dir + "Solve\\", W_full_2d)) //W- не перезаписана!
+				 {
+					 MPI_RETURN(1);
+				 }
+				 cur_time = 0;
+				 printf("File sol: %d. time= %lf\n", sol_cnt++, t);
 			 }
-			 cur_time = 0;
-			 printf("File sol: %d. time= %lf\n", sol_cnt++, t);
-		 }
-	 }
-	 else
-	 {
-		 const int size = U_full.size();
-		 for (int i = 0; i < size; i ++)
-		 {
-			 if(neighbours_id_faces_local[i] == -10) // другой узел
+
+#ifndef WRITE_LOG
+			 
 			 {
-				 continue; // этот узел будет выпоолнен на основном узле
+				 ofstream ofile;
+				 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+				 ofile << "\n id_cells_node0 size= " << id_cells_node0.size() << "\n";
+
+				 for (auto& el : id_cells_node0)
+				 {
+					 ofile << el << "   ";
+				 }
+				 ofile<<"\n\n";
+				 ofile.close();
 			 }
-			 // U_full_2d_prev,  W_full_2d -> local
-			 U_full_2d[i] = RHLLC_stepToOMP2d(i, tau, neighbours_id_faces, normals, squares_cell, volume);
+#endif
+
+			 const int N = id_cells_node0.size();
+			 for (int id = 0; id < N; id++)// можно omp
+			 {
+				 const int i = id_cells_node0[id];
+
+				 U_full_2d_local[id] = RHLLC_stepToMpi2d(i, tau, neighbours_id_faces, normals, squares_cell, volume,
+					 U_full_2d_prev, W_full_2d);
+
+				 ReBuildPhysicValue(U_full_2d_local[id], W_full_2d[i]);
+			 }
+
+#ifndef WRITE_LOG
+			 ofstream ofile;
+			 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+			 ofile << "\nt= " << t << "; tau= " << tau << "; step= " << count << '\n';
+			 ofile.close();
+#endif
+
 		 }
-	 }
+		 else // вычислительные узлы
+		 {
+#ifdef WRITE_LOG
+
+			 if (myid == 1)
+			 {
+				 ofstream ofile;
+				 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+
+				 ofile << "\n neighbours_id_faces_local size= " << neighbours_id_faces_local.size() << "\n";
+				 for (auto& el : neighbours_id_faces_local)
+				 {
+					 ofile << el << " ";
+				 }
+				 ofile << "\n\n";
+
+				 ofile << "\n U_full_2d_local size= " << U_full_2d_local.size() << "\n";
+				 for (auto& el : U_full_2d_local)
+				 {
+					 ofile << el << " \n";
+				 }
+				 ofile << "\n\n";
+
+				 ofile << "\n W_full_2d_local size= " << W_full_2d_local.size() << "\n";
+				 for (auto& el : W_full_2d_local)
+				 {
+					 ofile << el << " \n";
+				 }
+				 ofile << "\n\n";
+
+				 ofile << "\n U_full_2d_prev_local size= " << U_full_2d_prev_local.size() << "\n";
+				 for (auto& el : U_full_2d_prev_local)
+				 {
+					 ofile << el << " \n";
+				 }
+				 ofile << "\n\n";
+
+				 ofile.close();
+			 }
+#endif
+
+			 const int size = U_full_2d_local.size();
+			 for (int i = 0; i < size; i++)
+			 {
+				 
+				 if (neighbours_id_faces_local[i*base] == -10 || neighbours_id_faces_local[i * base +1] == -10
+					 || neighbours_id_faces_local[i * base +2] == -10) // другой узел
+				 {
+					 continue; // этот узел будет выпоолнен на основном узле
+				 }
+				 // U_full_2d_prev,  W_full_2d -> local
+				 U_full_2d_local[i] = RHLLC_stepToMpi2d(i, tau, neighbours_id_faces_local, normals_local, squares_cell_local, volume_local,
+					 U_full_2d_prev_local, W_full_2d_local);
 
 
-	 if (myid != 0 && np > 1)
-	 {
-		 // и себе тоже-> блок себя удалить, если np!= 1? 
+				 ReBuildPhysicValue(U_full_2d_local[i], W_full_2d_local[i]);
 
-		 MPI_Gatherv(W_full_2d.data(), W_full_2d.size(), MPI_DOUBLE, W_full_2d.data(), send_count.data(), disp.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		 MPI_Gatherv(U_full_2d_prev.data(), U_full_2d_prev.size(), MPI_DOUBLE, U_full_2d_prev.data(), send_count.data(), disp.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		 MPI_Gatherv(U_full_2d.data(), U_full_2d.size(), MPI_DOUBLE, U_full_2d.data(), send_count.data(), disp.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-	 	 
+			 }
 
-	 if (myid == 0)
-	 {
-		 U_full_2d.swap(U_full_2d_prev); // здесь он переставит указатели, mpi может сойти с ума
-	 }
+#ifdef WRITE_LOG
 
+			 if (myid == 1)
+			 {
+				 ofstream ofile;
+				 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+
+				 ofile << "\n rhlcc size= " << neighbours_id_faces_local.size() << "\n";
+
+				 ofile.close();
+			 }
+#endif
+		//	 ReBuildPhysicValue(U_full_2d_local, W_full_2d_local);
+		 }
+
+
+		 MPI_RETURN(0);
+
+		 //if (myid != 0 && np > 1)
+		 {
+			 //MPI_Allgatherv(
+			 Vector4 foo;
+			 MPI_Gatherv( W_full_2d_local.data(), send_count[myid], MPI_EigenVector4,  W_full_2d.data(), send_count.data(), disp.data(), MPI_EigenVector4, 0, MPI_COMM_WORLD);
+			 MPI_Gatherv( U_full_2d_prev_local.data(), send_count[myid], MPI_EigenVector4,  U_full_2d_prev.data(), send_count.data(), disp.data(), MPI_EigenVector4, 0, MPI_COMM_WORLD);
+			 MPI_Gatherv( U_full_2d_local.data(), send_count[myid], MPI_EigenVector4,  U_full_2d.data(), send_count.data(), disp.data(), MPI_EigenVector4, 0, MPI_COMM_WORLD);
+
+		 }
+
+#ifdef WRITE_LOG
+		 if (myid == 0)
+		 {
+			 ofstream ofile;
+			 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+			 ofile << "\n after gather";
+			 ofile.close();
+		 }
+#endif
+
+		 if (myid == 0)
+		 {
+			 for (auto id : id_cells_node0)
+			 {
+				 U_full_2d[id] = U_full_2d_local[id];  // сохраняем ячейки расчитаные отдельно
+			 }			 
+
+			 U_full_2d.swap(U_full_2d_prev); // здесь он переставит указатели, mpi может сойти с ума
+		 }
+
+
+		 MPI_RETURN(0);
+
+		 t += tau;
+		 cur_time += tau;
+		 count++;
+
+	 }// while
 
 	MPI_RETURN(0);
 }
