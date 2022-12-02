@@ -1218,11 +1218,22 @@ std:string main_dir;
 #elif defined RHLLC_2D
 #ifdef USE_MPI
 	MPI_Init(&argc, &argv);
-
+	_clock = -omp_get_wtime();
+	
 	MPI_RHLLC(main_dir, centers, neighbours_id_faces, normals, squares_cell, volume);
+	
+	_clock += omp_get_wtime();
+	printf("Full mpi time= %lf\n", _clock);
+	printf("End 2d hllc\n");
+
 	return 0;
 #else
+	_clock = -omp_get_wtime();
+
 	RHLLC2d(main_dir, centers, neighbours_id_faces, normals, squares_cell, volume);
+
+	_clock += omp_get_wtime();
+	printf("Full omp time= %lf\n", _clock);
 	printf("End 2d hllc\n");
 	return 0;
 #endif
@@ -1296,8 +1307,8 @@ std:string main_dir;
 	Type cur_timer = 10;  // больше print_timer для вывода первого шага
 #ifdef ONLY_HLLC
 	Type tau = 1e-5;
-	Type CFL = 0.7;
-	Type print_timer = 0.01;
+	Type CFL = 0.1;
+	Type print_timer = 0.015;
 #else
 	Type tau = 1e-8;
 	Type CFL = 0.001;
@@ -1314,9 +1325,9 @@ std:string main_dir;
 #elif defined Jet
 	const Type h = 0.0012548169651948;
 #elif defined Cube
-	//const Type h = 0.0007123669658939; // Soda1d_2
+	const Type h = 0.0007123669658939; // Soda1d_2
 	//const Type h  = 0.0010828369115320; // Soda1d
-	const Type h = 0.0010307259619874; // Soda1d_3
+	//const Type h = 0.0010307259619874; // Soda1d_3
 #elif defined Step
 	const Type h = 0.0018751819368151;
 	T = 5;

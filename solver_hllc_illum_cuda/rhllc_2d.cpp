@@ -738,7 +738,6 @@ static int ReBuildConvValue(const std::vector<Vector4>& W, std::vector<Vector4>&
 		U[i] = cell;
 	}
 
-
 	return 0;
 }
 
@@ -817,6 +816,20 @@ int RHLLC2d(std::string& main_dir,
 		ofile.close();
 #endif
 
+#ifdef WRITE_LOG_NO
+		{
+			ofstream ofile;
+			ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+
+			ofile << "U_full_2d\n\n";
+			for (auto el : U_full_2d)
+				ofile << el << '\n';
+
+			ofile << "\n\n";
+			ofile.close();
+		}
+#endif
+
 		U_full_2d.swap(U_full_2d_prev);
 		t += tau;
 		cur_time += tau;
@@ -844,6 +857,14 @@ int MPI_RHLLC(std::string& main_dir,
 	int np, myid;
 	MPI_Comm_size(MPI_COMM_WORLD, &np);
 	MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+
+#ifdef WRITE_LOG
+	{		
+		remove((main_dir + "File_with_Logs_solve" + to_string(myid) + ".txt").c_str());
+	}
+#endif
+
+	//np = 3; myid = 2;
 
 	Vector4 a;	
 	MPI_Datatype MPI_EigenVector4;
@@ -876,18 +897,23 @@ int MPI_RHLLC(std::string& main_dir,
 		for (int i = 2; i < np; i++)
 			disp[i] = (i-1) * (size_grid / npp);
 
-		if (size_grid % npp) { // если число процессов не кратно размерности задачи 
-			for (int i = 1; i < size_grid % npp; i++) // первые процессы берут на единицу больше тел
-				++send_count[i];
+		//int wtf = size_grid % npp;
+		if (size_grid % npp != 0) // если число процессов не кратно размерности задачи 
+		{ 
+			for (int i = 0; i < size_grid % npp; i++) // первые процессы берут на единицу больше тел
+				++send_count[i+1];
 
-			for (int i = 2; i < npp; i++) // смещени€ дл€ процессов за ними увеличиваетс€ начина€ со второго
+			for (int i = 2; i < np; i++) // смещени€ дл€ процессов за ними увеличиваетс€ начина€ со второго
 				++disp[i];
 		}
 	}
 
-#ifndef WRITE_LOG
+#ifdef WRITE_LOG
+	std::vector<int> orig_id_cell_nodes;
 	{
-		if (myid == 0)
+		
+
+		//if (myid == 0)
 		{
 			printf("disp= ");
 			for (auto el : disp)
@@ -909,6 +935,7 @@ int MPI_RHLLC(std::string& main_dir,
 	std::vector<Normals> normals_local;
 	std::vector<Type> squares_cell_local;
 	std::vector<Type> volume_local;
+
 
 	if (myid == 0)
 	{
@@ -940,7 +967,7 @@ int MPI_RHLLC(std::string& main_dir,
 		const int shift_node = disp[myid];
 		int id = 0;
 
-		for (int i = shift_node; i < size_node; i++)
+		for (int i = shift_node; i < shift_node+size_node; i++)
 		{
 			Normals nn(base);
 
@@ -956,15 +983,19 @@ int MPI_RHLLC(std::string& main_dir,
 					if ((neigh_cell > shift_node) && (neigh_cell < shift_node + size_node)) // данные на этом узле
 					{
 						neighbours_id_faces_local[base * id + k] = new_idx_face;
+						orig_id_cell_nodes.push_back(i);
 					}
 					else
 					{
 						neighbours_id_faces_local[base * id + k] = -10;  // флаг на то, что данные на другом узле
+						//orig_id_cell_nodes.erase(orig_id_cell_nodes.end() - k, orig_id_cell_nodes.end());
+							//break;
 					}
 				}
 				else
 				{
 					neighbours_id_faces_local[base * id + k] = neigh;
+					orig_id_cell_nodes.push_back(i);
 				}
 
 				nn.n[k] = normals[i].n[k];
@@ -975,7 +1006,8 @@ int MPI_RHLLC(std::string& main_dir,
 
 			id++;
 		}
-		
+		auto last = std::unique(orig_id_cell_nodes.begin(), orig_id_cell_nodes.end());
+		orig_id_cell_nodes.erase(last, orig_id_cell_nodes.end());
 		// очищаем пам€ть на вычислительном узле
 		neighbours_id_faces.clear();
 		normals.clear();
@@ -996,24 +1028,29 @@ int MPI_RHLLC(std::string& main_dir,
 			 const int shift_node = disp[id];
 			 const int size_node = send_count[id];
 
-			 for (int i = 0; i < size_grid; i++)// все €чеки
+			 for (int i = shift_node; i < shift_node+ size_node; i++)// все €чеки узла
 			 {
 				 for (size_t j = 0; j < base; j++) // все грани
 				 {
-					 const int neigh_cell = neighbours_id_faces[i * base + j] / base; // -> €чейка
-					 if (neigh_cell >= 0)
+					 const int neigh_face = neighbours_id_faces[i * base + j]; // -> грань
+					 if (neigh_face >= 0)
 					 {
+						 const int neigh_cell = neigh_face / base; // -> €чейка
 						 if ((neigh_cell <= shift_node) || (neigh_cell >= shift_node + size_node)) // €чейка не на данном узле					 
 						 {
 							 id_cells_node0.push_back(i);
+							 orig_id_cell_nodes.push_back(i);
 							 break;
 						 }
 					 }
 				 }				 
 			 }
 		 }
+		 
+		 std::sort(id_cells_node0.begin(), id_cells_node0.end());
+		 auto last = std::unique(id_cells_node0.begin(), id_cells_node0.end());  // могуть быт повторы	
+		 id_cells_node0.erase(last, id_cells_node0.end());
 
-		 std::unique(id_cells_node0.begin(), id_cells_node0.end());  // могуть быт повторы		 
 	 }
 	 else if (np == 1)
 	 {
@@ -1027,68 +1064,119 @@ int MPI_RHLLC(std::string& main_dir,
 	 if (myid == 0)
 	 {
 		 U_full_2d_local.resize(id_cells_node0.size());
+		 W_full_2d_local.resize(id_cells_node0.size());
 	 }
 	 //--------------------------------------------до while(T)_--------------------
 
 	
+	
+#ifdef WRITE_LOG
 	 {
-		 // и себе тоже-> блок себ€ удалить, если np!= 1? 
-		 MPI_Scatterv(W_full_2d.data(), send_count.data(), disp.data(), MPI_EigenVector4, W_full_2d_local.data(), send_count[myid], MPI_EigenVector4, 0, MPI_COMM_WORLD);
-		 MPI_Scatterv(U_full_2d_prev.data(), send_count.data(), disp.data(), MPI_EigenVector4,  U_full_2d_prev_local.data(), send_count[myid], MPI_EigenVector4, 0, MPI_COMM_WORLD);
-		 MPI_Scatterv(U_full_2d.data(), send_count.data(), disp.data(), MPI_EigenVector4,  U_full_2d_local.data(), send_count[myid], MPI_EigenVector4, 0, MPI_COMM_WORLD);
+		 ofstream ofile;
+		 ofile.open(main_dir + "File_with_Logs_solve" + to_string(myid) + ".txt", std::ios::app);
+
+		 if (myid == 0)
+		 {
+			 ofile << "neighbours_id_faces= " << id_cells_node0.size() << "\n\n";
+			 for (auto& el : id_cells_node0)
+				 ofile << el << ' ';
+			 ofile << "\n\n";
+		 }
+		 else
+		 {
+			 ofile << "neighbours_id_faces= "<< neighbours_id_faces_local.size() << "\n\n";
+			 for (auto& el : neighbours_id_faces_local)
+				 ofile << el/base << ' ';
+			 ofile << "\n\n";
+		 }
+		 		 
+		 ofile.close();
 	 }
-
-
-
+#endif
 	 // –асчет
 
 	 Type t = 0;
-	 const Type T = 0.1;	 
+	 const Type T = 0.5;	 
 	 Type print_time = 0.01;
 	 Type cur_time = 10;	 
-	 Type tau;
+	 Type tau = 0;
 
 	 // ------------------------------------------ ќсновной расчЄт------------------------------------------
 	 int sol_cnt = 0;
 	 int count = 0;
 
-#ifndef WRITE_LOG
-	 if (myid == 1)
-	 {
-		 ofstream ofile;
-		 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
-		 ofile << "\n neighbours_id_faces_local size= "<< W_full_2d_local.size() << "\n";
-
-		 for (auto &el: neighbours_id_faces_local)
-		 {
-			 ofile << el << "  ";
-		 }
-		 ofile << "\n\n";
-		 ofile.close();
-	 }
-#endif
-
-
-#ifndef WRITE_LOG
-	 if (myid == 0)
-	 {
-		 ofstream ofile;
-		 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
-		 ofile << "\n after gather W_full_2d size= " << W_full_2d.size() << "\n";
-
-		 for (auto& el : W_full_2d)
-		 {
-			 ofile << el << "  ";
-		 }
-		 ofile << "\n\n";
-		 ofile.close();
-	 }
-#endif
-	 //MPI_RETURN(0);
-
-
 	 while (t < T)
 	 {
+
+		 {
+			 // и себе тоже-> блок себ€ удалить, если np!= 1? 
+			 MPI_Scatterv(W_full_2d.data(), send_count.data(), disp.data(), MPI_EigenVector4, W_full_2d_local.data(), send_count[myid], MPI_EigenVector4, 0, MPI_COMM_WORLD);
+			 MPI_Scatterv(U_full_2d_prev.data(), send_count.data(), disp.data(), MPI_EigenVector4, U_full_2d_prev_local.data(), send_count[myid], MPI_EigenVector4, 0, MPI_COMM_WORLD);
+			 //MPI_Scatterv(U_full_2d.data(), send_count.data(), disp.data(), MPI_EigenVector4, U_full_2d_local.data(), send_count[myid], MPI_EigenVector4, 0, MPI_COMM_WORLD);
+		 }
+
+#ifndef WRITE_LOG
+		 {
+			 ofstream ofile;
+			 ofile.open(main_dir + "File_with_Logs_solve" + to_string(myid) + ".txt", std::ios::app);
+
+			 //if (myid == 0)
+			 {
+				 ofile << "U_full_2d_prev_local= " << U_full_2d_prev_local.size() << "\n\n";
+				 for (auto& el : U_full_2d_prev_local)
+				 {
+					 ofile << el[0] << '\n';
+				 }
+				 ofile << "\n\n";
+			 }
+			 ofile.close();
+
+			 int ii = 0;
+			 if (myid != 0)
+			 {
+				 for (size_t i = 0; i < U_full_2d_local.size(); i++)
+				 {
+					 if (neighbours_id_faces_local[i * base + 0] == -10 ||
+						 neighbours_id_faces_local[i * base + 1] == -10 ||
+						 neighbours_id_faces_local[i * base + 2] == -10) continue;
+					 
+						 int id = neighbours_id_faces_local[i] / base;
+						 U_full_2d_local[i] = -U_full_2d_prev_local[i];
+					 
+				 }				 
+			 }
+			 else
+			 {
+				 for (size_t i = 0; i < id_cells_node0.size(); i++)
+				 {
+					 U_full_2d_local[i][0] = -id_cells_node0[i];
+				 }
+			 }
+			 MPI_Gatherv(U_full_2d_local.data(), send_count[myid], MPI_EigenVector4, U_full_2d.data(), send_count.data(), disp.data(), MPI_EigenVector4, 0, MPI_COMM_WORLD);
+
+			 if (myid == 0)
+			 {
+				 for (size_t i = 0; i < id_cells_node0.size(); i++)
+				 {
+					 U_full_2d[id_cells_node0[i]][0] = U_full_2d_local[i][0];
+				 }
+			 }
+			 //ofstream ofile;
+			 ofile.open(main_dir + "File_with_Logs_solve" + to_string(myid) + ".txt", std::ios::app);
+
+			 if (myid == 0)
+			 {
+				 ofile << "U_full_2d= " << U_full_2d.size() << "\n\n";
+				 for (auto& el : U_full_2d)
+				 {
+					 ofile << el[0] << '\n';
+				 }
+				 ofile << "\n\n";
+			 }
+			 ofile.close();
+		 }
+#endif
+
 
 		 if (myid == 0)
 		 {
@@ -1097,17 +1185,7 @@ int MPI_RHLLC(std::string& main_dir,
 
 		 MPI_Bcast(&tau, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);  // заготовка под переменный шаг
 		 
-
-#ifdef WRITE_LOG
-		 if (myid == 1)
-		 {
-			 ofstream ofile;
-			 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
-
-			 ofile << "MPI_Bcast time\n";
-			 ofile.close();
-		 }
-#endif
+		 int cc = 0;
 
 		 if (myid == 0) // на главном узле хранитс€ полный объем данных
 		 {
@@ -1121,23 +1199,16 @@ int MPI_RHLLC(std::string& main_dir,
 				 }
 				 cur_time = 0;
 				 printf("File sol: %d. time= %lf\n", sol_cnt++, t);
-			 }
-
-#ifndef WRITE_LOG
-			 
-			 {
-				 ofstream ofile;
-				 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
-				 ofile << "\n id_cells_node0 size= " << id_cells_node0.size() << "\n";
-
-				 for (auto& el : id_cells_node0)
+#ifdef WRITE_LOG
 				 {
-					 ofile << el << "   ";
+					 ofstream ofile;
+					 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
+
+					 ofile << "t= " << t << " sol_cnt= " << sol_cnt << '\n';
+					 ofile.close();
 				 }
-				 ofile<<"\n\n";
-				 ofile.close();
-			 }
 #endif
+			 }
 
 			 const int N = id_cells_node0.size();
 			 for (int id = 0; id < N; id++)// можно omp
@@ -1146,59 +1217,26 @@ int MPI_RHLLC(std::string& main_dir,
 
 				 U_full_2d_local[id] = RHLLC_stepToMpi2d(i, tau, neighbours_id_faces, normals, squares_cell, volume,
 					 U_full_2d_prev, W_full_2d);
+				 cc++;
 
-				 ReBuildPhysicValue(U_full_2d_local[id], W_full_2d[i]);
-			 }
-
-#ifndef WRITE_LOG
-			 ofstream ofile;
-			 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
-			 ofile << "\nt= " << t << "; tau= " << tau << "; step= " << count << '\n';
-			 ofile.close();
+				 if (ReBuildPhysicValue(U_full_2d_local[id], W_full_2d[i]))
+				 {
+#ifdef WRITE_LOG
+					 {
+						 ofstream ofile;
+						 ofile.open(main_dir + "File_with_Logs_solve" + to_string(myid) + ".txt", std::ios::app);
+						 ofile << "Err cell " << i << '\n';
+						 ofile.close();
+					 }
 #endif
-
+					 MPI_RETURN(1);
+				 }
+				 W_full_2d_local[id] = W_full_2d[i];
+			 }
+			 
 		 }
 		 else // вычислительные узлы
 		 {
-#ifdef WRITE_LOG
-
-			 if (myid == 1)
-			 {
-				 ofstream ofile;
-				 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
-
-				 ofile << "\n neighbours_id_faces_local size= " << neighbours_id_faces_local.size() << "\n";
-				 for (auto& el : neighbours_id_faces_local)
-				 {
-					 ofile << el << " ";
-				 }
-				 ofile << "\n\n";
-
-				 ofile << "\n U_full_2d_local size= " << U_full_2d_local.size() << "\n";
-				 for (auto& el : U_full_2d_local)
-				 {
-					 ofile << el << " \n";
-				 }
-				 ofile << "\n\n";
-
-				 ofile << "\n W_full_2d_local size= " << W_full_2d_local.size() << "\n";
-				 for (auto& el : W_full_2d_local)
-				 {
-					 ofile << el << " \n";
-				 }
-				 ofile << "\n\n";
-
-				 ofile << "\n U_full_2d_prev_local size= " << U_full_2d_prev_local.size() << "\n";
-				 for (auto& el : U_full_2d_prev_local)
-				 {
-					 ofile << el << " \n";
-				 }
-				 ofile << "\n\n";
-
-				 ofile.close();
-			 }
-#endif
-
 			 const int size = U_full_2d_local.size();
 			 for (int i = 0; i < size; i++)
 			 {
@@ -1212,66 +1250,69 @@ int MPI_RHLLC(std::string& main_dir,
 				 U_full_2d_local[i] = RHLLC_stepToMpi2d(i, tau, neighbours_id_faces_local, normals_local, squares_cell_local, volume_local,
 					 U_full_2d_prev_local, W_full_2d_local);
 
-
-				 ReBuildPhysicValue(U_full_2d_local[i], W_full_2d_local[i]);
-
-			 }
-
+				 cc++;
+				 if (ReBuildPhysicValue(U_full_2d_local[i], W_full_2d_local[i]))
+				 {
 #ifdef WRITE_LOG
-
-			 if (myid == 1)
-			 {
-				 ofstream ofile;
-				 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
-
-				 ofile << "\n rhlcc size= " << neighbours_id_faces_local.size() << "\n";
-
-				 ofile.close();
-			 }
+					 {
+						 ofstream ofile;
+						 ofile.open(main_dir + "File_with_Logs_solve" + to_string(myid) + ".txt", std::ios::app);
+						 ofile << "Err cell " << i << '\n';
+						 ofile.close();
+					 }
 #endif
-		//	 ReBuildPhysicValue(U_full_2d_local, W_full_2d_local);
+					 MPI_RETURN(1);
+				 }
+
+			 }
 		 }
 
-
-		 MPI_RETURN(0);
-
+		 static int one_print = 0;
+		 if (!one_print)
+		 {
+			 printf("[%d] CC=%d\n", myid, cc);
+			 one_print = 1;
+		 }
 		 //if (myid != 0 && np > 1)
 		 {
-			 //MPI_Allgatherv(
-			 Vector4 foo;
-			 MPI_Gatherv( W_full_2d_local.data(), send_count[myid], MPI_EigenVector4,  W_full_2d.data(), send_count.data(), disp.data(), MPI_EigenVector4, 0, MPI_COMM_WORLD);
-			 MPI_Gatherv( U_full_2d_prev_local.data(), send_count[myid], MPI_EigenVector4,  U_full_2d_prev.data(), send_count.data(), disp.data(), MPI_EigenVector4, 0, MPI_COMM_WORLD);
-			 MPI_Gatherv( U_full_2d_local.data(), send_count[myid], MPI_EigenVector4,  U_full_2d.data(), send_count.data(), disp.data(), MPI_EigenVector4, 0, MPI_COMM_WORLD);
+			 MPI_Gatherv(W_full_2d_local.data(), send_count[myid], MPI_EigenVector4, W_full_2d.data(), send_count.data(), disp.data(), MPI_EigenVector4, 0, MPI_COMM_WORLD);
+			 //MPI_Gatherv(U_full_2d_prev_local.data(), send_count[myid], MPI_EigenVector4, U_full_2d_prev.data(), send_count.data(), disp.data(), MPI_EigenVector4, 0, MPI_COMM_WORLD);
+			 MPI_Gatherv(U_full_2d_local.data(), send_count[myid], MPI_EigenVector4, U_full_2d.data(), send_count.data(), disp.data(), MPI_EigenVector4, 0, MPI_COMM_WORLD);
 
 		 }
 
-#ifdef WRITE_LOG
 		 if (myid == 0)
 		 {
-			 ofstream ofile;
-			 ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
-			 ofile << "\n after gather";
-			 ofile.close();
-		 }
-#endif
-
-		 if (myid == 0)
-		 {
+			 int ii = 0;
 			 for (auto id : id_cells_node0)
 			 {
-				 U_full_2d[id] = U_full_2d_local[id];  // сохран€ем €чейки расчитаные отдельно
+				 U_full_2d[id] = U_full_2d_local[ii];  // сохран€ем €чейки расчитаные отдельно
+				 W_full_2d[id] = W_full_2d_local[ii++];  // сохран€ем €чейки расчитаные отдельно
 			 }			 
 
-			 U_full_2d.swap(U_full_2d_prev); // здесь он переставит указатели, mpi может сойти с ума
+			 std::swap(U_full_2d, U_full_2d_prev);
+			 //U_full_2d.swap(U_full_2d_prev); // здесь он переставит указатели, mpi может сойти с ума
 		 }
 
+#ifndef WRITE_LOG
+		 {
+			 ofstream ofile;
+			 ofile.open(main_dir + "File_with_Logs_solve" + to_string(myid) + ".txt", std::ios::app);
+			
 
-		 MPI_RETURN(0);
+			 ofile<<"t= "<<t << " U_full_2d_local= " << U_full_2d_local.size() << "\n\n";
+			 for (auto& el : U_full_2d_local)
+				 ofile << el << '\n';
+			 ofile << "\n\n";
+
+			 ofile << "\n\n";
+			 ofile.close();
+	 }
+#endif
 
 		 t += tau;
 		 cur_time += tau;
 		 count++;
-
 	 }// while
 
 	MPI_RETURN(0);

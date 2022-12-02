@@ -1654,7 +1654,7 @@ void HLLC_Rel(const Type tau, const std::vector<int>& neighbours_id_faces, const
 #ifdef Cube
 			// Äëÿ 1d çàäà÷è Ñîäà. 
 			// ÑËÈØÊÎÌ ÑÈËÜÍÛÅ ÊÎËÅÁÀÍÈß ÏÎ Y,Z. ÷òî-òî íå òàê!!!!!!!!!!!!!!!!!!!!
-			buf[1] = Vector3(buf[1], buf[2], buf[3]).norm();
+			//buf[1] = Vector3(buf[1], buf[2], buf[3]).norm();
 			buf[2] = 0;
 			buf[3] = 0; 
 #endif
@@ -1720,7 +1720,7 @@ Type FormTimeStepToRHLLC(const int n, const Type h, const Type k) {
 		if (c > c_max) c_max = c;
 	}
 	//printf("c=%lf\n", c_max);
-	return k * h / c_max;
+	return k * h * c_max;
 }
 #endif //RHLLC
 

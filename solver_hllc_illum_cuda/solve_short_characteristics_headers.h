@@ -5,7 +5,7 @@
 
 //#define ONLY_ILLUM
 
-#define RHLLC
+//#define RHLLC
 
 //#define HLLC_2D
 
@@ -33,7 +33,7 @@
 //#define Const_1d
 //#define Sphere
 //#define Ellips
-//#define Cube
+#define Cube
 //#define Step
 //#define Cylinder
 
