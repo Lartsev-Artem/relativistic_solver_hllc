@@ -9,9 +9,9 @@
 
 #else
 
-#define SODA_2d
+//#define SODA_2d
 
-//#define Jet_2d
+#define Jet_2d
 
 static int c0 = 0;
 static int c1 = 0;
@@ -77,6 +77,28 @@ static  int WriteSolution(const int n, const std::string main_dir, const std::ve
 	return 0;
 }
 
+static int InitNeigh(const int N, const std::vector<Vector3>& centerts, const std::vector<Normals>& normals,
+	std::vector<int>& neighbours_id_faces)
+{
+#ifdef Jet_2d
+	for (size_t i = 0; i < N; i++)
+	{
+		Vector2 x(centerts[i][0], centerts[i][1]);
+
+		for (size_t j = 0; j < 3; j++)
+		{
+			if (neighbours_id_faces[3 * i + j] < 0)
+				if (fabs(normals[i].n[j][0] - 1) < 0.0001)
+					if (x[1] < 1 && x[1]>-1 && x[0] < 1)
+				{
+					neighbours_id_faces[3 * i + j] = eBound_OutSource;
+				}
+		}
+	}
+#endif
+
+	return 0;
+}
 static int RHLLC_Init(const int N, const std::vector<Vector3>& centerts, std::vector<Vector4>& W) {
 
 	W.resize(N);
@@ -92,7 +114,7 @@ static int RHLLC_Init(const int N, const std::vector<Vector3>& centerts, std::ve
 			cell(0) = 0.1;			
 			cell(1) = 0.99;
 			cell(2) = 0;
-			cell(3) = 0.01;
+			cell(3) = 0.01;			
 		}
 		else
 		{
@@ -175,6 +197,19 @@ Vector4 RHLLC_stepToOMP2d(const int num_cell, const Type tau, const std::vector<
 			case eBound_FreeBound:
 				U_R = U;
 				W_R = W;
+				break;
+			case eBound_OutSource://eBound_InnerSource:
+#ifdef Jet_2d				
+				W_R << 0.1, 0.99, 0, 0.01;
+
+				U_R << 0.7088812050083355,
+					6.218592964824112,					
+					0,
+					6.271407035175871;
+#else
+				U_R = U;
+				W_R = W;
+#endif
 				break;
 			default:
 				if (neig < 0)
@@ -637,19 +672,28 @@ static int ReBuildPhysicValue(const Vector4& U, Vector4& W)
 }
 
 static int ReBuildPhysicValue(const  std::vector<Vector4>& U, std::vector<Vector4>& W) {
+	
+	bool flag = false;
+#pragma omp parallel default(none) shared(U, W, flag)
+	{	
+		const int size = U.size();
 
-	const int size = U.size();
-
-	for (int num_cell = 0; num_cell < size; num_cell++)
-	{
-		if (ReBuildPhysicValue(U[num_cell], W[num_cell]))
+#pragma omp for
+		for (int num_cell = 0; num_cell < size; num_cell++)
 		{
-			printf("Error cell= %d\n", num_cell);
-			MPI_RETURN(1);
+			if (!flag && ReBuildPhysicValue(U[num_cell], W[num_cell]))
+			{
+#pragma omp critical
+				{
+					flag = true;
+					printf("Error cell= %d\n", num_cell);
+					//MPI_RETURN(1);
+				}
+			}
 		}
 	}
 
-	return 0;
+	return flag;
 }
 
 static int ReBuildPhysicValueold(const  std::vector<Vector4>& U, std::vector<Vector4>& W) {
@@ -743,7 +787,7 @@ static int ReBuildConvValue(const std::vector<Vector4>& W, std::vector<Vector4>&
 
 
 int RHLLC2d(std::string& main_dir,
-	const std::vector<Vector3>& centerts, const std::vector<int>& neighbours_id_faces,
+	const std::vector<Vector3>& centerts, std::vector<int>& neighbours_id_faces,
 	const std::vector<Normals>& normals, const std::vector<Type>& squares_cell, const std::vector<Type>& volume) {
 
 	printf("start 2d rhllc task\n");
@@ -764,6 +808,8 @@ int RHLLC2d(std::string& main_dir,
 #endif
 
 	RHLLC_Init(size_grid, centerts, W_full_2d);
+
+	InitNeigh(size_grid, centerts, normals, neighbours_id_faces);
 
 	U_full_2d.resize(size_grid);
 	U_full_2d_prev.resize(size_grid);
@@ -787,21 +833,17 @@ int RHLLC2d(std::string& main_dir,
 
 		//ReBuildConvValue(W_full_2d, U_full_2d_prev);
 
-#pragma omp parallel default(none) shared(tau, neighbours_id_faces, normals, squares_cell, volume, U_full_2d, U_full_2d_prev,W_full_2d)
+#pragma omp parallel default(none) shared(size_grid, tau, neighbours_id_faces, normals, squares_cell, volume, U_full_2d, U_full_2d_prev,W_full_2d)
 		{
 			Vector4 buf;
 #pragma omp for
 			for (int i = 0; i < size_grid; i++)
 			{
-				buf = RHLLC_stepToOMP2d(i, tau, neighbours_id_faces, normals, squares_cell, volume);
+				U_full_2d[i] = RHLLC_stepToOMP2d(i, tau, neighbours_id_faces, normals, squares_cell, volume);
 
 				//buf[1] = Vector3(buf[1], buf[2], buf[3]).norm();
 				//buf[2] = 0;
 				//buf[3] = 0;
-#pragma omp critical
-				{
-					U_full_2d[i] = buf;
-				}
 			}
 		}
 

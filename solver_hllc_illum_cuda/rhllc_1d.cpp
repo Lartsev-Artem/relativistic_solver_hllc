@@ -1,5 +1,6 @@
 #include "solve_short_characteristics_headers.h"
 #include "solve_short_characteristics_global_structure.h"
+#include "omp.h"
 
 #define SIGN(a) (a < 0.0 ? -1.0 : 1.0) 
 struct PhysVal {
@@ -26,7 +27,7 @@ struct Flux {
 	}
 };
 
-static int size_g = 101;
+static int size_g = 200 + 1;
 static const Type h = 1. / (size_g - 1);
 static Type tau = h * 0.1;
 
@@ -276,6 +277,8 @@ int RHLLC_Init(std::vector<PhysVal>& W) {
 int ReBuildCon2Phys(const std::vector<ConVal>& U, std::vector<PhysVal>& W)
 {
 	int n = U.size();
+	static std::vector<Type> iters(100, 0);
+
 	for (size_t num_cell = 0; num_cell < n; num_cell++)
 	{
 		const Type vv = W[num_cell].v * W[num_cell].v;
@@ -285,6 +288,90 @@ int ReBuildCon2Phys(const std::vector<ConVal>& U, std::vector<PhysVal>& W)
 
 		Type W0 = d * h * Gamma0 * Gamma0; //U[0] * Gamma0 * h;
 		
+		Type m = U[num_cell].v;
+		Type mm = U[num_cell].v * U[num_cell].v;
+
+		Type p = W[num_cell].p;
+		Type v = W[num_cell].v;
+
+		Type D = U[num_cell].d;
+		Type E = U[num_cell].p;
+
+		int  cc = 0;		
+
+		Type err = 1;
+		do
+		{
+			err = W0;
+
+			Type fW = W0 - p - E;
+
+			Type dGdW = -(Gamma0 * Gamma0 * Gamma0) * mm / (2 * W0 * W0 * W0);
+			Type dFdW = 1 - ((Gamma0 * (1 + D * dGdW) - 2 * W0 * dGdW) / (Gamma0 * Gamma0 * Gamma0 * gamma_g));
+			W0 -= (fW / dFdW);
+			//W0 -= fW;
+
+			Gamma0 = 1. / sqrt(1 - mm / (W0 * W0));
+
+			p = (W0 - D * Gamma0) / (Gamma0 * Gamma0 * gamma_g);
+
+			v = m / W0;
+			
+			err -= W0;
+			cc++;
+		} while (fabs(err / W0) > 1e-14);
+
+		if (p < 0 || U[num_cell].d < 0 || std::isnan(p) || std::isnan(U[num_cell].d))
+		{
+			printf("Error cell %d (p = %lf, d= %lf)", num_cell, p, D / Gamma0);
+			exit(1);
+		}
+
+		
+		
+		if (cc < 100)
+		{
+			//Type norm = Vector3(fabs(p - W[num_cell].p), fabs(D / Gamma0 - W[num_cell].rho), fabs(v - W[num_cell].v)).norm();
+			
+			Type norm = Vector3(U_full_1d_prev[num_cell].p - U_full_1d[num_cell].p, U_full_1d_prev[num_cell].v - U_full_1d[num_cell].v,
+				U_full_1d_prev[num_cell].d - U_full_1d[num_cell].d).norm();
+			if(iters[cc] < norm ) iters[cc] = norm;
+
+			//iters[cc] = fabs(D / Gamma0 - W[num_cell].rho);
+			//iters[cc] = fabs(v - W[num_cell].v);
+			//if(iters[cc] < fabs(p - W[num_cell].p)) iters[cc] = fabs(p - W[num_cell].p);
+		}
+
+		W[num_cell].p = p;
+		W[num_cell].v = v;		
+		W[num_cell].rho = D / Gamma0;
+	}
+
+	for (size_t i = 0; i < 100; i++)
+	{
+		//if(iters[i]> 1e-15) printf("delta p = %0.16lf,  cc=%d\n", iters[i], i);
+		if (iters[i] > 1e-15) printf("{%d, %0.16lf}, ", i, iters[i]);
+	}
+	printf("\n-----------------------------------\n");
+	
+	
+	return 0;
+}
+
+int ReBuildCon2PhysIter(const std::vector<ConVal>& U, std::vector<PhysVal>& W)
+{
+	int n = U.size();
+	static std::vector<Type> iters(100, 0);
+
+	for (size_t num_cell = 0; num_cell < n; num_cell++)
+	{
+		const Type vv = W[num_cell].v * W[num_cell].v;
+		const Type d = W[num_cell].rho;
+		Type Gamma0 = 1. / sqrt(1 - vv);
+		const Type h = 1 + gamma_g * W[num_cell].p / d;
+
+		Type W0 = d * h * Gamma0 * Gamma0; //U[0] * Gamma0 * h;
+
 		Type m = U[num_cell].v;
 		Type mm = U[num_cell].v * U[num_cell].v;
 
@@ -312,7 +399,7 @@ int ReBuildCon2Phys(const std::vector<ConVal>& U, std::vector<PhysVal>& W)
 			p = (W0 - D * Gamma0) / (Gamma0 * Gamma0 * gamma_g);
 
 			v = m / W0;
-			
+
 			err -= W0;
 			cc++;
 		} while (fabs(err / W0) > 1e-14);
@@ -323,12 +410,37 @@ int ReBuildCon2Phys(const std::vector<ConVal>& U, std::vector<PhysVal>& W)
 			exit(1);
 		}
 
+
+
+		if (cc < 100)
+		{
+			//Type norm = Vector3(fabs(p - W[num_cell].p), fabs(D / Gamma0 - W[num_cell].rho), fabs(v - W[num_cell].v)).norm();
+
+			Type norm = Vector3(U_full_1d_prev[num_cell].p - U_full_1d[num_cell].p, U_full_1d_prev[num_cell].v - U_full_1d[num_cell].v,
+				U_full_1d_prev[num_cell].d - U_full_1d[num_cell].d).norm();
+			if (iters[cc] < norm) iters[cc] = norm;
+
+			//iters[cc] = fabs(D / Gamma0 - W[num_cell].rho);
+			//iters[cc] = fabs(v - W[num_cell].v);
+			//if(iters[cc] < fabs(p - W[num_cell].p)) iters[cc] = fabs(p - W[num_cell].p);
+		}
+
 		W[num_cell].p = p;
-		W[num_cell].v = v;		
+		W[num_cell].v = v;
 		W[num_cell].rho = D / Gamma0;
 	}
+
+	for (size_t i = 0; i < 100; i++)
+	{
+		//if(iters[i]> 1e-15) printf("delta p = %0.16lf,  cc=%d\n", iters[i], i);
+		if (iters[i] > 1e-15) printf("{%d, %0.16lf}, ", i, iters[i]);
+	}
+	printf("-----------------------------------\n");
+
+
 	return 0;
 }
+
 int ReBuildPhys2Con(const std::vector<PhysVal>& W, std::vector<ConVal>& U)
 {	
 	ConVal cell;
@@ -355,7 +467,7 @@ int ReBuildPhys2Con(const std::vector<PhysVal>& W, std::vector<ConVal>& U)
 int RHLLC_1d(std::string& main_dir) {
 
 	Type t = 0;
-	const Type T = 0.5;
+	const Type T = 0.4;
 
 	RHLLC_Init(W_full_1d_prev);
 	if (WriteSolution(main_dir, W_full_1d_prev, 1))
@@ -364,21 +476,33 @@ int RHLLC_1d(std::string& main_dir) {
 	}
 
 	int count = 0;
+	Type print_time = 0.01;
+	Type cur_time = 0;
 	while (t < T)
 		//for (size_t k = 0; k < ; k++)		
 	{
 		ReBuildPhys2Con(W_full_1d_prev, U_full_1d_prev);
 
-		for (size_t i = 0; i < size_g; i++)
+#pragma omp parallel default(none) shared(U_full_1d, size_g, U_full_1d_prev, W_full_1d_prev)
 		{
-			U_full_1d[i] = RHLLC_flux(i);
+			
+#pragma omp for						
+			for (int i = 0; i < size_g; i++)
+			{
+				U_full_1d[i] = RHLLC_flux(i);
+			}
 		}
 	
 		ReBuildCon2Phys(U_full_1d, W_full_1d_prev);
 
-		if (WriteSolution(main_dir, W_full_1d_prev, 0))
+		if (cur_time >= print_time)
 		{
-			return 1;
+			if (WriteSolution(main_dir, W_full_1d_prev, 0))
+			{
+				return 1;
+			}
+			cur_time = 0;
+			count++;
 		}
 
 #ifdef DBG_OUTPUT
@@ -413,7 +537,7 @@ int RHLLC_1d(std::string& main_dir) {
 		//W_full_1d.swap(W_full_1d_prev);
 
 		t += tau;
-		count++;
+		cur_time += tau;
 	}
 
 	printf("timer %d\n", count);

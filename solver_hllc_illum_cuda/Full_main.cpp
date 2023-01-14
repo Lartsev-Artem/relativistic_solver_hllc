@@ -54,6 +54,7 @@ int BoundDataToHLLC(const std::vector<Normals>& normals, const std::vector<int>&
 		{
 			const int neig = neighbours_id_faces[4 * num_cell + i];
 
+
 			if (neig == eBound_OutSource)
 			{
 				const Vector3 velocity(0.99, 0, 0);
@@ -82,6 +83,8 @@ int BoundDataToHLLC(const std::vector<Normals>& normals, const std::vector<int>&
 
 	return 0;
 #endif
+
+
 	return 0;
 #endif
 
@@ -995,7 +998,7 @@ std:string main_dir;
 		for (size_t i = 0; i < size_grid; i++)
 		{
 			Vector3 x = centers[i];
-			if (Vector2(x[1], x[2]).norm() < 0.3 && x[0] < 0.5)
+			if (Vector2(x[1], x[2]).norm() < 0.2 && x[0] < 0.5)
 			{
 				density[i] = 0.1;
 				pressure[i] = 0.01;
@@ -1308,7 +1311,7 @@ std:string main_dir;
 #ifdef ONLY_HLLC
 	Type tau = 1e-5;
 	Type CFL = 0.1;
-	Type print_timer = 0.015;
+	Type print_timer = 0.01;
 #else
 	Type tau = 1e-8;
 	Type CFL = 0.001;
@@ -1316,7 +1319,7 @@ std:string main_dir;
 #endif
 
 	Type t = 0.0;	
-	Type T =  0.7;
+	Type T =  0.4;
 #if defined Sphere
 	const Type h = 0.0128079221422811;
 #elif defined Cone && !defined Jet
@@ -1325,19 +1328,19 @@ std:string main_dir;
 #elif defined Jet
 	const Type h = 0.0012548169651948;
 #elif defined Cube
-	const Type h = 0.0007123669658939; // Soda1d_2
+	//const Type h = 0.0007123669658939; // Soda1d_2
 	//const Type h  = 0.0010828369115320; // Soda1d
-	//const Type h = 0.0010307259619874; // Soda1d_3
+	const Type h = 0.0010307259619874; // Soda1d_3
 #elif defined Step
 	const Type h = 0.0018751819368151;
 	T = 5;
 	CFL = 0.5;
 	print_timer = 0.1;
 #elif defined Cylinder
-	const Type h = 0.0066864401941437;
+	const Type h = 0.0064085233935784;
 	T = 10;
 	CFL = 0.05;
-	print_timer = 0.1;
+	print_timer = 0.0000001;
 #else
 	const Type h = 1;
 	printf("Bad geometry define\n");
@@ -1348,7 +1351,7 @@ std:string main_dir;
 #ifndef ONLY_ILLUM
 	U_full.resize(size_grid, VectorX(5));	//  может не пройти инициализация VectorX!!
 #if defined RHLLC
-	ReBuildDataForHLLCRel(size_grid, U_full_prev);
+	ReBuildDataForHLLCRel(size_grid, U_full_prev);	
 #else
 	if (ReBuildDataForHLLC(size_grid, U_full_prev)) ERR_RETURN("Error rebuild data to HLLC\n")
 #endif
@@ -1383,6 +1386,12 @@ std:string main_dir;
 	std::unique(bound_cells.begin(), bound_cells.end());
 #endif
 
+#ifdef USE_MPI
+	MPI_Init(&argc, &argv);
+	RHLLC_MPI(main_dir, centers, neighbours_id_faces, normals, squares_cell, volume);
+	MPI_RETURN(0);
+#endif
+
 	//------------------------------------------------------------------------------------------------------------
 	int res_count = 0; // счётчик решений	
 	Type full_time = -omp_get_wtime();
@@ -1392,7 +1401,7 @@ std:string main_dir;
 
 		if (cur_timer >= print_timer)
 		{
-			std::string file_solve = solve_direction +"Solve" + std::to_string(res_count); //(count / step);
+			std::string file_solve = solve_direction + "Solve" + std::to_string(res_count); //(count / step);
 			WriteStepTimeSolve(file_solve, 0, Illum, energy, stream, impuls, div_stream, div_impuls, U_full_prev);
 			cur_timer = 0;
 			res_count++;
@@ -1402,7 +1411,18 @@ std:string main_dir;
 #ifdef RHLLC
 		HLLC_Rel(tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev);
 #else
+#ifdef NEW_CLASS
+		//omp_set_num_threads(1);
+		//_clock = -omp_get_wtime();
+		//HLLC(size_grid, tau, bound_cells, neighbours_id_faces, normals, squares_cell, volume, U_full_prev);
+		//_clock += omp_get_wtime();
+		//printf("Time old hllc: %lf\n", _clock);
+
+		HLLC(tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev);
+#else
+
 		HLLC(size_grid, tau, bound_cells, neighbours_id_faces, normals, squares_cell, volume, U_full_prev);
+#endif
 #endif
 
 #ifdef SAVE_DUMP_HLLC

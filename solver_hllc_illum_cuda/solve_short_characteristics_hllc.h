@@ -23,6 +23,10 @@ void HLLC_Rel(const Type tau, const std::vector<int>& neighbours_id_faces, const
 
 Type FormTimeStepToRHLLC(const int n, const Type h, const Type k);
 int ReBuildDataForHLLCRel(const int N, std::vector<VectorX>& data);
+
+int RHLLC_Init_3d(const int N, const std::vector<Vector3>& centerts, std::vector<VectorX>& W);
+int ReBuildConvValue_3d(const std::vector<VectorX>& W, std::vector<VectorX>& U);
+
 #endif
 
 #ifdef HLLC_1D
@@ -35,13 +39,13 @@ int RHLLC_1d(std::string& main_dir);
 
 #ifdef HLLC_2D
 int HLLC2d(std::string& main_dir,
-	const std::vector<Vector3>& centerts, const std::vector<int>& neighbours_id_faces,
+	const std::vector<Vector3>& centerts,  std::vector<int>& neighbours_id_faces,
 	const std::vector<Normals>& normals, const std::vector<Type>& squares_cell, const std::vector<Type>& volume);
 #endif
 
 #ifdef RHLLC_2D
 int RHLLC2d(std::string& main_dir,
-	const std::vector<Vector3>& centerts, const std::vector<int>& neighbours_id_faces,
+	const std::vector<Vector3>& centerts, std::vector<int>& neighbours_id_faces,
 	const std::vector<Normals>& normals, const std::vector<Type>& squares_cell, const std::vector<Type>& volume);
 
 #ifdef USE_MPI
@@ -52,6 +56,16 @@ int MPI_RHLLC(std::string& main_dir,
 #endif
 #endif
 
+#if defined USE_MPI && defined RHLLC
+int  RHLLC_MPI(std::string& main_dir,
+	std::vector<Vector3>& centerts, std::vector<int>& neighbours_id_faces,
+	std::vector<Normals>& normals, std::vector<Type>& squares_cell, std::vector<Type>& volume);
+#endif
+
+#ifdef NEW_CLASS
+void HLLC(const Type tau, std::vector<int>& neighbours_id_faces, std::vector<Normals>& normals,
+	std::vector<Type>& squares_cell, std::vector<Type>& volume, std::vector<VectorX>& U_full_prev);
+#endif
 
 
 #endif

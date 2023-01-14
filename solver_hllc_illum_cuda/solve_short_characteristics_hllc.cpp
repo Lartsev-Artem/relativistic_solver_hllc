@@ -245,6 +245,10 @@ VectorX HLLC_stepToOMP(const int num_cell, const Type tau, const std::vector<int
 
 		const Type S_L = v_L - a_L * q_L;
 		const Type S_R = v_R + a_R * q_R;
+
+#ifdef DBG_OUTPUT
+		printf("(%d), S_L=%lf,  S_R=%lf\n", num_cell, S_L, S_R);
+#endif
 		flag_bound = false;
 		if (S_R <= 0) // если верно выполнить всегда
 		{
@@ -303,6 +307,9 @@ VectorX HLLC_stepToOMP(const int num_cell, const Type tau, const std::vector<int
 		}
 
 #ifdef DBG_OUTPUT
+
+		std::cout << "F= " << F << '\n';
+
 		ofstream ofile;
 		const std::string name_file = "D:\\Desktop\\FilesCourse\\dbg_hllc.txt";
 		static bool start = false;
@@ -313,7 +320,7 @@ VectorX HLLC_stepToOMP(const int num_cell, const Type tau, const std::vector<int
 			ofile.close();
 		}
 
-		if (fabs(F(0)) > 1e-1)
+		//if (fabs(F(0)) > 1e-1)
 		{
 			ofile.open(name_file, std::ios::app);
 			if (!ofile.is_open())
@@ -322,6 +329,8 @@ VectorX HLLC_stepToOMP(const int num_cell, const Type tau, const std::vector<int
 				exit(1);
 			}
 			int i = num_cell;
+
+			ofile << "S_L[" << num_cell << "]= " <<S_L  << " S_R= " << S_R << '\n';
 			ofile << "U[" << num_cell << "]= " << U(0) << ", " << U(1) << ", " << U(4) << '\n';
 			ofile << "F[" << num_cell << "]= " << F(0) << ", " << F(1) << ", " << F(4) << '\n';
 
@@ -665,7 +674,7 @@ int ReBuildDataForHLLCRel(const int N, std::vector<VectorX>& data) {
 		//cell[4] = pressure[i] / (gamma1 - 1) + d * v / 2;
 		//cell[4] = e_substance[i];
 
-		data[i] = cell;
+		data[i] = cell;		
 
 		PhysCell << density[i], velocity[i][0], velocity[i][1], velocity[i][2], pressure[i];
 		W_full[i] = PhysCell;
@@ -1242,8 +1251,18 @@ VectorX RHLLC_stepToOMPGit(const int num_cell, const Type tau, const std::vector
 				neig = num_cell * 4 + i;
 				break;
 			case eBound_OutSource://eBound_InnerSource:
+#ifdef Cylinder				
+				W_R << 0.1, 0.99, 0, 0, 0.01;
+
+				U_R << 0.7088812050083355,
+					6.218592964824112,
+					0,
+					0,
+					6.271407035175871;
+#else
 				U_R = U;
 				W_R = W;
+#endif
 				neig = num_cell * 4 + i;
 				break;
 			case eBound_InnerSource://eBound_OutSource:
@@ -1650,7 +1669,7 @@ void HLLC_Rel(const Type tau, const std::vector<int>& neighbours_id_faces, const
 		for (int i = 0; i < size_grid; i++)
 		{
 			//buf = HLLC_stepToOMPRel(i, tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev); // -> U_full		
-			buf = RHLLC_stepToOMPGit(i, tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev); // -> U_full		
+			U_full[i] = RHLLC_stepToOMPGit(i, tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev); // -> U_full		
 #ifdef Cube
 			// ƒл€ 1d задачи —ода. 
 			// —Ћ»Ў ќћ —»Ћ№Ќџ≈  ќЋ≈ЅјЌ»я ѕќ Y,Z. что-то не так!!!!!!!!!!!!!!!!!!!!
@@ -1658,18 +1677,17 @@ void HLLC_Rel(const Type tau, const std::vector<int>& neighbours_id_faces, const
 			buf[2] = 0;
 			buf[3] = 0; 
 #endif
-
-#pragma omp critical
-			{
- 				U_full[i] = buf;		
-			}
 		}
 	}
 
-	for (size_t i = 0; i < size_grid; i++)
-	{		
-		ReBuildPhysicValue_ost1098(i, U_full[i]); // U_full -> p1, v1, rho1
-		//ReBuildPhysicValue(i, U_full[i]); // U_full -> p1, v1, rho1
+#pragma omp parallel default(none) shared(pressure, velocity, density, size_grid,  gamma_g, U_full)
+	{
+#pragma omp for
+		for (int i = 0; i < size_grid; i++)
+		{
+			ReBuildPhysicValue_ost1098(i, U_full[i]); // U_full -> p1, v1, rho1
+			//ReBuildPhysicValue(i, U_full[i]); // U_full -> p1, v1, rho1
+		}
 	}
 
 #ifdef DBG_OUTPUT
@@ -1722,6 +1740,528 @@ Type FormTimeStepToRHLLC(const int n, const Type h, const Type k) {
 	//printf("c=%lf\n", c_max);
 	return k * h * c_max;
 }
+
+int RHLLC_Init_3d(const int N, const std::vector<Vector3>& centerts, std::vector<VectorX>& W) {
+
+	W.resize(N);
+	VectorX cell;
+
+	for (size_t i = 0; i < N; i++)
+	{
+		Vector3 x(centerts[i][0], centerts[i][1], centerts[i][2]);
+
+#ifdef Jet_2d
+		if (x[0] < 1 && x[1] < 1 && x[1]>-1)
+		{
+			cell(0) = 0.1;
+			cell(1) = 0.99;
+			cell(2) = 0;
+			cell(3) = 0.01;
+		}
+		else
+		{
+			cell(0) = 10;
+			cell(1) = 0;
+			cell(2) = 0;
+			cell(3) = 0.01;
+		}
+#endif
+
+#if 1 //def SODA
+		if (x[0] < 0.499)
+		{
+			cell(0) = 1;
+			cell(1) = 0.9;
+			cell(2) = 0;
+			cell(3) = 0;
+			cell(4) = 1;
+		}
+		else
+		{
+			cell(0) = 1;
+			cell(1) = 0;
+			cell(2) = 0;
+			cell(3) = 0;
+			cell(4) = 10;
+		}
+#endif
+
+		W[i] = cell;
+	}
+
+	return 0;
+}
+
+int ReBuildConvValue_3d(const std::vector<VectorX>& W, std::vector<VectorX>& U) {
+
+	U.resize(size_grid);
+	VectorX cell;
+
+	for (size_t i = 0; i < size_grid; i++)
+	{
+		const Type v = (W[i](1) * W[i](1) + W[i](2) * W[i](2));
+		const Type d = W[i](0);
+		const Type Gamma = 1. / sqrt(1 - v);
+		const Type h = 1 + gamma_g * W[i](3) / d;
+		const Type dhGG = d * h * Gamma * Gamma;
+
+		cell[0] = Gamma * d;
+		cell[1] = dhGG * W[i][1];
+		cell[2] = dhGG * W[i][2];
+		cell[2] = dhGG * W[i][3];
+		cell[4] = dhGG - W[i](4);
+
+		U[i] = cell;
+	}
+
+	return 0;
+}
+
 #endif //RHLLC
+
+#ifdef NEW_CLASS
+#define base 4
+
+struct flux
+{
+	Type d;
+	Vector3 v;
+	Type p;
+
+	flux()
+	{
+		d = 0;
+		v = Vector3::Zero();
+		p = 0;
+	}
+
+	flux(const Type a, const Type b, const Type c, const Type dd, const Type e)
+	{
+		d = a;
+		v = Vector3(b, c, dd);
+		p = e;
+	}
+
+	flux operator+ (const flux& x) { d += x.d; v += x.v; p += x.p; return *this; }
+	flux operator+= (const flux& x) { d += x.d; v += x.v; p += x.p; return *this; }
+	flux operator-= (const flux& x) { d -= x.d; v -= x.v; p -= x.p; return *this; }
+	flux operator* (const Type x) { d *= x; v *= x; p *= x; return *this; }
+	flux operator- (const flux& x) { d -= x.d; v -= x.v; p -= x.p; return *this; }
+	flux operator/ (const Type x) { d /= x; v /= x; p /= x; return *this; }
+	
+	// это временно дл€ свз€и со старым кодом
+	Type operator[](const int i)
+	{
+		switch (i)
+		{
+		case 0: return d;			
+		case 1: return v[0];
+		case 2: return v[1];
+		case 3: return v[2];
+		case 4: return p;
+
+		default:
+			printf("err idx in flux opreator []\n");
+			return 0;
+			break;
+		}
+	}
+	Type operator()(const int i)
+	{
+		switch (i)
+		{
+		case 0: return d;
+		case 1: return v[0];
+		case 2: return v[1];
+		case 3: return v[2];
+		case 4: return p;
+
+		default:
+			printf("err idx in flux opreator ()\n");
+			return 0;
+			break;
+		}
+	}
+
+};
+struct face
+{
+	flux f;
+	int id_l;
+	int id_r;
+
+	Vector3 n;
+	Type S;
+
+	face()
+	{
+		id_l = 0;
+		id_r = 0;
+		n = Vector3::Zero();
+		S = 0;
+	}
+};
+struct elem// пока спорно
+{
+	flux val;
+	int id_faces[base];
+	Type V;
+	bool sign_n[base];
+
+	elem()
+	{
+		for (int i = 0; i < base; i++)
+		{
+			id_faces[i] = -1;
+			sign_n[i] = 0;
+		}
+		V = 0;
+	}
+};
+
+void ReBuildNeighStruct(std::vector<int>& neighbours_id_faces, std::vector<Normals> normals, std::vector<Type>& squares_faces,
+	std::vector<face>& faces, std::vector<elem>& cells)
+{
+	//std::vector<int> neighbours_id_faces = { -1,-1,4, -1,2,7, -1,5,-1 };	
+
+	const int N = neighbours_id_faces.size() / base;
+	//std::vector<Normals> normals(N, Normals(base));
+	cells.resize(N);
+
+	int cc = 0;
+	for (int i = 0; i < N * base; i++)
+	{
+		int idx = neighbours_id_faces[i];
+
+		if (idx != -10)
+		{
+			face f;
+			f.id_l = i / base; //€чейка
+
+			f.n = normals[i / base].n[i % base];
+			f.S = squares_faces[i];
+
+			cells[i / base].sign_n[i % base] = true;
+			cells[i / base].id_faces[i % base] = cc;
+
+			neighbours_id_faces[i] = -10;
+			if (idx >= 0)
+			{
+				f.id_r = idx / base; //сосед
+
+				cells[idx / base].sign_n[idx % base] = false;
+				cells[idx / base].id_faces[idx % base] = cc;
+
+				neighbours_id_faces[idx] = -10;
+			}
+			else
+			{
+				f.id_r = idx; // код границы
+			}
+
+			faces.push_back(f); // как потом искать с €чейками?
+			cc++;
+		}
+	}
+
+
+	neighbours_id_faces.clear();
+	normals.clear();
+	squares_faces.clear();
+
+	return;
+}
+
+static inline int MakeRotationMatrixNew(const Vector3& n, Eigen::Matrix3d& T)
+{	
+		T = Eigen::Matrix3d::Zero();		
+
+		if (fabs(n[2] * n[2] - 1) > eps)
+		{
+
+			T(0, 0) = n[0];
+			T(0, 1) = n[1];
+			T(0, 2) = n[2];
+
+			Type sqr = sqrt(1 - n[2] * n[2]);
+
+			if (sqr < eps * eps - eps / 10)
+				printf("Err T\n");
+
+			T(1, 0) = -n[1] / sqr;
+			T(1, 1) = n[0] / sqr;
+
+			T(2, 0) = -n[0] * n[2] / sqr;
+			T(2, 1) = -n[1] * n[2] / sqr;
+			T(2, 2) = sqr;
+		}
+		else if (n[2] > 0)  // n_z == 1
+		{
+			T(0, 2) = 1;
+			T(1, 1) = 1;
+			T(2, 0) = -1;
+		}
+		else  // n_z == -1
+		{
+			T(0, 2) = -1;
+			T(1, 1) = -1;
+			T(2, 0) = 1;
+		}
+
+	return 0;
+}
+static int flux_calc(const flux& val_l, const flux& val_r, face& f)
+{
+	Matrix3 T;
+	MakeRotationMatrixNew(f.n, T);
+	
+	flux U_L = val_l; 
+	U_L.v = T * val_l.v;	
+	
+	flux U_R= val_r;  
+	U_R.v = T * val_r.v;
+
+	Type d_L = U_L[0]; //density[num_cell];
+	Type d_R = U_R[0]; // density[neig];
+
+	Vector3 vel(U_L(1) / d_L, U_L(2) / d_L, U_L(3) / d_L);
+	Type v = vel.dot(vel);
+	Type p_L = (U_L(4) - v * d_L / 2.) * (gamma1 - 1);
+
+	vel << U_R(1) / d_R, U_R(2) / d_R, U_R(3) / d_R;
+	v = vel.dot(vel);
+	Type p_R = (U_R(4) - v * d_R / 2.) * (gamma1 - 1);
+
+
+	const Type v_L = U_L[1] / d_L; // sqrt(U_L[1] * U_L[1] + U_L[2] * U_L[2] + U_L[3] * U_L[3]);  //velocity[num_cell].norm();
+	const Type v_R = U_R[1] / d_R; //sqrt(U_R[1] * U_R[1] + U_R[2] * U_R[2] + U_R[3] * U_R[3]); //velocity[neig].norm();
+
+	const Type a_L = sqrt(gamma1 * p_L / d_L);
+	const Type a_R = sqrt(gamma1 * p_R / d_R);
+
+	const Type P = (p_L + p_R) / 2;
+	const Type Den = (d_L + d_R) / 2;
+	const Type A = (a_L + a_R) / 2;
+	const Type _p = max(0.0, P - (v_R - v_L) * Den * A / 2);
+	
+	// pressure-based wave speed estimates
+	Type q_L = 1;
+	const Type G = (gamma1 + 1) / (2 * gamma1);
+	if (_p > p_L) q_L = sqrt(1 + G * (_p / p_L - 1));
+
+	Type q_R = 1;
+	if (_p > p_R) q_R = sqrt(1 + G * (_p / p_R - 1));
+
+	const Type S_L = v_L - a_L * q_L;
+	const Type S_R = v_R + a_R * q_R;	
+
+#ifdef DBG_OUTPUT
+	printf("(f), S_L=%lf,  S_R=%lf\n",  S_L, S_R);
+#endif
+	flux F;
+	if (S_R <= 0) // если верно выполнить всегда
+	{
+		F.d = U_R[1];
+		F.v(0) = U_R[1] * U_R[1] / d_R + p_R;
+		F.v(1) = U_R[1] * U_R[2] / d_R;
+		F.v(2) = U_R[1] * U_R[3] / d_R;
+		F.p = (U_R[4] + p_R) * U_R[1] / d_R;
+		//continue;
+		c0++;
+	}
+	else if (S_L >= 0) // выполнить либо по условию либо дл€ всех границ
+	{
+		F.d = U_L[1];
+		F.v(0) = U_L[1] * U_L[1] / d_L + p_L;
+		F.v(1) = U_L[1] * U_L[2] / d_L;
+		F.v(2) = U_L[1] * U_L[3] / d_L;
+		F.p = (U_L[4] + p_L) * U_L[1] / d_L;  // TU[4]*d_L
+		//continue;
+		c1++;
+	}
+	else
+	{
+		const Type roS_L = d_L * (S_L - v_L);
+		const Type roS_R = d_R * (S_R - v_R);
+		const Type _S = (p_R - p_L + roS_L * v_L - roS_R * v_R) / (roS_L - roS_R);
+
+		const Type P_LR = (p_L + p_R + roS_L * (_S - v_L) + roS_R * (_S - v_R)) / 2.0;
+		
+		flux D(0, 1, 0, 0, _S);
+
+		if (_S >= 0)
+		{
+			F.d = U_L[1];
+			F.v(0) = U_L[1] * U_L[1] / d_L + p_L;
+			F.v(1) = U_L[1] * U_L[2] / d_L;
+			F.v(2) = U_L[1] * U_L[3] / d_L;
+			F.p = (U_L[4] + p_L) * U_L[1] / d_L;
+
+			flux buf = F;
+			F = ((U_L * S_L - buf) *_S + D * P_LR * S_L) / (S_L - _S);
+			c2++;
+		}
+		else //(_S <= 0)
+		{
+			F.d = U_R[1];
+			F.v(0) = U_R[1] * U_R[1] / d_R + p_R;
+			F.v(1) = U_R[1] * U_R[2] / d_R;
+			F.v(2) = U_R[1] * U_R[3] / d_R;
+			F.p = (U_R[4] + p_R) * U_R[1] / d_R;
+
+			flux buf = F;
+			F = ( ( U_R* S_R - buf) *_S +  D* S_R * P_LR) / (S_R - _S);
+			c3++;
+		}
+	}
+	
+#ifdef DBG_OUTPUT
+	printf("U= %lf, %lf,  %lf\n", val_l.d, val_l.v(0), val_l.p);
+	printf("F= %lf, %lf,  %lf\n\n", F.d, F.v(0), F.p);
+#endif
+
+	f.f = F;
+	f.f.v = (T.transpose()) * F.v;
+	f.f = f.f * f.S;
+
+	return 0;
+}
+void HLLC(const Type tau,  std::vector<int>& neighbours_id_faces,  std::vector<Normals>& normals,
+	 std::vector<Type>& squares_cell,  std::vector<Type>& volume, std::vector<VectorX>& U_full_prev)
+{
+	static std::vector<face> faces;
+	static std::vector<elem> cells;
+
+	static bool init = false;
+	if (!init)
+	{
+		ReBuildNeighStruct(neighbours_id_faces, normals, squares_cell, faces, cells);
+		init = true;
+
+
+		{
+			for (size_t i = 0; i < size_grid; i++)
+			{
+				cells[i].V = volume[i];
+
+				cells[i].val.d = U_full_prev[i][0];
+				cells[i].val.v[0] = U_full_prev[i][1];
+				cells[i].val.v[1] = U_full_prev[i][2];
+				cells[i].val.v[2] = U_full_prev[i][3];
+				cells[i].val.p = U_full_prev[i][4];
+			}
+			//U_full_prev.clear();
+			volume.clear();
+		}
+	}
+
+	Type _clock = -omp_get_wtime();
+	flux bound_val;
+	Eigen::MatrixXd T(5, 5);
+	VectorX U;
+	// потоки
+	for(auto &f : faces)	
+	{				
+		switch (f.id_r)// id соседа она же признак √”
+		{
+		case eBound_FreeBound:
+			bound_val = cells[f.id_l].val;
+			break;
+		case eBound_InnerSource:
+			bound_val = cells[f.id_l].val;
+			break;
+		case eBound_OutSource:			
+			MakeRotationMatrix(f.n, T);
+			U << cells[f.id_l].val.d, cells[f.id_l].val.v(0), cells[f.id_l].val.v(1), cells[f.id_l].val.v(2), cells[f.id_l].val.p;
+			U = T * U;
+			U[1] = -U[1];
+			U = (T.transpose()) * U;
+
+			bound_val.d = cells[f.id_l].val.d;
+			bound_val.v(0) = U(1);
+			bound_val.v(1) = U(2);
+			bound_val.v(2) = U(3);			
+			bound_val.p = cells[f.id_l].val.p;
+
+			break;
+		case eBound_LockBound:
+
+			MakeRotationMatrix(f.n, T);
+			U << cells[f.id_l].val.d, cells[f.id_l].val.v(0), cells[f.id_l].val.v(1), cells[f.id_l].val.v(2), cells[f.id_l].val.p;
+			U = T * U;
+			U[1] = -U[1];
+			U = (T.transpose()) * U;
+
+			bound_val.d = cells[f.id_l].val.d;
+			bound_val.v(0) = U(1);
+			bound_val.v(1) = U(2);
+			bound_val.v(2) = U(3);
+			bound_val.p = cells[f.id_l].val.p;
+
+			break;
+
+		default:
+			if (f.id_r < 0)
+			{
+				printf("Err bound in HLLC\n");
+				exit(1);
+			}
+
+			bound_val = cells[f.id_r].val;			
+			break;
+		}
+
+		flux_calc(cells[f.id_l].val, bound_val, f);
+	}
+
+	// €чейки
+	for (auto& el : cells)
+	{		
+		flux sumF;
+		for (int j = 0; j < base; j++)
+		{
+			if (el.sign_n[j])
+			{
+				sumF += faces[el.id_faces[j]].f;
+			}
+			else
+			{
+				sumF -= faces[el.id_faces[j]].f;
+			}
+		}
+		el.val -= sumF * (tau / el.V);		
+	}
+
+	
+	_clock += omp_get_wtime();
+	//printf("Time new hllc: %lf\n", _clock);
+
+	//exit(1);
+	
+	for (size_t i = 0; i < size_grid; i++)
+	{
+		//U_full_prev[i] << cells[i].val.d, cells[i].val.v[0], cells[i].val.v[1], cells[i].val.v[2], cells[i].val.p;
+		U_full[i] << cells[i].val.d, cells[i].val.v[0], cells[i].val.v[1], cells[i].val.v[2], cells[i].val.p;
+	}
+	
+#ifdef DBG_OUTPUT
+	Type sum = 0;
+	for (int i = 0; i < size_grid; i++)
+	{
+		sum += (U_full[i] - U_full_prev[i]).norm();
+		if ((U_full[i] - U_full_prev[i]).norm() > 0.000001)
+		{
+			printf("%d\n", i);
+		}
+
+	}
+	printf("norm= %lf\n", sum);
+#endif
+
+	return;
+
+}
+#endif
+
 
 #endif // USE_VTK

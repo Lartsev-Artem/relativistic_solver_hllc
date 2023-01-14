@@ -9,7 +9,7 @@
 
 //#define HLLC_2D
 
-#define RHLLC_2D
+//#define RHLLC_2D
 
 //#define HLLC_1D
 
@@ -17,7 +17,9 @@
 
 //#define ONLY_RHLL
 
-#define USE_MPI
+//#define USE_MPI
+
+#define NEW_CLASS
 
 #define WRITE_LOG
 

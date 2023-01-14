@@ -32,6 +32,11 @@ struct Normals {
 	Normals(const int size) {
 		n.resize(size);
 	}
+
+	~Normals() 
+	{
+		n.clear();
+	}
 };
 
 struct cell {
@@ -122,5 +127,59 @@ extern bool bad_hllc_flag;
 #define MPI_RETURN(a) return a;
 #endif //USE_MPI
 
+
+#if 0
+//#ifdef NEW_CLASS
+
+#define base 4
+struct flux
+{
+	Type d;
+	Vector3 v;
+	Type p;
+
+	flux()
+	{
+		d = 0;
+		v = Vector3::Zero();
+		p = 0;
+	}
+};
+
+struct face
+{
+	flux f;
+	int id_l;
+	int id_r;
+
+	Vector3 n;
+	Type S;
+
+	face()
+	{
+		id_l = 0;
+		id_r = 0;
+		n = Vector3::Zero();
+		S = 0;
+	}
+};
+struct cell// пока спорно
+{
+	flux val;
+	int id_faces[base];
+	Type V;
+	bool sign_n[base];
+
+	cell()
+	{
+		for (int i = 0; i < base; i++)
+		{
+			id_faces[i] = -1;
+			sign_n[i] = 0;
+		}
+		V = 0;
+	}
+};
+#endif
 
 #endif
