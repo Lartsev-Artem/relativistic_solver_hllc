@@ -594,7 +594,7 @@ size_t ReadDataArray(const size_t class_file_vtk, const std::string& main_dir,
 	int& size_grid, const bool is_print/*=false*/) {
 
 	if (class_file_vtk == 0) {
-		size_grid = 51167;// 19888;// 20475;
+		size_grid = 0;
 		printf("No grid data\n");
 	}
 
@@ -736,13 +736,12 @@ size_t ReadDataArray(const size_t class_file_vtk, const std::string& main_dir,
 	}
 
 
-	if (is_print) {
+	if (is_print && class_file_vtk)
+	{
 		std::cout << "Grid has " << size_grid << " cells.\n";
-		if (class_file_vtk) {
-			std::cout << "density_Size: " << density.size() << '\n';
-			std::cout << "absorp_coef_Size: " << absorp_coef.size() << '\n';
-			std::cout << "Q_Size: " << rad_en_loose_rate.size() << '\n';
-		}
+		std::cout << "density_Size: " << density.size() << '\n';
+		std::cout << "absorp_coef_Size: " << absorp_coef.size() << '\n';
+		std::cout << "Q_Size: " << rad_en_loose_rate.size() << '\n';
 	}
 	return 0;
 }

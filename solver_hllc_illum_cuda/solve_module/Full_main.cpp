@@ -41,6 +41,7 @@ Type FormTimeStepToHLLC(const int n, const Type h, const Type k, const std::vect
 	}
 	return k * h / c_max;
 }
+
 int BoundDataToHLLC(const std::vector<Normals>& normals, const std::vector<int>& neighbours_id_faces,
 	const std::vector<Vector3> centers, std::vector<VectorX>& U_array)
  {

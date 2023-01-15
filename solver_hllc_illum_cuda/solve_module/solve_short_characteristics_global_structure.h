@@ -128,57 +128,97 @@ extern bool bad_hllc_flag;
 #endif //USE_MPI
 
 
-#if 0
+#if 1
 //#ifdef NEW_CLASS
 
 #define base 4
+struct illum_value
+{
+	std::vector<Type> int_scattering; // (count_cells* count_directions, 0);
+
+	Type energy;
+	Vector3 stream;
+
+	//Type prev_energy;
+	//Vector3 prev_stream;
+
+	Matrix3 impuls;
+	Type div_stream;
+	Vector3 div_impuls;
+
+	illum_value(const int num_dir = 0);
+};
 struct flux
 {
 	Type d;
 	Vector3 v;
 	Type p;
 
-	flux()
-	{
-		d = 0;
-		v = Vector3::Zero();
-		p = 0;
-	}
-};
+	flux();
+	flux(const Type a, const Type b, const Type c, const Type dd, const Type e);
+	
+	flux operator+ (const flux& x); 
+	flux operator+= (const flux& x);
+	flux operator-= (const flux& x);
+	flux operator* (const Type x); 
+	flux operator- (const flux& x);
+	flux operator/ (const Type x); 
 
+	// это временно дл€ свз€и со старым кодом
+	Type operator[](const int i);	
+	Type operator()(const int i);
+
+	//private:
+	//	flux(const flux& f) {};
+};
 struct face
 {
 	flux f;
+#ifndef ONLY_HLLC	
+	std::vector<Type> Illum;	
+	Vector3 x[base][base - 1];	   //[номер грани][номер точки интерпол€ции]	
+	Vector2 x0[base][base - 1];	   // [номер грани][номер точки интерпол€ции]	
+	
+#endif
+
 	int id_l;
 	int id_r;
 
 	Vector3 n;
 	Type S;
 
-	face()
-	{
-		id_l = 0;
-		id_r = 0;
-		n = Vector3::Zero();
-		S = 0;
-	}
+	face(const int num_dir = 0);	
 };
-struct cell// пока спорно
+
+struct elem
 {
+#ifndef ONLY_ILLUM
 	flux val;
+	flux phys_val;
+#endif
+
+#ifndef ONLY_HLLC	
+	illum_value illum_val;	
+
+	std::vector<uint8_t> enter_face; //вход€ща€ или выход€ща€ грань {0-вход€ща€ наклонна€, 1-вход€ща€ пр€ма€, 2- выход€ща€ наклонна€,3-выход€ща€ пр€ма€}
+
+#if 1
+	std::vector<uint8_t> inner_face; //номер св€занной вход€щей грани
+	std::vector<Type> s_line; //(size= вычисл€етс€ в make, разный по всем направлени€м [])
+#else
+	std::vector<std::pair<uint8_t, Type>> face_and_s;
+#endif
+
+#endif
+
 	int id_faces[base];
 	Type V;
-	bool sign_n[base];
+	bool sign_n[base];		
+	Vector3 center;
 
-	cell()
-	{
-		for (int i = 0; i < base; i++)
-		{
-			id_faces[i] = -1;
-			sign_n[i] = 0;
-		}
-		V = 0;
-	}
+	elem(const int num_dir = 0);
+private:
+	elem(const elem& el) {};
 };
 #endif
 

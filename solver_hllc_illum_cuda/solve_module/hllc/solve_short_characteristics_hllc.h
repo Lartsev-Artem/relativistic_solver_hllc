@@ -63,8 +63,7 @@ int  RHLLC_MPI(std::string& main_dir,
 #endif
 
 #ifdef NEW_CLASS
-void HLLC(const Type tau, std::vector<int>& neighbours_id_faces, std::vector<Normals>& normals,
-	std::vector<Type>& squares_cell, std::vector<Type>& volume, std::vector<VectorX>& U_full_prev);
+int HLLC(const Type tau, std::vector<face>& faces, std::vector<elem>& cells);
 #endif
 
 

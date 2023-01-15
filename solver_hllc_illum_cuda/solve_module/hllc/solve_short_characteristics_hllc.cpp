@@ -1820,37 +1820,30 @@ int ReBuildConvValue_3d(const std::vector<VectorX>& W, std::vector<VectorX>& U) 
 #endif //RHLLC
 
 #ifdef NEW_CLASS
-#define base 4
 
-struct flux
-{
-	Type d;
-	Vector3 v;
-	Type p;
-
-	flux()
+	flux::flux()
 	{
 		d = 0;
 		v = Vector3::Zero();
 		p = 0;
 	}
 
-	flux(const Type a, const Type b, const Type c, const Type dd, const Type e)
+	flux::flux(const Type a, const Type b, const Type c, const Type dd, const Type e)
 	{
 		d = a;
 		v = Vector3(b, c, dd);
 		p = e;
 	}
 
-	flux operator+ (const flux& x) { d += x.d; v += x.v; p += x.p; return *this; }
-	flux operator+= (const flux& x) { d += x.d; v += x.v; p += x.p; return *this; }
-	flux operator-= (const flux& x) { d -= x.d; v -= x.v; p -= x.p; return *this; }
-	flux operator* (const Type x) { d *= x; v *= x; p *= x; return *this; }
-	flux operator- (const flux& x) { d -= x.d; v -= x.v; p -= x.p; return *this; }
-	flux operator/ (const Type x) { d /= x; v /= x; p /= x; return *this; }
+	flux flux::operator+ (const flux& x) { d += x.d; v += x.v; p += x.p; return *this; }
+	flux flux::operator+= (const flux& x) { d += x.d; v += x.v; p += x.p; return *this; }
+	flux flux::operator-= (const flux& x) { d -= x.d; v -= x.v; p -= x.p; return *this; }
+	flux flux::operator* (const Type x) { d *= x; v *= x; p *= x; return *this; }
+	flux flux::operator- (const flux& x) { d -= x.d; v -= x.v; p -= x.p; return *this; }
+	flux flux::operator/ (const Type x) { d /= x; v /= x; p /= x; return *this; }
 	
 	// это временно для свзяи со старым кодом
-	Type operator[](const int i)
+	Type flux::operator[](const int i)
 	{
 		switch (i)
 		{
@@ -1866,7 +1859,7 @@ struct flux
 			break;
 		}
 	}
-	Type operator()(const int i)
+	Type flux::operator()(const int i)
 	{
 		switch (i)
 		{
@@ -1883,32 +1876,19 @@ struct flux
 		}
 	}
 
-};
-struct face
-{
-	flux f;
-	int id_l;
-	int id_r;
-
-	Vector3 n;
-	Type S;
-
-	face()
+	face::face(const int num_dir)
 	{
 		id_l = 0;
 		id_r = 0;
 		n = Vector3::Zero();
 		S = 0;
-	}
-};
-struct elem// пока спорно
-{
-	flux val;
-	int id_faces[base];
-	Type V;
-	bool sign_n[base];
 
-	elem()
+#ifndef ONLY_HLLC
+		Illum.resize(base * num_dir, 0);
+#endif
+	}
+
+	elem::elem(const int num_dir)
 	{
 		for (int i = 0; i < base; i++)
 		{
@@ -1916,8 +1896,27 @@ struct elem// пока спорно
 			sign_n[i] = 0;
 		}
 		V = 0;
+		center = Vector3::Zero();
+
+#ifndef ONLY_HLLC	
+		illum_value(num_dir);
+		enter_face.resize(num_dir * base);
+#endif
 	}
-};
+	illum_value::illum_value(const int num_dir)
+	{
+		int_scattering.resize(num_dir, 0);
+
+		energy = 0;
+		stream = Vector3::Zero();
+
+		//Type prev_energy;
+		//Vector3 prev_stream;
+
+		impuls = Matrix3::Zero();
+		div_stream = 0;
+		div_impuls = Vector3::Zero();
+	}
 
 void ReBuildNeighStruct(std::vector<int>& neighbours_id_faces, std::vector<Normals> normals, std::vector<Type>& squares_faces,
 	std::vector<face>& faces, std::vector<elem>& cells)
@@ -1963,7 +1962,6 @@ void ReBuildNeighStruct(std::vector<int>& neighbours_id_faces, std::vector<Norma
 			cc++;
 		}
 	}
-
 
 	neighbours_id_faces.clear();
 	normals.clear();
@@ -2126,36 +2124,8 @@ static int flux_calc(const flux& val_l, const flux& val_r, face& f)
 
 	return 0;
 }
-void HLLC(const Type tau,  std::vector<int>& neighbours_id_faces,  std::vector<Normals>& normals,
-	 std::vector<Type>& squares_cell,  std::vector<Type>& volume, std::vector<VectorX>& U_full_prev)
+int HLLC(const Type tau, std::vector<face>& faces, std::vector<elem>& cells)
 {
-	static std::vector<face> faces;
-	static std::vector<elem> cells;
-
-	static bool init = false;
-	if (!init)
-	{
-		ReBuildNeighStruct(neighbours_id_faces, normals, squares_cell, faces, cells);
-		init = true;
-
-
-		{
-			for (size_t i = 0; i < size_grid; i++)
-			{
-				cells[i].V = volume[i];
-
-				cells[i].val.d = U_full_prev[i][0];
-				cells[i].val.v[0] = U_full_prev[i][1];
-				cells[i].val.v[1] = U_full_prev[i][2];
-				cells[i].val.v[2] = U_full_prev[i][3];
-				cells[i].val.p = U_full_prev[i][4];
-			}
-			//U_full_prev.clear();
-			volume.clear();
-		}
-	}
-
-	Type _clock = -omp_get_wtime();
 	flux bound_val;
 	Eigen::MatrixXd T(5, 5);
 	VectorX U;
@@ -2232,33 +2202,7 @@ void HLLC(const Type tau,  std::vector<int>& neighbours_id_faces,  std::vector<N
 		el.val -= sumF * (tau / el.V);		
 	}
 
-	
-	_clock += omp_get_wtime();
-	//printf("Time new hllc: %lf\n", _clock);
-
-	//exit(1);
-	
-	for (size_t i = 0; i < size_grid; i++)
-	{
-		//U_full_prev[i] << cells[i].val.d, cells[i].val.v[0], cells[i].val.v[1], cells[i].val.v[2], cells[i].val.p;
-		U_full[i] << cells[i].val.d, cells[i].val.v[0], cells[i].val.v[1], cells[i].val.v[2], cells[i].val.p;
-	}
-	
-#ifdef DBG_OUTPUT
-	Type sum = 0;
-	for (int i = 0; i < size_grid; i++)
-	{
-		sum += (U_full[i] - U_full_prev[i]).norm();
-		if ((U_full[i] - U_full_prev[i]).norm() > 0.000001)
-		{
-			printf("%d\n", i);
-		}
-
-	}
-	printf("norm= %lf\n", sum);
-#endif
-
-	return;
+	return 0;
 
 }
 #endif
