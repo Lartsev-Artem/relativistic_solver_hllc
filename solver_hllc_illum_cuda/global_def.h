@@ -13,6 +13,8 @@
 #define EXIT(a) exit(a);
 #endif //USE_MPI
 
+#define EXIT_ERR(str){printf(str); EXIT(1);}
+
 #define RETURN_ERR(str) { printf(str); return 1; }
 
 #define base (NUMBER_OF_MEASUREMENTS + 1)
@@ -79,6 +81,27 @@ struct cell {
 	}
 };
 
+struct direction_s
+{
+	Vector3 dir;
+	Type area;
+};
+
+struct BasePointTetra //узлы интерпол€ции всех тетраэдров // ¬ перспективе можно уйти к гран€м
+{
+	Vector3 x[base][NUMBER_OF_MEASUREMENTS];
+
+	Vector3 operator()(const int i, const int j) const
+	{
+		return x[i][j];
+	}
+};
+struct cell_local // дл€ каждой €чейки и каждого направлени€
+{
+	Type s;    //рассто€ние x0-x
+	Vector2 x0; //локальна€ координата входного узла дл€ интерпол€ции
+	ShortId in_face_id; //id выходной грани
+};
 
 #define OPEN_FSTREAM(file, namefile) \
 file.open(namefile); \
@@ -99,5 +122,9 @@ ofile.close(); }
 #define fwrite_unlocked _fwrite_nolock
 #define fread_unlocked  _fread_nolock
 #endif
+
+#define check_bit(word, idx) ((word >> (idx)) & 0x1)  // проверка i-го бита
+#define clear_bit(word, idx) (word & (~(1 << (idx)))) // выключение i-го бита
+#define set_bit(word, idx) (word | (1 << (idx)))      // установка i-го бита
 
 #endif //GLOBAL_DEF

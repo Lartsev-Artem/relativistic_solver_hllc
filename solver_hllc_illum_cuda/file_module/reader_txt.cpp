@@ -26,7 +26,7 @@ int ReadSphereDirectionDecart(const std::string name_file_sphere_direction, std:
 	return 0;
 }
 
-size_t ReadSphereDirectionDecartToSpherical(const std::string& name_file_sphere_direction, vector<Vector3>& directions_all, vector<Type>& squares, Type& square_surface) {
+size_t ReadSphereDirectionDecartToSpherical(const std::string& name_file_sphere_direction, vector<direction_s>& directions_all, Type& square_surface) {
 
 	ifstream ifile;
 
@@ -34,12 +34,11 @@ size_t ReadSphereDirectionDecartToSpherical(const std::string& name_file_sphere_
 
 	int N = 0;
 	ifile >> N;
-	directions_all.resize(N);
-	squares.resize(N);
+	directions_all.resize(N);	
 
 	for (int i = 0; i < N; i++) {
-		ifile >> squares[i];
-		ifile >> directions_all[i][0] >> directions_all[i][1] >> directions_all[i][2];
+		ifile >> directions_all[i].area;
+		ifile >> directions_all[i].dir[0] >> directions_all[i].dir[1] >> directions_all[i].dir[2];
 	}
 	ifile >> square_surface;
 	ifile.close();

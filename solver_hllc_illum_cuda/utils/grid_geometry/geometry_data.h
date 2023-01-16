@@ -22,12 +22,9 @@ int GetCentersOfTetra2D(const vtkSmartPointer<vtkUnstructuredGrid>& unstructured
 
 int GetCentersOfFaces3D(const vtkSmartPointer<vtkUnstructuredGrid>& unstructured_grid, std::vector<Vector3>& centers);
 
-#endif //USE_VTK
+int SetVertexMatrix(const size_t number_cell, const vtkSmartPointer<vtkUnstructuredGrid>& unstructured_grid, Eigen::Matrix4d& vertex_tetra);
 
-#if 1 //defined BUILD
-int IntersectionWithPlane(const Face& face, const Vector3& start_point, const Vector3& direction, Vector3& result);
-int InTriangle(int number_face, const Face& cell_face, const Normals& normals_cell, const Vector3& XX);
-#endif
+#endif //USE_VTK
 
 int SetTypeOfBound(const std::vector<Vector3>& centers, const std::vector<Normals>& normals, std::vector<int>& all_pairs_face);
 
