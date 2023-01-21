@@ -1,4 +1,5 @@
 #include "struct_short_characteristics_global_structure.h"
+#ifdef MAKE
 #include "struct_short_characteristics_calculations.h"
 #include "struct_short_characteristics_logic_function.h"
 
@@ -9,35 +10,16 @@
 #include "../file_module/writer_bin.h"
 
 #include "../utils/grid_geometry/geometry_solve.h"
-#if 0
-Vector3 start_point_plane_coord;   // начало координат плоскости
-Matrix3 transform_matrix;          // матрица перехода из базового тетраэдра в плоскость
-Matrix3 inverse_transform_matrix;  // матрица перехода из плоскости в базовый тетраэдр
 
-Matrix3	straight_face;  // 3 узла интерпол€ции
-Matrix3 inclined_face;  // 3 узла интерпол€ции на наклонной плоскости
-
-Type square_surface;  // площадь поверхности дискретной 
-
-Vector3 center_local_sphere;  // центр описанной сферы около стандартного тетраэдра
-
-int num_cur_direction; // номер текущего направлени€
-Vector3 cur_direction;
-
-std::vector<Vector3> x_try_surface;
-std::vector<int> id_try_surface;
-
-struct make_illum_val pos_cnt;
-#endif
-
-int RunMakeBuild(std::string name_file_settings, int a, int b)
+int RunMakeModule(std::string name_file_settings, int a, int b)
 {
 	std::string name_file_vtk;
 	std::string name_file_sphere_direction;
+	std::string name_file_graph;
 	std::string out_file_grid_vtk;
-	std::string str; int class_vtk;
+	std::string str; int class_vtk; int iter;
 
-	if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, name_file_sphere_direction, str, BASE_ADRESS, str))
+	if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, name_file_sphere_direction, name_file_graph, BASE_ADRESS, str, iter))
 	{
 		RETURN_ERR("Error reading the start settings\n");
 	}
@@ -47,18 +29,16 @@ int RunMakeBuild(std::string name_file_settings, int a, int b)
 	const std::string name_file_cells = BASE_ADRESS + "grid.bin";
 	const std::string name_file_vertex = BASE_ADRESS + "vertex.bin";
 	const std::string name_file_pairs = BASE_ADRESS + "pairs.bin";
-	//-------------------читающиес€ файлы, построенные в build_graph---------------------------
-	const std::string name_file_graph = BASE_ADRESS + "graph";
+	//-------------------читающиес€ файлы, построенные в build_graph---------------------------	
 	const std::string name_file_id_defining_faces = BASE_ADRESS + "pairs.bin";
 	const std::string name_file_x_defining_faces = BASE_ADRESS + "x_defining_faces.bin";
 	const std::string name_file_size = BASE_ADRESS + "Size.txt";  // на ƒќ«јѕ»—№
 	//--------------------------------создающиес€ файлы----------------------------------------
 	const std::string name_file_state_face = BASE_ADRESS + "state_face";
-	const std::string name_file_x = BASE_ADRESS + "X";
+	const std::string name_file_x = BASE_ADRESS + "X.bin";
 	const std::string name_file_x0_loc = BASE_ADRESS + "LocX0";
 	const std::string name_file_res_bound = BASE_ADRESS + "ResBound";
-
-	Type _clock;
+	
 #ifdef USE_VTK
 
 	vtkSmartPointer<vtkUnstructuredGrid> unstructured_grid =
@@ -73,36 +53,32 @@ int RunMakeBuild(std::string name_file_settings, int a, int b)
 	WriteVertex(name_file_vertex, unstructured_grid);
 #endif
 
-#ifdef ONLY_BUILD_DATA
+#ifdef ONLY_GEO_DATA
 	return 0;
 #else
+	Type _clock = 0;
 	// make
 	std::vector<Face> grid;
-	std::vector<Eigen::Matrix4d> vertexs;
+	std::vector<Matrix4> vertexs;
 	std::vector<Normals> normals;
-	std::vector<cell> nodes_value;
+	std::vector<int> all_pairs_face;	
 
-	std::vector<direction_s> directions;
-	Type square_surface;
-
+	grid_directions_t grid_direction;
+	
 	_clock = -omp_get_wtime();
-	{
-		std::vector<int> all_pairs_face;
-		if (ReadSimpleFileBin(name_file_pairs, all_pairs_face)) return 1;
-		InitNodesValue(all_pairs_face, nodes_value);
-		all_pairs_face.clear();
-
+	{		
+		if (ReadSimpleFileBin(name_file_pairs, all_pairs_face)) return 1;	
 		if (ReadCellFaces(name_file_cells, grid)) return 1;
 		if (ReadSimpleFileBin(name_file_vertex, vertexs)) return 1;
 		if (ReadNormalFile(name_file_normals, normals)) return 1;
 
-		if (ReadSphereDirectionDecartToSpherical(name_file_sphere_direction, directions, square_surface)) return 1;
+		if (ReadSphereDirectionDecartToSpherical(name_file_sphere_direction, grid_direction)) return 1;
 	}
 	_clock += omp_get_wtime();
 	std::cout << "\nReading time of the sphere_direction file: " << _clock << "\n";
 
 	const int count_cells = vertexs.size();
-	const int count_directions = directions.size();
+	const int count_directions = grid_direction.size;
 	if (b == 0) b = count_directions;
 
 	std::vector < std::vector<int>> sorted_id_cell(count_directions);
@@ -133,9 +109,7 @@ int RunMakeBuild(std::string name_file_settings, int a, int b)
 			fclose(f);*/
 
 	}
-
-	InitGlobalValue(start_point_plane_coord, transform_matrix, inverse_transform_matrix, straight_face, inclined_face);
-
+	
 	std::vector<BasePointTetra> vec_x(count_cells);
 	MakeArrayX(vertexs, vec_x);
 
@@ -152,7 +126,7 @@ int RunMakeBuild(std::string name_file_settings, int a, int b)
 	/*---------------------------------- далее FOR по направлени€м----------------------------------*/
 	for (int num_direction = a; num_direction < b; ++num_direction)
 	{
-		direction = directions[num_direction].dir;
+		direction = grid_direction.directions[num_direction].dir;
 
 		vec_x0.clear();
 		vec_x0.reserve(base * count_cells);
@@ -171,7 +145,7 @@ int RunMakeBuild(std::string name_file_settings, int a, int b)
 				if (!check_bit(face_state, num_out_face)) // выход€щие грани
 				{
 					GetNodes(num_cell, grid, num_out_face, vertexs[num_cell],
-						face_state, direction, normals, nodes_value,
+						face_state, direction, normals, all_pairs_face,
 						vec_x[num_cell], vec_res_bound, vec_x0);
 				}
 			}
@@ -187,6 +161,7 @@ int RunMakeBuild(std::string name_file_settings, int a, int b)
 	/*---------------------------------- конец FOR по направлени€м----------------------------------*/
 
 	if (WriteSimpleFileBin(name_file_x, vec_x)) RETURN_ERR("Error vec_x");
+	if (WriteSimpleFileBin(name_file_res_bound, vec_res_bound)) RETURN_ERR("Error vec_res_bound");
 
 	_clock += omp_get_wtime();
 	std::cout << "Time of make: " << _clock << '\n';
@@ -199,4 +174,4 @@ int RunMakeBuild(std::string name_file_settings, int a, int b)
 	return 0;
 }
 
-
+#endif //MAKE

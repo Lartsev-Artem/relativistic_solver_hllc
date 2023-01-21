@@ -1,19 +1,423 @@
-#include "solve_short_characteristics_main.h"
+#include "../solve_config.h"
+#if defined ILLUM && defined SOLVE
 
-#ifdef USE_VTK
-#else
+#include "illum_utils.h"
 
-int CalculateIllum(const std::string& main_dir, bool& use_cuda, const int cuda_mod, const Type accuracy, const int max_number_of_iter,
-	const std::vector<Vector3>& directions, std::vector<Type>& Illum, std::vector<Type>& int_scattering, std::vector<Type> squares,
-	std::vector<cell>& grid, const std::vector<int>& neighbours_id_faces, const std::vector<ShortId>& OutC,
-	const std::vector<ShortId>& Out, const std::vector<ShortId>& In, const std::vector<Type>& S, const std::vector<Vector3>& X, const std::vector<Vector2>& X0,
-	const std::vector<Type>& res_inner_bound, const std::vector<int>& id_try_surface, const vector<int>& sorted_id_cell,
-	const vector<uint64_t>& ShiftOut, const vector<uint64_t>& ShiftRes, const vector<uint64_t>& ShiftX0, const vector<int>& ShiftTry,
-	const std::vector<VectorX>& U_full)
+#include "../solve_global_struct.h"
+#include "../../global_value.h"
+#include "../../global_def.h"
+
+
+static Type CalculateIllumeOnInnerFace(const int num_in_face, const std::vector<face_t>& faces, elem_t* cell)
+{	
+	const int id_face_ = cell->geo.id_faces[num_in_face]; //номер грани
+	const int neigh_id = faces[id_face_].geo.id_r;  // признак ГУ + связь с глобальной нумерацией
+	Type I_x0 = 0;
+
+	switch (neigh_id)
+	{
+	case eBound_OutSource: // дно конуса
+		cell->illum_val.coef_inter[num_in_face] = Vector3(30, 30, 30);
+		return 30;
+	case eBound_FreeBound:
+		cell->illum_val.coef_inter[num_in_face] = Vector3(0, 0, 0);
+		/*Граничные условия*/
+		//I_x0 = BoundaryFunction(num_cell, x, direction, illum_old, directions, squares);
+		return I_x0;
+
+	case eBound_LockBound:
+		cell->illum_val.coef_inter[num_in_face] = Vector3(0, 0, 0);
+		/*Граничные условия*/
+		//I_x0 = BoundaryFunction(num_cell, x, direction, illum_old, directions, squares);
+		return I_x0;
+
+	case eBound_InnerSource:  // внутренняя граница	
+	{
+#if 0
+		id_try_pos++;
+		grid[num_cell].nodes_value[num_in_face] = Vector3(res_on_inner_bound, res_on_inner_bound, res_on_inner_bound);
+		return res_on_inner_bound;
+
+		Type data = res_inner_bound[ShiftRes + pos_in_res++]; // защита на выход из диапазона??
+		if (data >= 0) //данные от пересечения с диском или шаром
+		{
+			/*
+				 Проверить порядок. Данные в массиве должны лежать в соответствии с упорядоченным графом
+				 от направления к направлению
+			*/
+			return res_on_inner_bound; // I_x0;
+			return data;
+		}
+		else // определяющимм являются противолежаащие грани (возможен расчет с учетом s=(x-x0).norm())
+		{
+
+			// результат не вполне понятен. Пока лучше использовать константу или другие параметры области (шар == граница)
+
+			//+dist_try_surface			
+			int id = id_try_surface[ShiftTry + id_try_pos - 1];  // будет лежать id грани			
+			const int cell = id / 4;
+			const int face = id % 4;
+
+			Vector3 coef = grid[cell].nodes_value[face];
+			Vector2	x0_local = X0[ShiftX0 + posX0++];//grid[num_cell].x0_loc[num_in_face_dir];
+
+			I_x0 = x0_local[0] * coef[0] + x0_local[1] * coef[1] + coef[2];
+
+			//if (I_x0 < 0) I_x0 = 0;
+			return  res_on_inner_bound; // I_x0;
+
+		}
+#endif
+		return I_x0;
+	}
+
+	default:
+	{
+
+		//Vector3 coef = grid[num_cell].nodes_value[num_in_face];
+		Vector3 coef = cell->illum_val.coef_inter[num_in_face];
+
+		//сейчас храним значения а не коэффициента интерполяции
+
+		//Vector2	x0_local = X0[ShiftX0 + posX0++]; // grid[num_cell].x0_loc[num_in_face_dir];
+		//I_x0 = x0_local[0] * coef[0] + x0_local[1] * coef[1] + coef[2];
+
+		I_x0 = (coef[0] + coef[1] + coef[2]) / 3;
+
+		if (I_x0 < 0)
+		{
+			return 0;
+		}
+
+		return I_x0;
+	}
+	}
+}
+
+static Type GetS(const int num_cell, const Vector3& direction, const std::vector<Type>& illum_old,
+	const grid_directions_t& grid_direction) {
+	//num_cell equals x
+	auto Gamma{ [](const Vector3& direction, const Vector3& direction2) {
+		Type dot = direction.dot(direction2);
+	return (3. * (1 + dot* dot)) / 4;
+	} };
+
+
+	Vector3 cur_direction;
+	Type S = 0;
+	const int N_dir = grid_direction.size;
+	const int N_cell = illum_old.size() / N_dir;
+
+	for (int num_direction = 0; num_direction < N_dir; num_direction++)
+	{
+		Type I = 0;
+		for (int i = 0; i < base; i++)
+		{
+			illum_old[num_direction * N_cell + num_cell + i];
+		}
+		I /= base;
+		
+		S += Gamma(grid_direction.directions[num_direction].dir, direction) * I * grid_direction.directions[num_direction].area;
+	}
+	return S / grid_direction.full_area;     // было *4PI, но из-за нормировки Gamma разделили на 4PI
+}
+
+static int CalculateIntCPU(const int num_cells, const std::vector<Type>& illum, const grid_directions_t& grid_direction,
+	vector<Type>& int_scattering)
 {
+
+#pragma omp parallel default(none) shared(num_cells, illum, grid_direction, int_scattering)
+	{
+		Vector3 direction;
+		const int num_directions = grid_direction.size;
+#pragma omp for
+		for (int num_direction = 0; num_direction < num_directions; ++num_direction) {
+			direction = grid_direction.directions[num_direction].dir;
+			for (int cell = 0; cell < num_cells; cell++)
+			{
+				int_scattering[num_direction * num_cells + cell] = GetS(base * cell, direction, illum, grid_direction);
+			}
+		}
+	}
+	return 0;
+}
+
+
+static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Type int_scattering, const elem_t& cell)
+{
+	switch (solve_mode.class_vtk)
+	{
+	case 0: // без интеграла рассеивания  (излучающий шар)
+	{
+		Type Q = 0;
+		Type alpha = 2;
+		Type betta = 1;
+		Type S = 0;
+
+		if ((x - Vector3(1, 0, 0)).norm() > 0.09) { Q = 0; alpha = 0.5;  betta = 0.5; }
+
+		Type k = alpha + betta;
+
+		Type I;
+		if (k > 1e-10)
+			I = (exp(-k * s) * (I_0 * k + (exp(k * s) - 1) * (Q + S * betta))) / k;
+		else
+			I = (1 - s * k) * (I_0 + s * (Q + S * betta));
+
+		if (I < 0)
+		{
+			return 0;
+		}
+
+		return I;
+
+		//-------------------------------------------
+				/*Type Ie = 10;
+				Type k = 10;
+				if ((x - Vector3(1, 0, 0)).norm() > 0.09) { Ie = 0; k = 1; }
+
+				Type I;
+
+				if (k > 1e-10)
+					I = Ie * (1 - exp(-s * k)) + I_node_prev * exp(-s * k);
+				else
+					I = I_node_prev * (1 - s * k) + Ie * s * k;
+
+				if (I < 0)
+					I = 0;
+				return I;*/
+	}
 	
-	const int count_directions = directions.size();
-	const int count_cells = size_grid;
+	case 1: // test task
+	{
+
+		//U_Full[cur_id][0] -> density;
+		Type S = int_scattering;
+		Type Q = cell.illum_val.rad_en_loose_rate;  //Q=alpha*Ie
+		Type alpha = cell.illum_val.absorp_coef;
+
+		Type betta = alpha / 2;  // просто из головы
+		Type k = alpha + betta;
+
+		Type I;
+		if (k > 1e-10)
+			I = (exp(-k * s) * (I_0 * k + (exp(k * s) - 1) * (Q + S * betta))) / k;
+		else
+			I = (1 - s * k) * (I_0 + s * (Q + S * betta));
+
+		if (I < 0)
+		{
+			return 0;
+		}
+
+		return I;
+	}
+
+	case 2:
+	{
+		const Type ss = s * 388189 * 1e5;  // числа --- переход к размерным параметрам
+
+		Type Q = cell.illum_val.rad_en_loose_rate;  //Q=alpha*Ie
+		Type alpha = cell.phys_val.d * cell.illum_val.absorp_coef;
+
+		Type I;
+		if (alpha > 1e-15)
+			I = I_0 * exp(-alpha * ss) + Q * (1 - exp(-alpha * ss)) / alpha;
+		else
+			I = I_0 * (1 - alpha * ss) + Q * ss;
+
+		if (I < 0)
+		{
+			return 0;
+		}
+
+		return I;
+	}
+	
+	case 3:
+	{
+
+		const Type d = cell.phys_val.d;
+		Type S = int_scattering;
+
+		//alpha = d*XXX...
+		//betta = d*sigma*XXX...
+		Type alpha = 0;// absorp_coef[cur_id];
+		Type betta = alpha / 2;  // просто из головы
+		Type Q = 0;//  rad_en_loose_rate[cur_id];  //Q=alpha*Ie
+
+		Type k = alpha + betta;
+
+		Type I;
+		if (k > 1e-10)
+			I = (exp(-k * s) * (I_0 * k + (exp(k * s) - 1) * (Q + S * betta))) / k;
+		else
+			I = (1 - s * k) * (I_0 + s * (Q + S * betta));
+
+		if (I < 0)
+		{
+			return 0;
+		}
+
+		return I;
+	}
+
+	case 10: // для конуса (считаем, что излучающая часть не изменяется в зависимости от газораспределения)
+	{
+		Type Q = 0;
+		Type alpha = 0.5;
+		Type betta = 0.5;
+		Type S = int_scattering;
+
+
+		//if (x[0] < 0.06) // излучающий слой
+		//{
+		//	Q = 10; alpha = 1;  betta = 2; 
+		//}
+
+		Type k = alpha + betta;
+
+		Type I;
+		if (k > 1e-10)
+			I = (exp(-k * s) * (I_0 * k + (exp(k * s) - 1) * (Q + S * betta))) / k;
+		else
+			I = (1 - s * k) * (I_0 + s * (Q + S * betta));
+
+		if (I < 0)
+		{
+			return 0;
+		}
+
+		return I;
+	}
+
+	case 11: // HLLC + Illum для конуса
+	{
+
+		Type S = int_scattering;
+		Type Ie = 1;
+		Type alpha = 0.5;
+		Type betta = 0.5;
+
+		{
+			const Type R = 8.314;
+			const Type c = 3 * 1e8;
+			const Type h = 6.62 * 1e-34;
+			const Type k = 1.38 * 1e-23;
+			const Type sigma = 6.652 * 1e-29;
+			const Type m = 1.6735575 * 1e-27;
+
+			Type d = cell.phys_val.d;			
+			Type v = cell.phys_val.v.norm();
+			Type p = cell.phys_val.p;
+
+			Type T = p / (d * R);
+
+			if (x[0] < 0.05)
+			{
+				d = 0.1;
+				p = 0.01;
+				T = p / (d * R);
+			}
+
+			Ie = 2 * pow(k * PI * T, 4) / (15 * h * h * h * c * c);
+			betta = sigma * d / m;
+			alpha = betta;  			//alpha = ???			
+		}
+
+		Type Q = alpha * Ie;
+
+		Type k = alpha + betta;
+
+		Type I;
+		if (k > 1e-10)
+			I = (exp(-k * s) * (I_0* k + (exp(k * s) - 1) * (Q + S * betta))) / k;
+		else
+			I = (1 - s * k) * (I_0 + s * (Q + S * betta));
+
+		if (I < 0)
+		{
+			return 0;
+		}
+
+		return I;
+	}
+	
+	
+	default:
+		EXIT_ERR("unknow class_vtk in get illum\n");
+	}
+}
+
+static Type ReCalcIllum(const int num_dir, std::vector<elem_t>& cells, std::vector<Type>& Illum)
+{
+	Type norm = -1;
+#pragma omp parallel default(none) shared(num_dir, cells, Illum, norm)
+	{		
+		Type norm_loc = -1;
+		const int size = cells.size();
+		const int shift_dir = num_dir * size;
+
+#pragma omp for
+		for (int num_cell = 0; num_cell < size; num_cell++)
+		{
+			for (int i = 0; i < base; i++)
+			{
+				Vector3 Il = cells[num_cell].illum_val.coef_inter[i];
+				const Type curI = (Il[0] + Il[1] + Il[2]) / 3;
+				const int id = base * (shift_dir + num_cell) + i;
+				{
+					Type buf_norm = fabs(Illum[id] - curI) / curI;
+					if (buf_norm > norm_loc) norm_loc = buf_norm;
+				}
+				Illum[id] = curI;
+
+				cells[num_cell].illum_val.illum[num_dir * base + i] = curI; //на каждой грани по направлениям
+			}
+			//cells[num_cell].illum_val.illum[num_dir] /= base; //пересчёт по направлению для расчёта энергий и т.д.
+		}
+
+#pragma omp critical
+		{
+			if (norm_loc > norm)
+			{
+				norm = norm_loc;
+			}		
+		}
+	} //parallel
+
+	return norm;
+}
+
+
+static int GetIntScattering(const int count_cells, const grid_directions_t& grid_direction,  std::vector<Type>& Illum, std::vector<Type>& int_scattering)
+{
+#ifdef USE_CUDA
+	if (solve_mode.use_cuda)
+	{
+		if (CalculateIntScattering(32, count_cells, grid_direction.size, Illum, int_scattering))  // если была ошибка пересчитать на CPU 
+		{
+			CalculateIntCPU(count_cells, Illum, grid_direction, int_scattering);
+			ClearDevice(solve_mode.cuda_mod);
+			solve_mode.use_cuda = false;
+		}
+	}
+	else
+#endif
+	{
+		CalculateIntCPU(count_cells, Illum, grid_direction, int_scattering);
+	}
+
+	return 0;
+}
+
+int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< std::vector<int>>& face_states,
+	const std::vector < std::vector<cell_local>> &vec_x0, std::vector<BasePointTetra>& vec_x, const std::vector < std::vector<int>> &sorted_id_cell,
+//const std::vector<Type>& res_inner_bound, 
+	grid_t& grid, std::vector<Type>& Illum, std::vector<Type>& int_scattering)
+{
+	const int count_directions = grid_direction.size;
+	const int count_cells = grid.size;
 
 	// вроде не обязательно. ПРОВЕРИТЬ
 	//Illum.assign(4 * count_cells * count_directions, 0);
@@ -22,11 +426,6 @@ int CalculateIllum(const std::string& main_dir, bool& use_cuda, const int cuda_m
 	int count = 0;
 	Type norm = 0;
 
-#ifdef WRITE_LOG
-	ofstream ofile;
-	ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
-#endif
-
 	do {
 		Type _clock = -omp_get_wtime();
 
@@ -34,48 +433,37 @@ int CalculateIllum(const std::string& main_dir, bool& use_cuda, const int cuda_m
 		/*---------------------------------- далее FOR по направлениям----------------------------------*/
 
 		for (register int num_direction = 0; num_direction < count_directions; ++num_direction)
-		{
-			int posX = 0;
-			int posX0 = 0;
-			int posOut = 0;
-			int posIn = 0;
-			int posS = 0;
-
-			int pos_in_res = 0;
-			int id_try_pos = 0;
-
-
-			register int num_cell;
-			ShortId n_out;
+		{			
+			int posX0 = 0;								
 			Vector3 I;
-			Type sumI = 0;
-
 
 			/*---------------------------------- далее FOR по ячейкам----------------------------------*/
-			for (int h = 0; h < count_cells; ++h) {
-				num_cell = sorted_id_cell[num_direction * count_cells + h];
+			for (int h = 0; h < count_cells; ++h) 
+			{
+				const int num_cell = sorted_id_cell[num_direction][h];
 
-				n_out = OutC[num_direction * count_cells + h];
+				elem_t* cell = &grid.cells[num_cell];
+				
+				//sumI = 0;
 
-				sumI = 0;
-
-				for (ShortId i = 0; i < n_out; ++i) 
+				for (ShortId num_out_face = 0; num_out_face < base; ++num_out_face)
 				{
-					ShortId num_out_face = Out[ShiftOut[num_direction] + posOut++];
+					if (!check_bit(face_states[num_direction][num_cell], num_out_face)) continue;
 
 					//GetNodes
-					for (int num_node = 0; num_node < 3; ++num_node) {
-						Vector3 x = X[3 * ShiftOut[num_direction] + posX++];
+					for (int num_node = 0; num_node < 3; ++num_node) 
+					{						
+						Vector3 x = vec_x[num_cell].x[num_out_face][num_node];
 
-						ShortId num_in_face = In[3 * ShiftOut[num_direction] + posIn++];
+						cell_local x0 = vec_x0[num_direction][posX0++];
 
-						Type I_x0 = CalculateIllumeOnInnerFace(num_cell, num_direction, num_in_face, x, X0, grid, neighbours_id_faces,
-							id_try_pos, pos_in_res, posX0, ShiftRes[num_direction], ShiftX0[num_direction], ShiftTry[num_direction]);
+						ShortId num_in_face = x0.in_face_id;
+						Type s = x0.s;
+						Vector2 X0 = x0.x0;
 
-						Type s = S[3 * ShiftOut[num_direction] + posS++];
+						Type I_x0 = CalculateIllumeOnInnerFace(num_in_face, grid.faces, cell);
 
-						I[num_node] = CurGetIllum(num_cell, num_direction, x, s, I_x0, int_scattering, U_full);
-						sumI += I[num_node];
+						I[num_node] = GetCurIllum(x, s, I_x0, int_scattering[num_direction * count_cells + num_cell], *cell);
 
 					}//num_node
 
@@ -87,281 +475,214 @@ int CalculateIllum(const std::string& main_dir, bool& use_cuda, const int cuda_m
 						//else
 						//	coef = straight_face_inverse * I;// GetInterpolationCoefInverse(straight_face_inverse, I);
 					}
-
-					grid[num_cell].nodes_value[num_out_face] = I; //coef;  // храним значение узлов а не коэф. интерполяции
-
-					//Illum[num_direction * (4*count_cells) + num_cell * 4 + num_out_face] = (I[0] + I[1] + I[2]) / 3;					
-
-					int neighbor_id_face = neighbours_id_faces[num_cell * 4 + num_out_face];
-					if (neighbor_id_face >= 0)
-						grid[neighbor_id_face / 4].nodes_value[neighbor_id_face % 4] = I;// coef;
-
-
-				} //num_out_face
-
-				for (size_t i = 0; i < 4; i++)
-				{
-					Vector3 Il = grid[num_cell].nodes_value[i];
-					const Type curI = (Il[0] + Il[1] + Il[2]) / 3;
-					const int id = num_direction * (4 * count_cells) + num_cell * 4 + i;
-					{
-						Type buf_norm = fabs(Illum[id] - curI) / curI;
-						if (buf_norm > norm) norm = buf_norm;
+					
+					const int id_face_ = cell->geo.id_faces[num_out_face]; //номер грани
+					const int id_face = grid.faces[id_face_].geo.id_r;  // признак ГУ + связь с глобальной нумерацией
+					cell->illum_val.coef_inter[num_out_face] = I;  //coef					
+					if (id_face >= 0)
+					{						
+						grid.cells[id_face / base].illum_val.coef_inter[id_face % base] = I;
 					}
-					Illum[id] = curI;
-				}
-				//illum[num_direction * count_cells + num_cell] = sumI / (3 * n_out);				
+
+				} //num_out_face						
 			}
 			/*---------------------------------- конец FOR по ячейкам----------------------------------*/
-
-			//std::cout << "End direction number: " << num_direction << '\n';
+			
+			norm = ReCalcIllum(num_direction, grid.cells, Illum);			
 		}
-		/*---------------------------------- конец FOR по направлениям----------------------------------*/
+		/*---------------------------------- конец FOR по направлениям----------------------------------*/		
 
-
-	
-		if (max_number_of_iter > 1)  // пропуск первой итерации
+		if (solve_mode.max_number_of_iter > 1)  // пропуск первой итерации
 		{
-			if (use_cuda)
-			{
-				if (CalculateIntScattering(32, count_cells, count_directions, Illum, int_scattering)) { // если была ошибка пересчитать на CPU 
-					CalculateIntOmp(count_cells, count_directions, Illum, directions, squares, int_scattering);
-					ClearDevice(cuda_mod);
-					use_cuda = false;
-				}
-			}
-			else
-				CalculateIntOmp(count_cells, count_directions, Illum, directions, squares, int_scattering);
+			GetIntScattering(count_cells, grid_direction, Illum, int_scattering);
 		}
-
-		//Illum.swap(Illum2);
-
+		
 		_clock += omp_get_wtime();
-		
-#ifdef WRITE_LOG
-		printf("Error: %lf\n", norm);
-		printf("Time of iter: %lf\n", _clock);
-		printf("End iter_count number: %d\n", count);
-		
-		ofile << "Error:= " << norm << '\n';
-		ofile << "Time of iter: " << _clock << '\n';
-		ofile << "End iter_count number: " << count << '\n';
-#endif
-		count++;
-		
-	} while (norm > accuracy && count < max_number_of_iter);
 
-#ifdef WRITE_LOG
-	ofile.close();
-#endif
+		WRITE_LOG("Error:= " << norm << '\n' << "End iter_count number: " << count << '\n');
+
+		count++;
+
+	} while (norm > solve_mode.accuracy && count < solve_mode.max_number_of_iter);
+
 
 	return 0;
 }
 
+//-----------------------------------------------------//
 
-int CalculateIllumOptMemory(const std::string& main_dir, bool& use_cuda, const int cuda_mod, const Type accuracy, const int max_number_of_iter,
-	const std::vector<Vector3>& directions, std::vector<Type>& Illum, std::vector<Type>& int_scattering, std::vector<Type> squares,
+
+#define GET_FACE_TO_CELL(val, data, init){ \
+val = init; \
+for (int pos = 0; pos < base; pos++) \
+{ \
+	val += data[pos]; \
+} \
+val /= base; \
+} 
+
+static Type IntegarteDirection(const vector<Type>& Illum, const grid_directions_t& grid_direction)
+{		
+#ifdef SORT_ILLUM
+	std::vector<Type> I(grid_direction.size);
+	int i = 0;
+	Type illum_cell;
+	for (auto& dir : grid_direction.directions)
+	{
+		GET_FACE_TO_CELL(illum_cell, (&Illum[i * base]), 0);
+		I[i / base] += illum_cell * dir.area;
+		i += base;
+	}
+
+	auto cmp{ [](const Type left, const Type right) { return left < right; } };
+	std::sort(I.begin(), I.end(), cmp);
+
+	Type res = 0;
+	for (size_t i = 0; i < grid_direction.size; i++)
+	{
+		res += I[i];
+	}
+
+#else
 	
-	std::vector<cell>& grid, const std::vector<int>& neighbours_id_faces, const std::vector<ShortId>& OutC,
-	const std::vector<ShortId>& Out, const std::vector<ShortId>& In,  std::vector<Type>& S,  std::vector<Vector3>& X,  std::vector<Vector2>& X0,
-	const std::vector<Type>& res_inner_bound, const std::vector<int>& id_try_surface, const vector<int>& sorted_id_cell,
-	const vector<uint64_t>& ShiftOut, const vector<uint64_t>& ShiftRes, const vector<uint64_t>& ShiftX0, const vector<int>& ShiftTry,
-	const std::vector<VectorX>& U_full)
+	Type res = 0;
+	Type illum_cell;
+	int i = 0;
+	for (auto& dir :grid_direction.directions)
+	{		
+		GET_FACE_TO_CELL(illum_cell, (&Illum[i * base]), 0);		
+		res += illum_cell * dir.area;
+		i += base;
+	}	
+#endif
+
+	return res / grid_direction.full_area;
+}
+static int MakeEnergy(const grid_directions_t& grid_direction, std::vector<elem_t>& cells) {
+		
+	for (auto &el : cells)
+	{
+		el.illum_val.energy = IntegarteDirection(el.illum_val.illum, grid_direction);
+	}
+	return 0;
+}
+
+static int IntegarteDirection3(const vector<Type>& Illum, const grid_directions_t& grid_direction, Vector3* stream_face)
+{
+	int i = 0;
+	for (int f = 0; f < base; f++)
+	{
+		stream_face[f] = Vector3::Zero();
+	}
+
+	for (auto& dir : grid_direction.directions)
+	{
+		for (int f = 0; f < base; f++)
+		{
+			stream_face[f] += Illum[i++] * dir.area * dir.dir;
+		}
+	}
+
+	for (int f = 0; f < base; f++)
+	{
+		stream_face[f] /= grid_direction.full_area;
+	}
+
+	return 0;
+}
+static int MakeStream(const grid_directions_t& grid_direction, grid_t& grid) 
+{
+	for (auto& el : grid.cells)
+	{				
+		 Vector3 Stream[base];
+		 IntegarteDirection3(el.illum_val.illum, grid_direction, Stream);
+
+		 GET_FACE_TO_CELL(el.illum_val.stream, Stream, Vector3::Zero());
+		 
+		el.illum_val.div_stream = 0;
+		for (int j = 0; j < base; j++)
+		{			
+			geo_face_t* geo_f = &grid.faces[el.geo.id_faces[j]].geo;
+			if (el.geo.sign_n)
+			{
+				el.illum_val.div_stream += Stream[j].dot(geo_f->n) * geo_f->S;
+			}
+			else
+			{
+				el.illum_val.div_stream -= Stream[j].dot(geo_f->n) * geo_f->S;
+			}						
+		}
+		el.illum_val.div_stream /= el.geo.V;
+		
+	}
+	return 0;
+}
+
+
+static int IntegarteDirection9(const vector<Type>& Illum, const grid_directions_t& grid_direction, Matrix3* impuls_face) {
+	
+	int i = 0;
+	for (int f = 0; f < base; f++)
+	{
+		impuls_face[f] = Matrix3::Zero();
+	}
+
+	for (auto& dir : grid_direction.directions)
+	{
+		for (int f = 0; f < base; f++)
+		{			
+			for (size_t h = 0; h < 3; h++)
+				for (size_t k = 0; k < 3; k++)
+					{
+						impuls_face[f](i, k) += dir.dir[h] * dir.dir[k] * (Illum[i] * dir.area);
+					}
+			i++;			
+		}
+	}
+
+	for (int f = 0; f < base; f++)
+	{
+		impuls_face[f] /= grid_direction.full_area;
+	}
+	
+	return 0;	
+}
+static int MakeDivImpuls(const grid_directions_t& grid_direction, grid_t& grid)
 {
 
-	std::string name_file_local_x0 = main_dir + "LocX0";
-	std::string name_file_x = main_dir + "X";
-	std::string name_file_s = main_dir + "S";
-	std::string name_file_sizes = main_dir + "Size";	
-	
-	const int count_directions = directions.size();
-	const int count_cells = size_grid;
+	for (auto& el : grid.cells)
+	{
+		Matrix3 Impuls[base];
+		IntegarteDirection9(el.illum_val.illum, grid_direction, Impuls);
 
-	int count = 0;
-	Type norm = 0;
-	Illum.resize(4*size_grid, 0);
+		GET_FACE_TO_CELL(el.illum_val.impuls, Impuls, Matrix3::Zero());
 
-#ifdef WRITE_LOG
-	ofstream ofile;
-	//ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
-#endif
-	int countX, countX0, countOutC, countOut, countIn, countS, countRes, countTry;
-	ReadSizes(name_file_sizes, countX, countX0, countOutC, countOut, countIn, countS, countRes, countTry);
-	X0.clear();
-	do {
-		Type _clock = -omp_get_wtime();
-
-		norm = -1;
-		/*---------------------------------- далее FOR по направлениям----------------------------------*/
-		FILE* fs;
-		FILE* fx;
-		FILE* fI;
-		fs = fopen((name_file_s + ".bin").c_str(), "rb");
-		fx = fopen((name_file_x + ".bin").c_str(), "rb");
-		fI = fopen((main_dir + "FormIllum.bin").c_str(), "wb");
-
-
-		for (register int num_direction = 0; num_direction < count_directions; ++num_direction)
+		el.illum_val.div_impuls = Vector3::Zero();
+		for (int j = 0; j < base; j++)
 		{
-#ifdef WRITE_LOG
-			ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
-			ofile << "Iter direction: " << num_direction << '\n';
-			ofile.close();
-#endif
-			Illum.assign(4*size_grid, 0);
-			if (num_direction != count_directions - 1) {
-				int n = 3*ShiftOut[num_direction + 1];
-				S.resize(n);
-				X.resize(n);
-			}
-			else 
+			geo_face_t* geo_f = &grid.faces[el.geo.id_faces[j]].geo;
+			if (el.geo.sign_n)
 			{
-				int n = countS - 3 * ShiftOut[num_direction]; 		//последнее направление
-				S.resize(n);
-				X.resize(n);		
-			}
-		
-			fread_unlocked(S.data(), sizeof(Type), S.size(), fs);									
-			fread(X.data(), sizeof(Vector3), X.size(), fx);
-						
-
-		/*	f = fopen((name_file_local_x0 + ".bin").c_str(), "rb");
-			if (!f) { printf("Err x0\n"); return 1; }
-			fread(X0.data(), sizeof(Vector2), X0.size(), f);
-			fclose(f);
-			printf("Read x0 files\n");*/
-
-
-			int posX = 0;
-			int posX0 = 0;
-			int posOut = 0;
-			int posIn = 0;
-			int posS = 0;
-
-			int pos_in_res = 0;
-			int id_try_pos = 0;
-
-
-			register int num_cell;
-			ShortId n_out;
-			Vector3 I;
-			Type sumI = 0;
-
-
-			/*---------------------------------- далее FOR по ячейкам----------------------------------*/
-			for (int h = 0; h < count_cells; ++h) {
-				num_cell = sorted_id_cell[num_direction * count_cells + h];
-
-				n_out = OutC[num_direction * count_cells + h];
-
-				sumI = 0;
-
-				for (ShortId i = 0; i < n_out; ++i)
-				{
-					ShortId num_out_face = Out[ShiftOut[num_direction] + posOut++];
-
-					//GetNodes
-					for (int num_node = 0; num_node < 3; ++num_node) {
-						Vector3 x = X[posX++];
-
-						ShortId num_in_face = In[3 * ShiftOut[num_direction] + posIn++];
-
-						Type I_x0 = CalculateIllumeOnInnerFace(num_cell, num_direction, num_in_face, x, X0, grid, neighbours_id_faces,
-							id_try_pos, pos_in_res, posX0, ShiftRes[num_direction], ShiftX0[num_direction], ShiftTry[num_direction]);
-
-						Type s = S[posS++];
-
-						I[num_node] = CurGetIllum(num_cell, num_direction, x, s, I_x0, int_scattering, U_full);
-						sumI += I[num_node];
-
-					}//num_node
-
-					// если хранить не знгачения у коэфф. интерполяции
-					{
-						//Vector3 coef;
-						//if (num_out_face == 3)
-						//	coef = inclined_face_inverse * I;// GetInterpolationCoefInverse(inclined_face_inverse, I);
-						//else
-						//	coef = straight_face_inverse * I;// GetInterpolationCoefInverse(straight_face_inverse, I);
-					}
-
-					grid[num_cell].nodes_value[num_out_face] = I; //coef;  // храним значение узлов а не коэф. интерполяции
-
-					//Illum[num_direction * (4*count_cells) + num_cell * 4 + num_out_face] = (I[0] + I[1] + I[2]) / 3;					
-
-					int neighbor_id_face = neighbours_id_faces[num_cell * 4 + num_out_face];
-					if (neighbor_id_face >= 0)
-						grid[neighbor_id_face / 4].nodes_value[neighbor_id_face % 4] = I;// coef;
-
-
-				} //num_out_face
-
-				for (size_t i = 0; i < 4; i++)
-				{
-					Vector3 Il = grid[num_cell].nodes_value[i];
-					const Type curI = (Il[0] + Il[1] + Il[2]) / 3;
-					//const int id = num_direction * (4 * count_cells) + num_cell * 4 + i;
-					const int id = num_cell * 4 + i;
-					{
-						Type buf_norm = fabs(Illum[id] - curI) / curI;
-						if (buf_norm > norm) norm = buf_norm;
-					}
-					Illum[id] = curI;
-				}
-				//illum[num_direction * count_cells + num_cell] = sumI / (3 * n_out);				
-			}
-			/*---------------------------------- конец FOR по ячейкам----------------------------------*/
-			{								
-					for (size_t j = 0; j < count_cells; j++)
-					{
-						const int N = j * 4;
-						Type I = (Illum[N] + Illum[N + 1] + Illum[N + 2] + Illum[N + 3]) / 4;
-						fwrite(&I, sizeof(Type), 1, fI);						
-					}
-			}
-			
-			//std::cout << "End direction number: " << num_direction << '\n';
-		}
-		/*---------------------------------- конец FOR по направлениям----------------------------------*/
-
-		fclose(fs);
-		fclose(fx);
-		fclose(fI);
-
-		if (max_number_of_iter > 1)  // пропуск первой итерации
-		{
-			if (use_cuda)
-			{
-				if (CalculateIntScattering(32, count_cells, count_directions, Illum, int_scattering)) { // если была ошибка пересчитать на CPU 
-					CalculateIntOmp(count_cells, count_directions, Illum, directions, squares, int_scattering);
-					ClearDevice(cuda_mod);
-					use_cuda = false;
-				}
+				el.illum_val.div_impuls += Impuls[j]*(geo_f->n) * geo_f->S;
 			}
 			else
-				CalculateIntOmp(count_cells, count_directions, Illum, directions, squares, int_scattering);
+			{
+				el.illum_val.div_impuls += Impuls[j]*(-geo_f->n) * geo_f->S;
+			}
 		}
-
-		//Illum.swap(Illum2);
-
-		_clock += omp_get_wtime();
-
-#ifdef WRITE_LOG
-		printf("Error: %lf\n", norm);
-		printf("Time of iter: %lf\n", _clock);
-		printf("End iter_count number: %d\n", count);
-
-		ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
-		ofile << "Error:= " << norm << '\n';
-		ofile << "Time of iter: " << _clock << '\n';
-		ofile << "End iter_count number: " << count << '\n';
-		ofile.close();
-#endif
-		count++;
-
-	} while (norm > accuracy && count < max_number_of_iter);
-
+		el.illum_val.div_impuls /= el.geo.V;		
+	}
 
 	return 0;
 }
-#endif // USE_VTK
+
+int CalculateIllumParam(const grid_directions_t& grid_direction, grid_t& grid) 
+{
+	MakeEnergy(grid_direction, grid.cells);
+	MakeStream(grid_direction, grid);
+//	MakeDivImpuls(grid_direction, grid);
+
+	return 0;
+}
+
+#endif //ILLUM

@@ -7,26 +7,39 @@
 
 #define USE_VTK	  // использование vtk для вывода результатов в виде сетки
 
-//#define ONLY_BUILD_DATA
+//#define UTILS
 
 #endif
 
 #define NUMBER_OF_MEASUREMENTS 3
 
-#define BUILD  // запуск модуля построителя графов
+//#define BUILD  // запуск модуля построителя графов
 
-#define MAKE   // запуск модуля подготовительных расчётов для излучения
+//#define MAKE   // запуск модуля подготовительных расчётов для излучения
 
 #define SOLVE  // запуск модуля решения
 
-#define USE_MPI  // подключение технологии mpi
+//#define USE_MPI  // подключение технологии mpi
+
+#define USE_CUDA  // подключение технологии cuda
 
 #define WRITE_GLOBAL_LOG	// писать лог файл
 
+#if defined BUILD || defined MAKE
+#define ONLY_GEO_DATA
+#endif
+
+#ifdef UTILS
+
+#define ILLUM
+#define HLLC
+
+#endif //UTILS
+
 
 // Геометрия
-// 
-//#define Cube
+
+#define Cube
 
 //#define Step
 
@@ -34,7 +47,6 @@
 
 //#define Sphere
 
-#define Cylinder
-
+//#define Cylinder
 
 #endif //PRJ_CONFIG

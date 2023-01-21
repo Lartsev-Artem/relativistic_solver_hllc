@@ -10,11 +10,20 @@
 #define EXIT(a) { MPI_END exit(a); }
 #else
 #define MPI_START(argc, argv) {}
+#define MPI_END {}
 #define EXIT(a) exit(a);
 #endif //USE_MPI
 
-#define EXIT_ERR(str){printf(str); EXIT(1);}
+#ifdef USE_CUDA
+#define CUDA_ERR(str){ WRITE_LOG(str); printf(str); solve_mode.use_cuda = false;}
+#else
+#define CUDA_ERR(str){}
+#endif //USE_CUDA
 
+#define EXIT_ERR(str){printf(str); EXIT(1);}
+#define EXIT_ERRS(str,val){printf(str,val); EXIT(1);}
+
+#define RETURN_ERRS(str, val) { printf(str,val); return 1; }
 #define RETURN_ERR(str) { printf(str); return 1; }
 
 #define base (NUMBER_OF_MEASUREMENTS + 1)
@@ -23,6 +32,9 @@ typedef Eigen::Vector3d Vector3;
 typedef Eigen::Vector2d Vector2;
 typedef Eigen::VectorXd VectorX;
 typedef Eigen::Matrix3d Matrix3;
+typedef Eigen::Vector4d Vector4;
+typedef Eigen::Matrix4d Matrix4;
+typedef Eigen::MatrixXd MatrixX;
 
 typedef double Type;
 typedef int IntId;
@@ -30,6 +42,8 @@ typedef uint8_t State;
 
 typedef uint8_t ShortId;
 typedef std::string Str_Type;
+
+typedef const std::string& file_name;
 
 using namespace std;
 using namespace std::chrono;
@@ -52,10 +66,12 @@ struct Face {
 	Vector3 A;
 	Vector3 B;
 	Vector3 C;
-	Face& operator=(const Face& face) {
+	Face& operator=(const Face& face) 
+	{
 		A = face.A;
 		B = face.B;
 		C = face.C;
+		return *this;
 	}
 };
 
@@ -68,23 +84,17 @@ struct FaceCell {
 	}
 };
 
-//сравнить с solve
-struct cell {
-	//int id;  - номер в массиве
-	std::vector<Vector3> nodes_value;
-	std::vector<int> neighbours_id_face;
-
-	cell() {
-		//id = -1;
-		nodes_value.resize(4, Vector3(-666, -666, -666));
-		neighbours_id_face.resize(4, -1);
-	}
-};
-
 struct direction_s
 {
 	Vector3 dir;
 	Type area;
+};
+
+struct grid_directions_t
+{
+	int size;
+	std::vector<direction_s> directions;
+	Type full_area;
 };
 
 struct BasePointTetra //узлы интерпол€ции всех тетраэдров // ¬ перспективе можно уйти к гран€м
@@ -105,7 +115,7 @@ struct cell_local // дл€ каждой €чейки и каждого направлени€
 
 #define OPEN_FSTREAM(file, namefile) \
 file.open(namefile); \
-if (!file.is_open()) { RETURN_ERR("Error : file %s is not open\n", namefile) }
+if (!file.is_open()) RETURN_ERRS("Error : file %s is not open\n", namefile);
 
 
 #ifdef WRITE_GLOBAL_LOG	
@@ -127,4 +137,20 @@ ofile.close(); }
 #define clear_bit(word, idx) (word & (~(1 << (idx)))) // выключение i-го бита
 #define set_bit(word, idx) (word | (1 << (idx)))      // установка i-го бита
 
+#define WRITE_FILE(name_file, data, value) \
+{ \
+FILE* f;\
+int n = data.size(); \
+f = fopen(name_file, "wb"); \
+if(!f) RETURN_ERRS("file %s not open\n",name_file); \
+fwrite(&n, sizeof(int), 1, f); \
+for (auto& el : data) \
+{	\
+	fwrite(&el.value, sizeof(el.value), 1, f);	\
+}	\
+fclose(f);\
+}
+
+
+#define SIGN(a) (a < 0.0 ? -1.0 : 1.0) 
 #endif //GLOBAL_DEF

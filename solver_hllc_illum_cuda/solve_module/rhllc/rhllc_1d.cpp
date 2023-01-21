@@ -1,8 +1,7 @@
-#include "solve_short_characteristics_headers.h"
-#include "solve_short_characteristics_global_structure.h"
-#include "omp.h"
+#include "../solve_config.h"
+#if defined RHLLC && NUMBER_OF_MEASUREMENTS == 1
+#include "../solve_global_struct.h"
 
-#define SIGN(a) (a < 0.0 ? -1.0 : 1.0) 
 struct PhysVal {
 	Type rho;
 	Type v;
@@ -42,7 +41,85 @@ static std::vector<Flux> F_full(size_g*2);
 
 static int c0, c1, c2, c3, c4;
 
-int WriteSolution(const std::string& dir, const std::vector<PhysVal>& vector_U, bool flag_init);
+static int WriteSolution(const std::string& dir, const std::vector<PhysVal>& vector_U, bool flag_init)
+{
+	int n = vector_U.size();
+	std::vector<Type> density(n);
+	std::vector<Type> pressure(n);
+	std::vector<Type> velocity(n);
+
+	for (size_t i = 0; i < n; i++)
+	{
+		density[i] = vector_U[i].rho;
+		velocity[i] = vector_U[i].v;
+		pressure[i] = vector_U[i].p;
+	}
+
+	std::ofstream ofile_1;
+
+	if (flag_init)
+	{
+		ofile_1.open(dir + "density.txt");
+		ofile_1 << n << '\n';
+	}
+	else
+		ofile_1.open((dir + "density.txt"), std::ios::app);
+
+
+	if (!ofile_1.is_open())
+	{
+		printf("density not opened\n");
+		return 1;
+	}
+
+	for (size_t i = 0; i < n; i++)
+	{
+		ofile_1 << density[i] << '\n';
+	}
+	ofile_1.close();
+
+	if (flag_init)
+	{
+		ofile_1.open((dir + "velocity.txt"));
+		ofile_1 << n << '\n';
+	}
+	else
+		ofile_1.open((dir + "velocity.txt"), std::ios::app);
+
+	if (!ofile_1.is_open())
+	{
+		printf("densit not opened\n");
+		return 1;
+	}
+
+	for (size_t i = 0; i < n; i++)
+	{
+		ofile_1 << velocity[i] << '\n';
+	}
+	ofile_1.close();
+
+	if (flag_init)
+	{
+		ofile_1.open((dir + "pressure.txt"));
+		ofile_1 << n << '\n';
+	}
+	else
+		ofile_1.open((dir + "pressure.txt"), std::ios::app);
+
+	if (!ofile_1.is_open())
+	{
+		printf("densit not opened\n");
+		return 1;
+	}
+
+	for (size_t i = 0; i < n; i++)
+	{
+		ofile_1 << pressure[i] << '\n';
+	}
+	ofile_1.close();
+
+	return 0;
+}
 
 static double MakeRotateCoef(int num_face)
 {
@@ -56,7 +133,7 @@ static double MakeRotateCoef(int num_face)
 	}
 }
 
-ConVal RHLLC_flux(const int num_cell) {
+static ConVal RHLLC_flux(const int num_cell) {
 	
 	Vector3 SumF(0,0,0);
 	ConVal U = U_full_1d_prev[num_cell];
@@ -251,7 +328,7 @@ ConVal RHLLC_flux(const int num_cell) {
 	return U;
 }
 
-int RHLLC_Init(std::vector<PhysVal>& W) {
+static int RHLLC_Init(std::vector<PhysVal>& W) {
 
 	int n = W.size();
 	//todo: check left 
@@ -274,7 +351,7 @@ int RHLLC_Init(std::vector<PhysVal>& W) {
 }
 
 
-int ReBuildCon2Phys(const std::vector<ConVal>& U, std::vector<PhysVal>& W)
+static int ReBuildCon2Phys(const std::vector<ConVal>& U, std::vector<PhysVal>& W)
 {
 	int n = U.size();
 	static std::vector<Type> iters(100, 0);
@@ -357,91 +434,7 @@ int ReBuildCon2Phys(const std::vector<ConVal>& U, std::vector<PhysVal>& W)
 	
 	return 0;
 }
-
-int ReBuildCon2PhysIter(const std::vector<ConVal>& U, std::vector<PhysVal>& W)
-{
-	int n = U.size();
-	static std::vector<Type> iters(100, 0);
-
-	for (size_t num_cell = 0; num_cell < n; num_cell++)
-	{
-		const Type vv = W[num_cell].v * W[num_cell].v;
-		const Type d = W[num_cell].rho;
-		Type Gamma0 = 1. / sqrt(1 - vv);
-		const Type h = 1 + gamma_g * W[num_cell].p / d;
-
-		Type W0 = d * h * Gamma0 * Gamma0; //U[0] * Gamma0 * h;
-
-		Type m = U[num_cell].v;
-		Type mm = U[num_cell].v * U[num_cell].v;
-
-		Type p = W[num_cell].p;
-		Type v = W[num_cell].v;
-
-		Type D = U[num_cell].d;
-		Type E = U[num_cell].p;
-
-		int  cc = 0;
-
-		Type err = 1;
-		do
-		{
-			err = W0;
-
-			Type fW = W0 - p - E;
-
-			Type dGdW = -(Gamma0 * Gamma0 * Gamma0) * mm / (2 * W0 * W0 * W0);
-			Type dFdW = 1 - ((Gamma0 * (1 + D * dGdW) - 2 * W0 * dGdW) / (Gamma0 * Gamma0 * Gamma0 * gamma_g));
-			W0 -= (fW / dFdW);
-
-			Gamma0 = 1. / sqrt(1 - mm / (W0 * W0));
-
-			p = (W0 - D * Gamma0) / (Gamma0 * Gamma0 * gamma_g);
-
-			v = m / W0;
-
-			err -= W0;
-			cc++;
-		} while (fabs(err / W0) > 1e-14);
-
-		if (p < 0 || U[num_cell].d < 0 || std::isnan(p) || std::isnan(U[num_cell].d))
-		{
-			printf("Error cell %d (p = %lf, d= %lf)", num_cell, p, D / Gamma0);
-			exit(1);
-		}
-
-
-
-		if (cc < 100)
-		{
-			//Type norm = Vector3(fabs(p - W[num_cell].p), fabs(D / Gamma0 - W[num_cell].rho), fabs(v - W[num_cell].v)).norm();
-
-			Type norm = Vector3(U_full_1d_prev[num_cell].p - U_full_1d[num_cell].p, U_full_1d_prev[num_cell].v - U_full_1d[num_cell].v,
-				U_full_1d_prev[num_cell].d - U_full_1d[num_cell].d).norm();
-			if (iters[cc] < norm) iters[cc] = norm;
-
-			//iters[cc] = fabs(D / Gamma0 - W[num_cell].rho);
-			//iters[cc] = fabs(v - W[num_cell].v);
-			//if(iters[cc] < fabs(p - W[num_cell].p)) iters[cc] = fabs(p - W[num_cell].p);
-		}
-
-		W[num_cell].p = p;
-		W[num_cell].v = v;
-		W[num_cell].rho = D / Gamma0;
-	}
-
-	for (size_t i = 0; i < 100; i++)
-	{
-		//if(iters[i]> 1e-15) printf("delta p = %0.16lf,  cc=%d\n", iters[i], i);
-		if (iters[i] > 1e-15) printf("{%d, %0.16lf}, ", i, iters[i]);
-	}
-	printf("-----------------------------------\n");
-
-
-	return 0;
-}
-
-int ReBuildPhys2Con(const std::vector<PhysVal>& W, std::vector<ConVal>& U)
+static int ReBuildPhys2Con(const std::vector<PhysVal>& W, std::vector<ConVal>& U)
 {	
 	ConVal cell;
 	int n = W.size();
@@ -505,34 +498,6 @@ int RHLLC_1d(std::string& main_dir) {
 			count++;
 		}
 
-#ifdef DBG_OUTPUT
-		ofstream ofile;
-		static bool flag_clear = true;
-		const std::string name_file = "D:\\Desktop\\FilesCourse\\dbg_rhllc_1d.txt";
-		if (flag_clear)
-		{
-			ofile.open(name_file);
-			ofile.close();
-			flag_clear = false;
-		}
-
-		ofile.open(name_file, std::ios::app);
-		if (!ofile.is_open())
-		{
-			printf("No open file\n");
-			exit(1);
-		}
-		for (size_t i = 0; i < size_g; i++)
-		{		
-			ofile << "U[" << i << "]= " << U_full_1d[i].d << ", " << U_full_1d[i].v<< ", " << U_full_1d[i].p << '\n';
-			ofile << "W[" << i << "]= " << W_full_1d_prev[i].rho << ", " << W_full_1d_prev[i].v << ", " << W_full_1d_prev[i].p << '\n';
-			ofile << "F[" << i << "]= " << F_full[2*i].d + F_full[2*i+1].d << ", " 
-				<< F_full[2 * i].v+ F_full[2 * i + 1].v << ", " << F_full[2 * i].p+ F_full[2 * i + 1].p << '\n';
-		}
-		ofile << "\n\n======================================\n\n";
-		ofile.close();
-
-#endif
 		U_full_1d.swap(U_full_1d_prev);
 		//W_full_1d.swap(W_full_1d_prev);
 
@@ -544,82 +509,5 @@ int RHLLC_1d(std::string& main_dir) {
 	return 0;
 }
 
-int WriteSolution(const std::string& dir, const std::vector<PhysVal>& vector_U, bool flag_init)
-{
-	int n = vector_U.size();
-	std::vector<Type> density(n);
-	std::vector<Type> pressure(n);
-	std::vector<Type> velocity(n);
 
-	for (size_t i = 0; i < n; i++)
-	{		
-		density[i] = vector_U[i].rho;
-		velocity[i] = vector_U[i].v;		
-		pressure[i] = vector_U[i].p;
-	}
-
-	std::ofstream ofile_1;
-
-	if (flag_init)
-	{
-		ofile_1.open(dir + "density.txt");
-		ofile_1 << n << '\n';
-	}
-	else
-		ofile_1.open((dir + "density.txt"), std::ios::app);
-
-
-	if (!ofile_1.is_open())
-	{
-		printf("density not opened\n");
-		return 1;
-	}
-
-	for (size_t i = 0; i < n; i++)
-	{
-		ofile_1 << density[i] << '\n';
-	}
-	ofile_1.close();
-
-	if (flag_init)
-	{
-		ofile_1.open((dir + "velocity.txt"));
-		ofile_1 << n << '\n';
-	}
-	else
-		ofile_1.open((dir + "velocity.txt"), std::ios::app);
-
-	if (!ofile_1.is_open())
-	{
-		printf("densit not opened\n");
-		return 1;
-	}
-
-	for (size_t i = 0; i < n; i++)
-	{
-		ofile_1 << velocity[i] << '\n';
-	}
-	ofile_1.close();
-
-	if (flag_init)
-	{
-		ofile_1.open((dir + "pressure.txt"));
-		ofile_1 << n << '\n';
-	}
-	else
-		ofile_1.open((dir + "pressure.txt"), std::ios::app);
-
-	if (!ofile_1.is_open())
-	{
-		printf("densit not opened\n");
-		return 1;
-	}
-
-	for (size_t i = 0; i < n; i++)
-	{
-		ofile_1 << pressure[i] << '\n';
-	}
-	ofile_1.close();
-
-	return 0;
-}
+#endif

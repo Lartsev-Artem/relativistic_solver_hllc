@@ -1,19 +1,20 @@
 #ifndef BUILD_GRAPH_CALCULATION
 #define BUILD_GRAPH_CALCULATION
 
-#ifdef  USE_OMP
-#include <omp.h>
-#endif 
+#include "build_graph_prj_config.h"
+
+#ifdef BUILD
+
+#include "build_graph_structures.h"
 
 #include <map>
 #include<set>
 #include <bitset>
 #include<list>
 
-#include "build_graph_prj_config.h"
-#include "build_graph_structures.h"
-
-
+#ifdef  USE_OMP
+#include <omp.h>
+#endif 
 
 int FindIdCellInBoundary(const Vector3& direction, const std::set<IntId>& inner_bound, const std::map<IntId, FaceCell>& inner_cells,
 	const std::vector<Normals>& normals, const int cur_cell, int* id);
@@ -60,6 +61,8 @@ int NewStep(const std::vector<IntId>& all_pairs_id, const std::vector<IntId>& co
 	std::set<IntId>& next_step_el);
 
 #endif //USE_OMP
+
+#endif //BUILD
 
 #endif
 

@@ -2,6 +2,9 @@
 #include "../utils/grid_geometry/geometry_data.h"
 
 #include "../global_value.h"
+
+#ifdef MAKE
+
 #ifdef USE_VTK
 
 int WriteCellFaces(const std::string name_file_cells, const vtkSmartPointer<vtkUnstructuredGrid>& unstructured_grid) {
@@ -52,7 +55,10 @@ int WriteVertex(const std::string name_file_vertex, const vtkSmartPointer<vtkUns
 	return 0;
 }
 
-#endif
+#endif//USE_VTK
+
+#ifndef ONLY_GEO_DATA
+
 int ReadCellFaces(const std::string name_file_cells, std::vector<Face>& grid) {
 
 	FILE* f;
@@ -72,22 +78,6 @@ int ReadCellFaces(const std::string name_file_cells, std::vector<Face>& grid) {
 
 	fclose(f);
 
-	return 0;
-}
-int InitNodesValue(const std::vector<int>& all_pairs_face, std::vector<cell>& nodes_value) {
-
-
-	const int n = all_pairs_face.size()/4;
-	nodes_value.resize(n);
-
-	for (size_t i = 0; i < n; ++i)
-	{
-		//nodes_value[i].id = i;	
-		for (int j = 0; j < 4; j++) {
-			nodes_value[i].neighbours_id_face[j] = all_pairs_face[i * 4 + j];
-			nodes_value[i].nodes_value[j] = Vector3(-666, -666, -666);
-		}
-	}
 	return 0;
 }
 
@@ -137,3 +127,59 @@ int FromPlaneToTetra(const Eigen::Matrix3d& inverse_transform_matrix, const Eige
 	return 0;
 }
 
+
+Vector3 GetInterpolationCoef(const Eigen::Matrix3d& interpolation_nodes, const Eigen::Vector3d& function_value) {
+	//interpolation_nodes --- постояные узлы интерполяции (формат (в координатах стандартного тетраэдра) {x_i, y_i, 1})
+
+	return interpolation_nodes.partialPivLu().solve(function_value);
+
+}
+Vector3 GetInterpolationCoefInverse(const Eigen::Matrix3d& interpolation_nodes, const Eigen::Vector3d& function_value) {
+	//interpolation_nodes --- постояные узлы интерполяции (формат (в координатах стандартного тетраэдра) {x_i, y_i, 1})
+
+	return interpolation_nodes * function_value;
+}
+
+#endif //ONLY_GEO_DATA
+
+#include "struct_short_characteristics_calculations.h"
+BaseTetra_t::BaseTetra_t()
+{
+	// 3 узла интерполяции
+	{
+		straight_face << 1. / 6, 1. / 6, 1,
+			2. / 3, 1. / 6, 1,
+			1. / 6, 2. / 3, 1;
+	}
+
+	// 3 узла интерполяции на наклонной плоскости
+	{
+		inclined_face <<
+			0, sqrt(2. / 3), 1,
+			sqrt(2) / 4, 1. / (2 * sqrt(6)), 1,
+			-sqrt(2) / 4, 1. / (2 * sqrt(6)), 1;
+	}
+
+	//Матрицы перехода из стандартного тетраэдра в координаты наклонной плоскости 
+	{ transform_matrix <<
+		-1. / sqrt(2), 1. / sqrt(2), 0,
+		-1. / sqrt(6), -1. / sqrt(6), sqrt(2. / 3),
+		1. / sqrt(3), 1. / sqrt(3), 1. / sqrt(3);
+	}
+
+	//Матрицы перехода из наклонной плоскости в  координаты стандартного тетраэдра
+	{
+		inverse_transform_matrix <<
+			-1. / sqrt(2), -1. / sqrt(6), 1. / sqrt(3),
+			1. / sqrt(2), -1. / sqrt(6), 1. / sqrt(3),
+			0, sqrt(2. / 3), 1. / sqrt(3);
+	}
+
+	// Начало координата плоскости
+	start_point_plane_coord << 0.5, 0.5, 0;
+
+	inclined_face_inverse = inclined_face.inverse();  // в решении
+	straight_face_inverse = straight_face.inverse(); // в решении	
+}
+
+#endif //MAKE

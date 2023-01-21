@@ -1,8 +1,9 @@
-#include "../file_module/reader_vtk.h"
-
 #include "build_graph_prj_config.h"
 
+#ifdef BUILD
+
 #ifdef WriteFiles
+#include "../file_module/reader_vtk.h"
 
 #include "../utils/grid_geometry/geometry_data.h"
 #include "../file_module/writer_bin.h"
@@ -532,3 +533,4 @@ int WriteFileGraph(std::unique_ptr<FILE, int(*)(FILE*)>& file_graph, std::unique
 }
 
 #endif //ReadFiles
+#endif // BUILD

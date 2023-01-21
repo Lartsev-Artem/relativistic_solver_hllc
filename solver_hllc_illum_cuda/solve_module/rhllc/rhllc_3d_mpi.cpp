@@ -1,11 +1,10 @@
-#include "solve_short_characteristics_headers.h"
-#if defined USE_MPI && defined RHLLC
-#include "solve_short_characteristics_hllc.h"
-#include "solve_short_characteristics_main.h"
+#include "../solve_config.h"
+#if defined RHLLC && NUMBER_OF_MEASUREMENTS == 3 && defined USE_MPI
+#include "../solve_global_struct.h"
+#include "../../file_module/reader_bin.h"
+#include "../../utils/grid_geometry/geometry_solve.h"
 
-#define base 4  // размерность элемента
-#define SIGN(a) (a < 0.0 ? -1.0 : 1.0) 
-
+#define MPI_RETURN(a) EXIT(a)
 
 class VectorVal
 {
@@ -303,7 +302,7 @@ int  RHLLC_MPI(std::string& main_dir,
 	std::vector<Normals>& normals, std::vector<Type>& squares_cell, std::vector<Type>& volume)
 {
 	int np, myid;
-	
+
 	MPI_Comm_size(MPI_COMM_WORLD, &np);
 	MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
@@ -312,15 +311,17 @@ int  RHLLC_MPI(std::string& main_dir,
 		remove((main_dir + "File_with_Logs_solve" + to_string(myid) + ".txt").c_str());
 	}
 #endif
-	
+
 	MPI_Datatype MPI_VectorVal;
-	int len[2] = { base + 1, 1 };	
+	int len[2] = { base + 1, 1 };
 	MPI_Aint pos[2] = { 0 ,sizeof(VectorVal) };
 	MPI_Datatype typ[2] = { MPI_DOUBLE, MPI_UB };
 	MPI_Type_struct(2, len, pos, typ, &MPI_VectorVal);
 	MPI_Type_commit(&MPI_VectorVal);
 	//
 	printf("Run\n");
+
+	const int size_grid = centerts.size();
 
 	std::vector<VectorVal> W_full_3d;
 	std::vector<VectorVal> U_full_3d;
@@ -337,15 +338,15 @@ int  RHLLC_MPI(std::string& main_dir,
 	std::vector<int> id_cells_local;		 // регулярные ячейки на узле
 	std::vector<int> id_bound_cur_local;  // граница на этом узле
 	std::vector<int> id_bound_next_local; // граница c другого
-	
+
 	ReadSimpleFileBin(name_file_cells, id_cells_local);
 	ReadSimpleFileBin(name_file_bound_cur, id_bound_cur_local);
 	ReadSimpleFileBin(name_file_bound_next, id_bound_next_local);
-	const int local_size = id_cells_local.size();
-	const int local_size_cur = id_bound_cur_local.size();
-	
+	 int local_size = id_cells_local.size();
+	 int local_size_cur = id_bound_cur_local.size();
+
 	const int size = local_size + local_size_cur;
-	std::vector<int> neighbours_id_faces_local(base* size);
+	std::vector<int> neighbours_id_faces_local(base * size);
 	std::vector<Normals> normals_local(size);
 	std::vector<Type> squares_cell_local(base * size);
 	std::vector<Type> volume_local(size);
@@ -360,7 +361,7 @@ int  RHLLC_MPI(std::string& main_dir,
 		{
 			squares_cell_local[i * base + j] = squares_cell[id * base + j];
 			neighbours_id_faces_local[i * base + j] = neighbours_id_faces[id * base + j];  // здесь пересчёт
-		}		
+		}
 	}
 	for (size_t k = 0; k < local_size_cur; k++)
 	{
@@ -405,7 +406,7 @@ int  RHLLC_MPI(std::string& main_dir,
 			}
 		}
 	}
-	
+
 
 	if (myid == 0)
 	{
@@ -415,228 +416,205 @@ int  RHLLC_MPI(std::string& main_dir,
 
 		U_full_3d.resize(size_grid);
 		U_full_3d_prev.resize(size_grid);
-		
+
 		ReBuildConvValue_3d(W_full_3d, U_full_3d_prev);
 	}
-		
+
 #endif
 
-		std::vector<int> send_count;
-		std::vector<int> disp;		
-		GetSend(np, size_grid, send_count);
-		GetDisp(np, size_grid, disp);
+	std::vector<int> send_count;
+	std::vector<int> disp;
+	GetSend(np, size_grid, send_count);
+	GetDisp(np, size_grid, disp);
 
-		const int local_size = send_count[myid];
-		const int local_disp = disp[myid];
+	local_size = send_count[myid];
+	const int local_disp = disp[myid];
 
-		std::vector<int> pairs_local(local_size * base);  // соседи на узле в глобальной нумерации
-		
-		std::vector<int> pairs_local_reg(local_size*base);  // соседи на узле регулярные в лок
-		std::vector<int> pairs_local_irr_left;  // соседи на узле с другого узла в глоб
-		std::vector<int> pairs_local_irr_right;  // соседи на узле с другого узла в глоб
+	std::vector<int> pairs_local(local_size * base);  // соседи на узле в глобальной нумерации
 
-		std::vector<int> irr_left_id;
-		std::vector<int> irr_right_id;
+	std::vector<int> pairs_local_reg(local_size * base);  // соседи на узле регулярные в лок
+	std::vector<int> pairs_local_irr_left;  // соседи на узле с другого узла в глоб
+	std::vector<int> pairs_local_irr_right;  // соседи на узле с другого узла в глоб
 
-		int left_s = 0;
-		int right_s = 0;
-		int reg_s = 0;
+	std::vector<int> irr_left_id;
+	std::vector<int> irr_right_id;
 
-		bool reg_cell = true;
-		bool irr_l_cell = false;
-		bool irr_r_cell = false;
+	int left_s = 0;
+	int right_s = 0;
+	int reg_s = 0;
 
-		for (size_t i = 0; i < local_size; i++)
+	bool reg_cell = true;
+	bool irr_l_cell = false;
+	bool irr_r_cell = false;
+
+	for (size_t i = 0; i < local_size; i++)
+	{
+		reg_cell = true; irr_l_cell = false; irr_r_cell = false;
+
+		for (size_t j = 0; j < base; j++)
 		{
-			reg_cell = true; irr_l_cell = false; irr_r_cell = false;
-
-			for (size_t j = 0; j < base; j++)
+			int neig = neighbours_id_faces[(local_disp + i) * base + j];
+			pairs_local[i * base + j] = neig;
+			if (neig < 0)
 			{
-				int neig = neighbours_id_faces[(local_disp + i) * base + j];
-				pairs_local[i * base + j] = neig;
-				if (neig < 0)
+				pairs_local_reg[i * base + j] = neig; // ГУ
+			}
+			else
+			{
+				int cell_id = neig / base;
+				if (cell_id >= local_disp && cell_id < local_disp + local_size)  // <= or <??
 				{
-					pairs_local_reg[i * base + j] = neig; // ГУ
+					pairs_local_reg[i * base + j] = GetLocalId(neig, local_disp);
 				}
 				else
 				{
-					int cell_id = neig / base;
-					if (cell_id >= local_disp && cell_id < local_disp + local_size)  // <= or <??
+					reg_cell = false;
+					if (cell_id < local_disp)
 					{
-						pairs_local_reg[i * base + j] = GetLocalId(neig, local_disp);
+						pairs_local_irr_left.push_back(neig);
+						pairs_local_reg[i * base + j] = -10; // признак на соседний узел
+						irr_l_cell = true;
 					}
 					else
 					{
-						reg_cell = false;
-						if (cell_id < local_disp)
-						{
-							pairs_local_irr_left.push_back(neig);
-							pairs_local_reg[i * base + j] = -10; // признак на соседний узел
-							irr_l_cell = true;
-						}
-						else
-						{
-							pairs_local_irr_right.push_back(neig);
-							pairs_local_reg[i * base + j] = -20; // признак на соседний узел
-							irr_r_cell = true;
-						}					
+						pairs_local_irr_right.push_back(neig);
+						pairs_local_reg[i * base + j] = -20; // признак на соседний узел
+						irr_r_cell = true;
 					}
 				}
 			}
-
-			if (irr_l_cell)
-			{
-				irr_left_id.push_back(i);
-			}
-			if (irr_r_cell)
-			{
-				irr_right_id.push_back(i);
-			}
 		}
 
-		std::vector<VectorVal> U_prev_local_irr_left;
-		std::vector<VectorVal> W_local_irr_left;
-
-		std::vector<VectorVal> U_prev_local_irr_right;
-		std::vector<VectorVal> W_local_irr_right;
-
-
-		std::vector<VectorVal> W_local(local_size);  // в нем есть регулярные левые и правые
-		std::vector<VectorVal> U_local(local_size);  // в нем есть регулярные левые и правые
-		std::vector<VectorVal> U_prev_local(local_size);  // в нем есть регулярные левые и правые
-
-		Eigen::MatrixXd T(5,5);
-		VectorVal tU;
-
-		VectorVal F;
-		VectorVal SumF;
-
-		VectorVal U, U_L, U_R;
-		VectorVal W, W_L, W_R;
-
-		int cnt_left = 0;
-		int cnt_right = 0;
-
-		Type tau = 0.1;
-		for (int num_cell = 0; num_cell < local_size; num_cell++)
+		if (irr_l_cell)
 		{
-			SumF.zero();
-			U = U_prev_local[num_cell];
-			W = W_local[num_cell];
+			irr_left_id.push_back(i);
+		}
+		if (irr_r_cell)
+		{
+			irr_right_id.push_back(i);
+		}
+	}
 
-			for (int i = 0; i < base; i++)
+	std::vector<VectorVal> U_prev_local_irr_left;
+	std::vector<VectorVal> W_local_irr_left;
+
+	std::vector<VectorVal> U_prev_local_irr_right;
+	std::vector<VectorVal> W_local_irr_right;
+
+
+	std::vector<VectorVal> W_local(local_size);  // в нем есть регулярные левые и правые
+	std::vector<VectorVal> U_local(local_size);  // в нем есть регулярные левые и правые
+	std::vector<VectorVal> U_prev_local(local_size);  // в нем есть регулярные левые и правые
+
+	Eigen::MatrixXd T(5, 5);
+	VectorVal tU;
+
+	VectorVal F;
+	VectorVal SumF;
+
+	VectorVal U, U_L, U_R;
+	VectorVal W, W_L, W_R;
+
+	int cnt_left = 0;
+	int cnt_right = 0;
+
+	Type tau = 0.1;
+	for (int num_cell = 0; num_cell < local_size; num_cell++)
+	{
+		SumF.zero();
+		U = U_prev_local[num_cell];
+		W = W_local[num_cell];
+
+		for (int i = 0; i < base; i++)
+		{
+			const int neig = pairs_local_reg[base * num_cell + i];
+
+			switch (neig)
 			{
-				const int neig = pairs_local_reg[base * num_cell + i];
+			case eBound_FreeBound:
+				U_R = U;
+				W_R = W;
+				break;
 
-				switch (neig)
+			case -10:
+				U_R = U_prev_local_irr_left[cnt_left];
+				W_R = W_local_irr_left[cnt_left++];
+				break;
+
+			case -20:
+				U_R = U_prev_local_irr_right[cnt_right];
+				W_R = W_local_irr_right[cnt_right++];
+				break;
+
+			default:
+				if (neig < 0)
 				{
-					case eBound_FreeBound:
-						U_R = U;
-						W_R = W;
-						break;
-
-					case -10:
-						U_R = U_prev_local_irr_left[ cnt_left];
-						W_R = W_local_irr_left[cnt_left++];
-						break;						
-
-					case -20:
-						U_R = U_prev_local_irr_right[cnt_right];
-						W_R = W_local_irr_right[cnt_right++];
-						break;
-
-					default:
-						if (neig < 0)
-						{
-							printf("Err bound in HLLC\n");
-							exit(1);
-						}
-
-						U_R = U_prev_local[neig / base];
-						W_R = W_local[neig / base];
-						break;
+					printf("Err bound in HLLC\n");
+					exit(1);
 				}
 
-				MakeRotationMatrix(normals_local[num_cell].n[i], T);
-
-				U_L = T * U;   U_R = T * U_R;
-				W_L = T * W;   W_R = T * W_R;
-
-				RHLLC_Flux(W_R, U_R, W_L, U_L, F);
-
-				F = (T.transpose()) * F;
-				SumF += (F * squares_cell_local[base * num_cell + i]);
-				
+				U_R = U_prev_local[neig / base];
+				W_R = W_local[neig / base];
+				break;
 			}
 
-			U_local[num_cell] = (U - SumF * tau / volume_local[num_cell]);
-		}
-		
+			MakeRotationMatrix(normals_local[num_cell].n[i], T);
 
-		if (myid == 0)
-		{
-			if (np > 1)
-			{				
-				int i = 0;
-				W_local_irr_right.resize(irr_right_id.size());
-				U_prev_local_irr_right.resize(irr_right_id.size());
-				for (auto id : irr_right_id)
-				{
-					W_local_irr_right[i++] = W_local[id];
-					U_prev_local_irr_right[i++] = U_prev_local[id];
-				}
+			U_L = T * U;   U_R = T * U_R;
+			W_L = T * W;   W_R = T * W_R;
 
-				MPI_Send(W_local_irr_right.data(), W_local_irr_right.size(), MPI_VectorVal, myid + 1, 0, MPI_COMM_WORLD);
-			}
+			RHLLC_Flux(W_R, U_R, W_L, U_L, F);
+
+			F = (T.transpose()) * F;
+			SumF += (F * squares_cell_local[base * num_cell + i]);
+
 		}
-		else if (myid == (np - 1))
+
+		U_local[num_cell] = (U - SumF * tau / volume_local[num_cell]);
+	}
+
+
+	if (myid == 0)
+	{
+		if (np > 1)
 		{
 			int i = 0;
-			W_local_irr_left.resize(irr_left_id.size());
-			U_prev_local_irr_left.resize(irr_right_id.size());
-			for (auto id : irr_left_id)
+			W_local_irr_right.resize(irr_right_id.size());
+			U_prev_local_irr_right.resize(irr_right_id.size());
+			for (auto id : irr_right_id)
 			{
-				W_local_irr_left[i++] = W_local[id];
-				U_prev_local_irr_left[i++] = U_prev_local[id];
+				W_local_irr_right[i++] = W_local[id];
+				U_prev_local_irr_right[i++] = U_prev_local[id];
 			}
 
-			MPI_Status st;
-			MPI_Recv(W_local_irr_left.data(), W_local_irr_left.size(), MPI_VectorVal, myid - 1, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
+			MPI_Send(W_local_irr_right.data(), W_local_irr_right.size(), MPI_VectorVal, myid + 1, 0, MPI_COMM_WORLD);
 		}
-		else
+	}
+	else if (myid == (np - 1))
+	{
+		int i = 0;
+		W_local_irr_left.resize(irr_left_id.size());
+		U_prev_local_irr_left.resize(irr_right_id.size());
+		for (auto id : irr_left_id)
 		{
-			MPI_Status st;
-			MPI_Sendrecv(W_local_irr_right.data(), W_local_irr_right.size(), MPI_VectorVal, myid + 1, 0,
-				W_local_irr_left.data(), W_local_irr_left.size(), MPI_VectorVal, myid - 1, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
+			W_local_irr_left[i++] = W_local[id];
+			U_prev_local_irr_left[i++] = U_prev_local[id];
 		}
-		
-		U_local.swap(U_prev_local);
-	return 0;
 
-	
-	//--------------------------------------------до while(T)_--------------------
+		MPI_Status st;
+		MPI_Recv(W_local_irr_left.data(), W_local_irr_left.size(), MPI_VectorVal, myid - 1, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
+	}
+	else
+	{
+		MPI_Status st;
+		MPI_Sendrecv(W_local_irr_right.data(), W_local_irr_right.size(), MPI_VectorVal, myid + 1, 0,
+			W_local_irr_left.data(), W_local_irr_left.size(), MPI_VectorVal, myid - 1, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
+	}
 
-	Type t = 0;
-	const Type T = 0.5;
-	Type print_time = 0.01;
-	Type cur_time = 10;
-	Type tau = 0;
-
-	// ------------------------------------------ Основной расчёт------------------------------------------
-	int sol_cnt = 0;
-	int count = 0;
-
+	U_local.swap(U_prev_local);
 	MPI_RETURN(0);
 
-	//while (t < T)
-	//{
-	//	ReBuildDataForHLLCRel(size_grid, U_full_prev); // p0, v0, rho0 -> U_full_prev
-
-	//	for (int i = 0; i < size_grid; i++)
-	//	{
-	//		U_full[i] = RHLLC_stepToOMPGit(i, tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev); // -> U_full		
-	//		ReBuildPhysicValue_ost1098(i, U_full[i]); // U_full -> p1, v1, rho1
-	//	}
-	//}
+	//--------------------------------------------до while(T)_--------------------
 }
+
 #endif

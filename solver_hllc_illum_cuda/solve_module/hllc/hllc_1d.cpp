@@ -1,18 +1,24 @@
-#include "solve_short_characteristics_headers.h"
-#include "solve_short_characteristics_global_structure.h"
-struct PhysVal {
+#include "../solve_config.h"
+#if defined HLLC && NUMBER_OF_MEASUREMENTS == 1
+
+#include "../solve_global_struct.h"
+
+struct PhysVal 
+{
 	Type rho;
 	Type v;
 	Type p;
 };
 
-struct ConVal {
+struct ConVal 
+{
 	Type d;
 	Type v;
 	Type p;
 };
 
-struct Flux {
+struct Flux 
+{
 	Type d;
 	Type v;
 	Type p;
@@ -37,9 +43,89 @@ static std::vector<Flux> F_full(size_g);
 
 static int c0,c1, c2, c3, c4;
 
-int WriteSolution(const std::string& dir, const std::vector<ConVal>& vector_U, bool flag_init);
+static int WriteSolution(const std::string& dir, const std::vector<ConVal>& vector_U, bool flag_init)
+{
+	int n = vector_U.size();
+	std::vector<Type> density(n);
+	std::vector<Type> pressure(n);
+	std::vector<Type> velocity(n);
 
-static double MakeRotateCoef(int num_face)
+	for (size_t i = 0; i < n; i++)
+	{
+		const Type d = vector_U[i].d;
+		density[i] = d;
+		velocity[i] = vector_U[i].v / d;
+		const Type v = velocity[i];
+		pressure[i] = (vector_U[i].p - v * v * d / 2.) * (gamma1 - 1);
+	}
+
+	std::ofstream ofile_1;
+
+	if (flag_init)
+	{
+		ofile_1.open(dir + "density.txt");
+		ofile_1 << n << '\n';
+	}
+	else
+		ofile_1.open((dir + "density.txt"), std::ios::app);
+
+
+	if (!ofile_1.is_open())
+	{
+		printf("density not opened\n");
+		return 1;
+	}
+
+	for (size_t i = 0; i < n; i++)
+	{
+		ofile_1 << density[i] << '\n';
+	}
+	ofile_1.close();
+
+	if (flag_init)
+	{
+		ofile_1.open((dir + "velocity.txt"));
+		ofile_1 << n << '\n';
+	}
+	else
+		ofile_1.open((dir + "velocity.txt"), std::ios::app);
+
+	if (!ofile_1.is_open())
+	{
+		printf("densit not opened\n");
+		return 1;
+	}
+
+	for (size_t i = 0; i < n; i++)
+	{
+		ofile_1 << velocity[i] << '\n';
+	}
+	ofile_1.close();
+
+	if (flag_init)
+	{
+		ofile_1.open((dir + "pressure.txt"));
+		ofile_1 << n << '\n';
+	}
+	else
+		ofile_1.open((dir + "pressure.txt"), std::ios::app);
+
+	if (!ofile_1.is_open())
+	{
+		printf("densit not opened\n");
+		return 1;
+	}
+
+	for (size_t i = 0; i < n; i++)
+	{
+		ofile_1 << pressure[i] << '\n';
+	}
+	ofile_1.close();
+
+	return 0;
+}
+
+static inline double MakeRotateCoef(const int num_face)
 {
 	if (num_face == 0)
 	{
@@ -51,7 +137,7 @@ static double MakeRotateCoef(int num_face)
 	}
 }
 
-ConVal HLLC_flux(int num_cell) 
+static ConVal HLLC_flux(int num_cell)
 {
 
 	Flux SumF;
@@ -187,10 +273,9 @@ ConVal HLLC_flux(int num_cell)
 	/*U_full_1d[num_cell] =*/ return U;
 }
 
-int HLLC_Init(std::vector<ConVal>& U) {
+static int HLLC_Init(std::vector<ConVal>& U) {
 	
-	int n = U.size();
-	//todo: check left 
+	int n = U.size();	
 	for (size_t i = 0; i < n; i++)
 	{
 		if (i * h < 0.5)
@@ -209,10 +294,13 @@ int HLLC_Init(std::vector<ConVal>& U) {
 	return 0;
 }
 
-int HLLC_1d(std::string& main_dir) {	
+int RunHllc_1d(std::string& main_dir) 
+{	
 
 	Type t = 0;
 	const Type T = 0.4;
+	const Type print_time = 0.1;
+	Type cur_time = 0;
 	
 	HLLC_Init(U_full_1d_prev);
 	if (WriteSolution(main_dir, U_full_1d_prev, 1))
@@ -221,21 +309,26 @@ int HLLC_1d(std::string& main_dir) {
 	}
 
 	int count = 0;
-	while (t < T)
-	//for (size_t k = 0; k < ; k++)		
-	{
+	while (t < T)	
+	{	
 		for (size_t i = 0; i < size_g; i++)
 		{
 			U_full_1d[i] = HLLC_flux(i);
-		}
-		
-		if (WriteSolution(main_dir, U_full_1d, 0))
+		}		
+
+		if (cur_time >= print_time)
 		{
-			return 1;
+			if (WriteSolution(main_dir, U_full_1d, 0))
+			{
+				return 1;
+			}
+			cur_time = 0;
 		}
+
 
 		U_full_1d.swap(U_full_1d_prev);
 		t += tau;
+		cur_time += tau;
 		count++;
 	}
 
@@ -243,84 +336,4 @@ int HLLC_1d(std::string& main_dir) {
 	return 0;
 }
 
-int WriteSolution(const std::string& dir, const std::vector<ConVal>& vector_U, bool flag_init)
-{
-	int n = vector_U.size();
-	std::vector<Type> density(n);
-	std::vector<Type> pressure(n);
-	std::vector<Type> velocity(n);
-
-	for (size_t i = 0; i < n; i++)
-	{
-		const Type d = vector_U[i].d;
-		density[i] = d;
-		velocity[i] = vector_U[i].v / d;		
-		const Type v = velocity[i];
-		pressure[i] = (vector_U[i].p - v * v * d / 2.) * (gamma1 - 1);
-	}
-
-	std::ofstream ofile_1;
-
-	if (flag_init)
-	{		
-		ofile_1.open(dir + "density.txt");
-		ofile_1 << n << '\n';
-	}
-	else
-		ofile_1.open((dir + "density.txt"), std::ios::app);
-
-
-	if (!ofile_1.is_open())
-	{
-		printf("density not opened\n");
-		return 1;
-	}	
-	
-	for (size_t i = 0; i < n; i++)
-	{
-		ofile_1 << density[i] << '\n';
-	}
-	ofile_1.close();
-
-	if (flag_init)
-	{		
-		ofile_1.open((dir + "velocity.txt"));
-		ofile_1 << n << '\n';
-	}
-	else
-		ofile_1.open((dir + "velocity.txt"), std::ios::app);
-
-	if (!ofile_1.is_open())
-	{
-		printf("densit not opened\n");
-		return 1;
-	}
-	
-	for (size_t i = 0; i < n; i++)
-	{
-		ofile_1 << velocity[i] << '\n';
-	}
-	ofile_1.close();
-
-	if (flag_init)
-	{
-		ofile_1.open((dir + "pressure.txt"));
-		ofile_1 << n << '\n';
-	}
-	else
-		ofile_1.open((dir + "pressure.txt"), std::ios::app);
-
-	if (!ofile_1.is_open())
-	{
-		printf("densit not opened\n");
-		return 1;
-	}
-	
-	for (size_t i = 0; i < n; i++)
-	{
-		ofile_1 << pressure[i] << '\n';
-	}
-	ofile_1.close();
-
-	return 0;
-}
+#endif // HLLC 1d

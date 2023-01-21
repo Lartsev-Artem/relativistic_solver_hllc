@@ -1,7 +1,11 @@
-#pragma once
 #ifndef SHORT_CHARACTERISTICS_CUDA_H
 #define SHORT_CHARACTERISTICS_CUDA_H
-#include "solve_short_characteristics_global_structure.h"
+
+#include "prj_config.h"
+#ifdef USE_CUDA
+#include "global_def.h"
+
+#include "solve_module/solve_config.h"
 
 
 //************Global Value**********************
@@ -23,7 +27,7 @@ extern Type* dev_impuls;
 int CheckDevice();
 
 int InitDevice(const int num_dir, const int num_cell, const int mod = 0);
-int HostToDevice(std::vector<Vector3>& host_directions, std::vector<Type>& host_squares, std::vector<Type>& host_illum, const int mod = 0);
+int HostToDevice(const grid_directions_t& host_directions, std::vector<Type>& host_illum, const int mod = 0);
 
 int CalculateIntScattering(const int b_size, const int N, const int M, std::vector<Type>& host_illum, std::vector<Type>& host_int_scattering);
 int CalculateEnergy(const int b_size, const int N, const int M, std::vector<Type>& host_energy);
@@ -32,4 +36,5 @@ int CalculateImpuls(const int b_size, const int N, const int M, std::vector<Matr
 
 int ClearDevice(const int mod = 0);
 
+#endif //CUDA
 #endif

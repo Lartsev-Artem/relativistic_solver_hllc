@@ -195,6 +195,20 @@ int InitGlobalValue(Vector3& start_point_plane_coord, Matrix3& transform_matrix,
 		return 0;
 }
 
+int InitGlobalValue(Vector3& start_point_plane_coord, Matrix3& transform_matrix, Matrix3& inverse_transform_matrix,
+	Matrix3& straight_face, Matrix3& inclined_face, Matrix3& inclined_face_inverse) 
+{
+
+	InitGlobalValue(start_point_plane_coord, transform_matrix, inverse_transform_matrix, straight_face, inclined_face);
+
+	inclined_face_inverse = inclined_face.inverse();  // в решении
+
+	//straight_face_inverse = straight_face.inverse(); // в решении	
+
+	return 0;
+}
+
+
 int GetInAndOutFaces(const Vector3& direction, const Normals& normals, int& face_state) 
 {
 	//face_state  -0=> выходящая грань,  1=> входящая  face_state.size=4!!!  
@@ -209,3 +223,125 @@ int GetInAndOutFaces(const Vector3& direction, const Normals& normals, int& face
 
 	return 0;
 }
+
+
+void MakeRotationMatrix(const Vector3& n, MatrixX& T) {
+
+	T = MatrixX::Zero(5, 5);
+	T(0, 0) = T(4, 4) = 1;
+
+	if (fabs(n[2] * n[2] - 1) > eps)
+	{
+
+		T(1, 1) = n[0];
+		T(1, 2) = n[1];
+		T(1, 3) = n[2];
+
+		Type sqr = sqrt(1 - n[2] * n[2]);
+
+		if (sqr < eps * eps - eps / 10)
+			printf("Err T\n");
+
+		T(2, 1) = -n[1] / sqr;
+		T(2, 2) = n[0] / sqr;
+
+		T(3, 1) = -n[0] * n[2] / sqr;
+		T(3, 2) = -n[1] * n[2] / sqr;
+		T(3, 3) = sqr;
+	}
+	else if (n[2] > 0)  // n_z == 1
+	{
+		T(1, 3) = 1;
+		T(2, 2) = 1;
+		T(3, 1) = -1;
+	}
+	else  // n_z == -1
+	{
+		T(1, 3) = -1;
+		T(2, 2) = -1;
+		T(3, 1) = 1;
+	}
+
+}
+void MakeRotationMatrix(const Vector3& n, Matrix4& T) {
+
+	// n=(x,y,0)!!!!
+
+	T = Matrix4::Zero();
+	T(0, 0) = T(3, 3) = 1;
+
+	//T(1, 1) = n[0];
+	//T(1, 2) = n[1];
+
+	//T(2, 1) = -n[1];
+	//T(2, 2) = n[0];
+
+	T(1, 1) = -n[0];
+	T(1, 2) = -n[1];
+
+	T(2, 1) = n[1];
+	T(2, 2) = -n[0];
+
+}
+int MakeRotationMatrix(const Vector3& n, Matrix3& T)
+{
+	T = Matrix3::Zero();
+
+	if (fabs(n[2] * n[2] - 1) > eps)
+	{
+
+		T(0, 0) = n[0];
+		T(0, 1) = n[1];
+		T(0, 2) = n[2];
+
+		Type sqr = sqrt(1 - n[2] * n[2]);
+
+		if (sqr < eps * eps - eps / 10)
+			printf("Err T\n");
+
+		T(1, 0) = -n[1] / sqr;
+		T(1, 1) = n[0] / sqr;
+
+		T(2, 0) = -n[0] * n[2] / sqr;
+		T(2, 1) = -n[1] * n[2] / sqr;
+		T(2, 2) = sqr;
+	}
+	else if (n[2] > 0)  // n_z == 1
+	{
+		T(0, 2) = 1;
+		T(1, 1) = 1;
+		T(2, 0) = -1;
+	}
+	else  // n_z == -1
+	{
+		T(0, 2) = -1;
+		T(1, 1) = -1;
+		T(2, 0) = 1;
+	}
+
+	return 0;
+}
+
+#if 0 // проблема со знаком прямой нормали
+static inline void MakeRotationMatrix(const Vector3& n, Matrix3& T)
+{
+	const Type x = n[0];
+	const Type y = n[1];
+	const Type theta = atan2(y, x);
+	const Type phi = atan2(sqrt(x * x + y * y), n[2]);
+
+	T(0, 0) = cos(theta) * sin(phi);
+	T(0, 1) = sin(theta) * sin(phi);
+	T(0, 2) = cos(phi);
+
+	T(1, 0) = -sin(theta);
+	T(1, 1) = cos(theta);
+	T(1, 2) = 0;
+
+	T(2, 0) = -cos(theta) * cos(phi);
+	T(2, 1) = -sin(theta) * cos(phi);
+	T(2, 2) = sin(phi);
+
+	return;
+}
+#endif

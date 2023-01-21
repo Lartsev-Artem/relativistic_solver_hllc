@@ -2,6 +2,7 @@
 
 #include "../../global_headers.h"
 #include "../../global_def.h"
+#include "../../global_value.h"
 
 #ifdef USE_VTK
 int GetNeighborFace3D(const vtkSmartPointer<vtkUnstructuredGrid>& unstructured_grid, std::vector<int>& all_pairs_face) {
@@ -101,7 +102,7 @@ int GetNeighborFace2D(const vtkSmartPointer<vtkUnstructuredGrid>& unstructured_g
 	vtkSmartPointer<vtkIdList> idp = vtkSmartPointer< vtkIdList>::New();
 	vtkSmartPointer<vtkIdList> idc = vtkSmartPointer< vtkIdList>::New();
 
-	int id_a, id_b, id_c;
+	int id_a, id_b;
 	for (vtkIdType num_cell = 0; num_cell < N; ++num_cell)
 	{
 
@@ -137,7 +138,7 @@ int GetNeighborFace2D(const vtkSmartPointer<vtkUnstructuredGrid>& unstructured_g
 	return 0;
 }
 
-static int NormalAndSquareFace3D(size_t NumberCell, size_t NumberFace, const vtkSmartPointer<vtkUnstructuredGrid>& unstructuredgrid, Type& S, Vector3& n) {
+static int NormalAndSquareFace3D(const int NumberCell, const int NumberFace, const vtkSmartPointer<vtkUnstructuredGrid>& unstructuredgrid, Type& S, Vector3& n) {
 
 	vtkSmartPointer<vtkIdList> idp = unstructuredgrid->GetCell(NumberCell)->GetFace(NumberFace)->GetPointIds();
 
@@ -386,7 +387,7 @@ int GetCentersOfTetra3D(const vtkSmartPointer<vtkUnstructuredGrid>& unstructured
 	const int n = unstructured_grid->GetNumberOfCells();
 	centers.resize(n);
 	
-	for (size_t i = 0; i < n; i++) 
+	for (int i = 0; i < n; i++) 
 	{
 		CenterOfTetra3D(i, unstructured_grid, centers[i]);	
 	}	
@@ -415,7 +416,7 @@ int GetCentersOfTetra2D(const vtkSmartPointer<vtkUnstructuredGrid>& unstructured
 	const int n = unstructured_grid->GetNumberOfCells();
 	centers.resize(n);
 
-	for (size_t i = 0; i < n; i++)
+	for (int i = 0; i < n; i++)
 	{
 		CenterOfTetra2D(i, unstructured_grid, centers[i]);
 	}
@@ -446,6 +447,7 @@ int GetCentersOfFaces3D(const vtkSmartPointer<vtkUnstructuredGrid>& unstructured
 		}
 
 	}
+	return 0;
 }
 
 int SetVertexMatrix(const size_t number_cell, const vtkSmartPointer<vtkUnstructuredGrid>& unstructured_grid, Eigen::Matrix4d& vertex_tetra) {
@@ -469,7 +471,7 @@ int SetVertexMatrix(const size_t number_cell, const vtkSmartPointer<vtkUnstructu
 
 int SetTypeOfBound(const std::vector<Vector3>& centers, const std::vector<Normals>& normals, std::vector<int>& all_pairs_face)
 {
-	const int n = centers.size();
+	const size_t n = centers.size();
 	for (size_t num_cell = 0; num_cell < n; num_cell++)
 	{
 		Vector3 P = centers[num_cell];
@@ -540,7 +542,6 @@ int SetTypeOfBound(const std::vector<Vector3>& centers, const std::vector<Normal
 
 	return 0;
 }
-
 
 
 //

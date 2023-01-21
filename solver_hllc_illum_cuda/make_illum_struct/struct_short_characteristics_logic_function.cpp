@@ -1,9 +1,11 @@
+#include "struct_short_characteristics_global_structure.h"
+#ifdef MAKE
 #include "struct_short_characteristics_calculations.h"
 #include "../global_value.h"
 #include "../global_def.h"
 #include "../utils/grid_geometry/geometry_solve.h"
 
-
+#ifndef ONLY_GEO_DATA
 int MakeArrayX(const std::vector<Eigen::Matrix4d>& vertexs, std::vector<BasePointTetra>& vec_x)
 {
 
@@ -25,24 +27,24 @@ int MakeArrayX(const std::vector<Eigen::Matrix4d>& vertexs, std::vector<BasePoin
 			case 1:// 1->2
 				for (size_t num_node = 0; num_node < 3; ++num_node) {
 					node[0] = 0;
-					node[1] = straight_face.row(num_node)[0];
-					node[2] = straight_face.row(num_node)[1];
+					node[1] = base_tetra_geo.straight_face.row(num_node)[0];
+					node[2] = base_tetra_geo.straight_face.row(num_node)[1];
 					FromLocalToGlobalTetra(vertex_tetra, node, x.x[num_cur_out_face][num_node]);  // x->координата узла на выходящей грани					
 				}
 				break;
 			case 2://2->0
 				for (size_t num_node = 0; num_node < 3; ++num_node) {
-					node[0] = straight_face.row(num_node)[0];
+					node[0] = base_tetra_geo.straight_face.row(num_node)[0];
 					node[1] = 0;
-					node[2] = straight_face.row(num_node)[1];
+					node[2] = base_tetra_geo.straight_face.row(num_node)[1];
 					FromLocalToGlobalTetra(vertex_tetra, node, x.x[num_cur_out_face][num_node]);  // x->координата узла на выходящей грани		
 
 				}
 				break;
 			case 0: //0->3
 				for (size_t num_node = 0; num_node < 3; ++num_node) {
-					node[0] = straight_face.row(num_node)[0];
-					node[1] = straight_face.row(num_node)[1];
+					node[0] = base_tetra_geo.straight_face.row(num_node)[0];
+					node[1] = base_tetra_geo.straight_face.row(num_node)[1];
 					node[2] = 0;
 					FromLocalToGlobalTetra(vertex_tetra, node, x.x[num_cur_out_face][num_node]);
 
@@ -50,10 +52,10 @@ int MakeArrayX(const std::vector<Eigen::Matrix4d>& vertexs, std::vector<BasePoin
 				break;
 			case 3: //3->1
 				for (size_t num_node = 0; num_node < 3; ++num_node) {
-					node[0] = inclined_face.row(num_node)[0];
-					node[1] = inclined_face.row(num_node)[1];
+					node[0] = base_tetra_geo.inclined_face.row(num_node)[0];
+					node[1] = base_tetra_geo.inclined_face.row(num_node)[1];
 					node[2] = 0;
-					FromPlaneToTetra(inverse_transform_matrix, start_point_plane_coord, node, node);
+					FromPlaneToTetra(base_tetra_geo.inverse_transform_matrix, base_tetra_geo.start_point_plane_coord, node, node);
 					FromLocalToGlobalTetra(vertex_tetra, node, x.x[num_cur_out_face][num_node]);
 
 				}
@@ -69,7 +71,7 @@ int MakeArrayX(const std::vector<Eigen::Matrix4d>& vertexs, std::vector<BasePoin
 	return 0;
 }
 
-static Vector2 CalculateIllumeOnInnerFace(const int num_in_face, const int neib_id, const Eigen::Matrix4d& vertex_tetra,
+static Vector2 CalculateIllumeOnInnerFace(const int num_in_face, const int neib_id, const Matrix4& vertex_tetra,
 	const Vector3& x, const Vector3& x0,  std::vector<Type>& vec_res_bound) 
 {
 	Vector2 x0_local(-100, -100);
@@ -197,12 +199,11 @@ static Vector2 CalculateIllumeOnInnerFace(const int num_in_face, const int neib_
 			Vector3 x0_loc;
 			FromGlobalToLocalTetra(vertex_tetra, x0, x0_loc);
 
+			Vector3 local_plane_x0;
 			switch (num_in_face)
 			{
-			case 3:
-				Vector3 local_plane_x0;
-				FromTetraToPlane(transform_matrix, start_point_plane_coord, x0_local, local_plane_x0);
-				
+			case 3:				
+				FromTetraToPlane(base_tetra_geo.transform_matrix, base_tetra_geo.start_point_plane_coord, x0_loc, local_plane_x0);
 				return Vector2(local_plane_x0[0], local_plane_x0[1]);
 			case 1:
 				return Vector2(x0_loc[1], x0_loc[2]);								
@@ -211,29 +212,31 @@ static Vector2 CalculateIllumeOnInnerFace(const int num_in_face, const int neib_
 			case 0:
 				return Vector2(x0_loc[0], x0_loc[1]);
 			default:
-				EXIT_ERR("Error num_in_face = %d", num_in_face);
+				EXIT_ERRS("Error num_in_face = %d", num_in_face);
 			}		
 	}		
+	return Vector2(0, 0);
 }
 
 static int CalculateNodeValue(const int num_cell, const Normals& normal, const std::vector<Face>& grid,
- const int face_state, const Vector3& direction, const Eigen::Matrix4d& vertex_tetra, const Vector3& x,
-	const std::vector<cell>& nodes_value,  std::vector<Type>& vec_res_bound, std::vector<cell_local>& vec_x0)
+ const int face_state, const Vector3& direction, const Matrix4& vertex_tetra, const Vector3& x,
+	const std::vector<int>& all_pairs_face,  std::vector<Type>& vec_res_bound, std::vector<cell_local>& vec_x0)
 {
 	Vector3 x0;
 
 	for (ShortId num_in_face = 0; num_in_face < base; ++num_in_face) 
 	{
+		const int face_id = num_cell * base + num_in_face;
 		if (!check_bit(face_state,num_in_face)) continue;  // обрабатываем только входные грани
 
-		IntersectionWithPlane(grid[num_cell * base + num_in_face], x, direction, x0);
+		IntersectionWithPlane(grid[face_id], x, direction, x0);
 
-		if (InTriangle(num_in_face, grid[num_cell * base + num_in_face], normal, x0))
+		if (InTriangle(num_in_face, grid[face_id], normal, x0))
 		{			
 			cell_local x0_local;
 			x0_local.s = (x - x0).norm();
 			x0_local.in_face_id = num_in_face;			
-			x0_local.x0 = CalculateIllumeOnInnerFace(num_in_face, nodes_value[num_cell].neighbours_id_face[num_in_face], vertex_tetra, x, x0, vec_res_bound);
+			x0_local.x0 = CalculateIllumeOnInnerFace(num_in_face, all_pairs_face[face_id], vertex_tetra, x, x0, vec_res_bound);
 
 			vec_x0.push_back(x0_local);
 			break;
@@ -246,7 +249,7 @@ static int CalculateNodeValue(const int num_cell, const Normals& normal, const s
 
 int GetNodes(const int num_cell, const std::vector<Face>& grid, const ShortId num_cur_out_face,
 	const Eigen::Matrix4d& vertex_tetra, const int face_state, const Vector3& direction, const std::vector<Normals>& normals,
-	const std::vector<cell>& nodes_value, const BasePointTetra& x,
+	const std::vector<int>& all_pairs_face, const BasePointTetra& x,
 	std::vector<Type>& vec_res_bound, std::vector<cell_local>& vec_x0) 
 {
 
@@ -257,27 +260,27 @@ int GetNodes(const int num_cell, const std::vector<Face>& grid, const ShortId nu
 		for (size_t num_node = 0; num_node < 3; ++num_node) 
 		{	
 			CalculateNodeValue(num_cell, normals[num_cell], grid, face_state, direction, vertex_tetra, x(num_cur_out_face, num_node), 
-				nodes_value, vec_res_bound, vec_x0);
+				all_pairs_face, vec_res_bound, vec_x0);
 		}
 		break;
 	case 2://2->0
 		for (size_t num_node = 0; num_node < 3; ++num_node) {
 			CalculateNodeValue(num_cell, normals[num_cell], grid, face_state, direction, vertex_tetra, x(num_cur_out_face, num_node),
-				nodes_value, vec_res_bound, vec_x0);
+				all_pairs_face, vec_res_bound, vec_x0);
 		}
 		break;
 	case 0: //0->3
 		for (size_t num_node = 0; num_node < 3; ++num_node) {
 
 			CalculateNodeValue(num_cell, normals[num_cell], grid, face_state, direction, vertex_tetra, x(num_cur_out_face, num_node),
-				nodes_value, vec_res_bound, vec_x0);
+				all_pairs_face, vec_res_bound, vec_x0);
 		}// x->координата узла на выходящей грани		}	
 		break;
 	case 3: //3->1
 		for (size_t num_node = 0; num_node < 3; ++num_node) {
 
 			CalculateNodeValue(num_cell, normals[num_cell], grid, face_state, direction, vertex_tetra, x(num_cur_out_face, num_node),
-				nodes_value, vec_res_bound, vec_x0);
+				all_pairs_face, vec_res_bound, vec_x0);
 		}
 		break;
 	default:
@@ -286,3 +289,5 @@ int GetNodes(const int num_cell, const std::vector<Face>& grid, const ShortId nu
 
 	return 0;
 }
+#endif // ONLY_GEO_DATA
+#endif //MAKE

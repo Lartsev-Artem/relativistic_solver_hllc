@@ -1,4 +1,5 @@
 ﻿#include "solve_short_characteristic_cuda.cuh"
+#ifdef USE_CUDA
 
 #include <cuda_runtime.h>
 #include "device_launch_parameters.h"
@@ -61,6 +62,7 @@ struct dev_Matrix3 {
 
 
 //************Global Value**********************
+Type dev_square_surface;
 Type* dev_directions;
 Type* dev_squares;
 Type* dev_illum;
@@ -243,22 +245,29 @@ int InitDevice(const int num_dir, const int num_cell, const int mod) {
     return 0;
 }
 
-int HostToDevice(std::vector<Vector3>& host_directions, std::vector<Type>& host_squares, std::vector<Type>& host_illum, const int mod) {
+int HostToDevice(const grid_directions_t& host_directions, std::vector<Type>& host_illum, const int mod) {
     
     if (CheckError(cudaMemcpy(dev_illum, host_illum.data(), host_illum.size() * sizeof(host_illum[0]), 
         cudaMemcpyHostToDevice), "cudaMemcpy failed illum!")) return 1;
 
     if (mod)  // first init
     {
-        std::vector<dev_Vector3> dev_dir(host_directions.size());  // может можно сразу?
-        for (size_t i = 0; i < host_directions.size(); i++)
+        std::vector<dev_Vector3> dev_dir(host_directions.size);  // может можно сразу?
+        std::vector<Type>host_squares(host_directions.size);
+
+        int i = 0;
+        for (auto &el:host_directions.directions)
         {
-            dev_dir[i].data[0] = host_directions[i][0];
-            dev_dir[i].data[1] = host_directions[i][1];
-            dev_dir[i].data[2] = host_directions[i][2];
+            dev_dir[i].data[0] = el.dir[0];
+            dev_dir[i].data[1] = el.dir[1];
+            dev_dir[i].data[2] = el.dir[2];
+
+            host_squares[i] = el.area;
+            i++;
         }
 
-
+        dev_square_surface = host_directions.full_area;
+        
         if (CheckError(cudaMemcpy( dev_directions, dev_dir.data(), dev_dir.size() * sizeof(dev_Vector3), cudaMemcpyHostToDevice),
             "cudaMemcpy failed dir!")) return 1;
   
@@ -277,7 +286,7 @@ int CalculateIntScattering(const int b_size, const int N, const int M, std::vect
     dim3 threads(b_size, b_size);
     dim3 blocks((N + b_size - 1) / b_size, (M + b_size - 1) / b_size);
 
-    d_GetS << <blocks, threads >> > (N, M, dev_illum, dev_int_scattering, dev_directions, dev_squares, square_surface);
+    d_GetS << <blocks, threads >> > (N, M, dev_illum, dev_int_scattering, dev_directions, dev_squares, dev_square_surface);
 
     // Check for any errors launching the kernel
     if (CheckError(cudaGetLastError(), "d_GetS failed!")) return 1;
@@ -292,7 +301,7 @@ int CalculateEnergy(const int b_size, const int N, const int M, std::vector<Type
     dim3 threads(b_size);
     dim3 blocks((N + b_size - 1) / b_size);
 
-    d_MakeEnergy << <blocks, threads >> > (N, M, dev_illum, dev_energy, dev_squares, square_surface);
+    d_MakeEnergy << <blocks, threads >> > (N, M, dev_illum, dev_energy, dev_squares, dev_square_surface);
 
     // Check for any errors launching the kernel
     if (CheckError(cudaGetLastError(), "d_MakeEnergy failed!")) return 1;
@@ -308,7 +317,7 @@ int CalculateStream(const int b_size, const int N, const int M, std::vector<Vect
     dim3 threads(b_size);
     dim3 blocks((N + b_size - 1) / b_size);
 
-    d_MakeStream << <blocks, threads >> > (N, M, dev_illum, dev_stream, dev_directions, dev_squares, square_surface);
+    d_MakeStream << <blocks, threads >> > (N, M, dev_illum, dev_stream, dev_directions, dev_squares, dev_square_surface);
 
     // Check for any errors launching the kernel
     if (CheckError(cudaGetLastError(), "d_MakeStreamfailed!")) return 1;
@@ -324,7 +333,7 @@ int CalculateImpuls(const int b_size, const int N, const int M, std::vector<Matr
     dim3 threads(b_size);
     dim3 blocks((N + b_size - 1) / b_size);
 
-    d_MakeImpuls << <blocks, threads >> > (N, M, dev_illum, dev_impuls, dev_directions, dev_squares, square_surface);
+    d_MakeImpuls << <blocks, threads >> > (N, M, dev_illum, dev_impuls, dev_directions, dev_squares, dev_square_surface);
 
     // Check for any errors launching the kernel
     if (CheckError(cudaGetLastError(), "d_MakeImpuls failed!")) return 1;
@@ -354,3 +363,4 @@ int ClearDevice(const int mod) {
 
     return 0;
 }
+#endif //USE_CUDA

@@ -67,33 +67,42 @@
 #endif //BUILD
 
 #if defined MAKE
-
+	int RunMakeModule(std::string name_file_settings, int a, int b);
 #endif //MAKE
 
 #if defined SOLVE
-
+	int RunSolveModule(const std::string& name_file_settings);
 #endif //SOLVE
+
+#if defined UTILS
+	int RunUtilsModule(int argc, char* argv[]);
+#endif //SOLVE
+	
 
 #include "global_def.h"
 
 template<typename Str>
 int ReadStartSettings(const std::string& name_file_settings, int& class_file_vtk, Str& name_file_vtk, Str& name_file_sphere_direction, 
-	Str& graph_adress, Str& base_adress, Str& solve_adress)
+	Str& graph_adress, Str& base_adress, Str& solve_adress, int& number_of_iter)
 {
-	std::ifstream ifile;
-
-	OPEN_FSTREAM(ifile, name_file_settings.c_str())
+	std::ifstream ifile(name_file_settings);
+	if (!ifile.is_open()) 
+	{
+		printf("Error : file %s is not open\n", name_file_settings.c_str());
+		return 1;
+	}	
 	
 	std::string str; // переменная для перевода строки при чтении из файла
 
 	ifile >> class_file_vtk;
-	getline(ifile, str);
+	std::getline(ifile, str);
 
 	std::getline(ifile, name_file_vtk);
 	std::getline(ifile, name_file_sphere_direction);
 	std::getline(ifile, graph_adress);
 	std::getline(ifile, base_adress);
 	std::getline(ifile, solve_adress);
+	ifile >> number_of_iter;
 	
 	ifile.close();
 	return 0;

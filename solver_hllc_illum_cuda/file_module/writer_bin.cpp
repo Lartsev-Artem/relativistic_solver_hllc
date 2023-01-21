@@ -1,60 +1,54 @@
 #include "../prj_config.h"
 
-#if defined BUILD
-
 #include "../global_headers.h"
 #include "../global_def.h"
 
 #include "reader_vtk.h"
+#include "writer_bin.h"
 
-#ifdef USE_VTK
+#if 1 //def SOLVE
+#include "../solve_module/solve_config.h"
+#include "../solve_module/solve_global_struct.h"
+#include "../solve_module/illum/illum_utils.h"
 
-#endif // USE_VTK
+size_t WriteFileSolution(const std::string& main_dir, const std::vector<Type>& vector_illum, const std::vector<elem_t>& cells) {
 
+#ifdef ILLUM
 
-int ReadNormalFile(const std::string& name_file_normals, std::vector<Normals>& normals) {
+	std::vector<Type> illum;
+	GetDirectionIllumFromFace(cells.size(), 0, vector_illum, illum);
+	WriteSimpleFileBin(main_dir + "Illum.bin", illum);
 
-	FILE* f;
-	f = fopen(name_file_normals.c_str(), "rb");
+	WRITE_FILE((main_dir + "energy.bin").c_str(), cells, illum_val.energy);
 
-	int n;
-	fread_unlocked(&n, sizeof(int), 1, f);
-	normals.resize(n);
+	WRITE_FILE((main_dir + "stream.bin").c_str(), cells, illum_val.stream);
 
-	Normals norm(4);
-	for (size_t i = 0; i < n; i++)
-	{
-		for (int j = 0; j < 4; j++)
-			fread_unlocked(norm.n[j].data(), sizeof(Type), 3, f);
-		normals[i] = norm;
-	}
-	fclose(f);
+	WRITE_FILE((main_dir + "impuls.bin").c_str(), cells, illum_val.impuls);
 
-	printf("Normals read\n");
+	WRITE_FILE((main_dir + "divstream.bin").c_str(), cells, illum_val.div_stream);
 
+	WRITE_FILE((main_dir + "divimpuls.bin").c_str(), cells, illum_val.div_impuls);
+#endif
 
-	//std::ifstream ifile;
+#if defined HLLC || defined RHLLC
 
-	//ifile.open(name_file_normals);
-	//if (!ifile.is_open()) {
-	//	std::cout << "Error read file normals\n";
-	//	return 1;
-	//}
+	WRITE_FILE((main_dir + "density.bin").c_str(), cells, phys_val.d);
 
-	//int N;
-	//ifile >> N;
-	//normals.resize(N);
+	WRITE_FILE((main_dir + "pressure.bin").c_str(), cells, phys_val.p);
 
-	//Normals norm(4);
-	//for (size_t i = 0; i < N; i++)
-	//{
-	//	for (int j = 0; j < 4; j++)
-	//		ifile >> norm.n[j][0] >> norm.n[j][1] >> norm.n[j][2];
-	//	normals[i] = norm;
-	//}
+	WRITE_FILE((main_dir + "velocity.bin").c_str(), cells, phys_val.v);
+#endif
 
-	//ifile.close();
 	return 0;
 }
 
-#endif //BUILD
+
+int WriteGeometryGrid(const std::string& file_cells, const std::string& file_faces, grid_t& grid)
+{		
+	WRITE_FILE(file_faces.c_str(), grid.faces, geo);
+	WRITE_FILE(file_cells.c_str(), grid.cells, geo);	
+	return 0;
+}
+
+#endif //SOLVE
+

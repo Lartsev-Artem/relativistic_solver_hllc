@@ -1,52 +1,23 @@
-#include "solve_short_characteristics_hllc.h"
+#include "../solve_config.h"
+#if defined HLLC && NUMBER_OF_MEASUREMENTS == 2 && !defined USE_MPI
+#include "../solve_global_struct.h"
+#include "../../file_module/writer_bin.h"
+#include "../../utils/grid_geometry/geometry_solve.h"
+#include "hllc_utils.h"
+
 
 #define JET_2D
-
-#ifdef USE_VTK
-
-#else
 
 static int c0 = 0;
 static int c1 = 0;
 static int c2 = 0;
 static int c3 = 0;
 
-typedef Eigen::Vector4d Vector4;
-typedef Eigen::Vector2d Vector2;
-typedef Eigen::Matrix4d Matrix4;
-
 //static std::vector<Vector4> W_2d;
 static std::vector<Vector4> U_full_2d;
 static std::vector<Vector4> U_full_2d_prev;
 
-
-int WriteFileSolution(const std::string& main_dir, const std::vector<Type>& density,
-	const std::vector<Type>& pressure, const std::vector<Vector3>& velocity)
-{
-	FILE* f;
-	
-	f = fopen((main_dir + "density.bin").c_str(), "wb");
-	int n = density.size();
-	fwrite(&n, sizeof(int), 1, f);
-	fwrite(density.data(), sizeof(Type), n, f);
-	fclose(f);
-
-	f = fopen((main_dir + "pressure.bin").c_str(), "wb");
-	n = pressure.size();
-	fwrite(&n, sizeof(int), 1, f);
-	fwrite(pressure.data(), sizeof(Type), n, f);
-	fclose(f);
-
-	f = fopen((main_dir + "velocity.bin").c_str(), "wb");
-	n = velocity.size();
-	fwrite(&n, sizeof(int), 1, f);
-	fwrite(velocity.data(), sizeof(Vector3), n, f);
-	fclose(f);
-
-	return 0;
-}
-
-int WriteSolution(const int n, const std::string main_dir, const std::vector<Vector4>& U_full)
+static int WriteSolution(const int n, const std::string main_dir, const std::vector<Vector4>& U_full)
 {
 	std::vector<Type> den(size_grid);
 	std::vector<Type> press(size_grid);
@@ -65,12 +36,15 @@ int WriteSolution(const int n, const std::string main_dir, const std::vector<Vec
 		press[i] = (U_full[i](3) - v * v * d / 2.) * (gamma1 - 1);
 	}
 
-	WriteFileSolution(main_dir + "Solve" + std::to_string(n), den, press, vel);
+	WriteSimpleFileBin(main_dir + "Solve" + std::to_string(n) + "density.bin", den);
+	WriteSimpleFileBin(main_dir + "Solve" + std::to_string(n) + "pressure.bin", press);
+	WriteSimpleFileBin(main_dir + "Solve" + std::to_string(n) + "velocity.bin", vel);
+
 
 	return 0;
 }
 
-int ReBuildDataForHLLC2d(const int N, const std::vector<Vector3>& centerts, std::vector<Vector4>& data) {
+static int ReBuildDataForHLLC2d(const int N, const std::vector<Vector3>& centerts, std::vector<Vector4>& data) {
 	
 	data.resize(N);
 	Vector4 cell;
@@ -155,7 +129,7 @@ static inline void MakeRotationMatrix(const Vector3& n, Matrix4& T) {
 
 }
 
-Vector4 HLLC_stepToOMP2d(const int num_cell, const Type tau, const std::vector<int>& neighbours_id_faces, const std::vector<Normals>& normals,
+static Vector4 HLLC_stepToOMP2d(const int num_cell, const Type tau, const std::vector<int>& neighbours_id_faces, const std::vector<Normals>& normals,
 	const std::vector<Type>& squares_cell, const std::vector<Type>& volume) {
 
 	Vector4 SumF = Vector4::Zero();  // интеграл по поверхности от F (т.е. Sum{F*n*dS}
@@ -307,27 +281,6 @@ Vector4 HLLC_stepToOMP2d(const int num_cell, const Type tau, const std::vector<i
 	/*U_full[num_cell] =*/ return (U - SumF * tau / volume[num_cell]);
 }
 
-int CheckState(const std::vector<Vector4>& data)
-{
-	for (size_t i = 0; i < size_grid; i++)
-	{
-		const Type d = data[i](0);
-		const Vector3 v(data[i](1) / d, data[i](2) / d, 0);
-		const Type vv = v.dot(v);
-		const Type p = (data[i](3) - vv * d / 2.) * (gamma1 - 1);
-
-		if (d < 0 || isnan(d) || p < 0 || isnan(p))
-		{
-			printf("cell = %d, p= %lf, d=%lf\n", i, p, d);
-			exit(1);
-		}
-
-	}
-	
-	static int cnt = 0;
-	printf("Good Check %d\n", cnt++);
-	
-}
 static int InitNeigh(const int N, const std::vector<Vector3>& centerts, const std::vector<Normals>& normals,
 	std::vector<int>& neighbours_id_faces)
 {
@@ -350,11 +303,13 @@ static int InitNeigh(const int N, const std::vector<Vector3>& centerts, const st
 
 	return 0;
 }
-int HLLC2d(std::string& main_dir,
+
+int HLLC_2d(std::string& solve_dir,
 	const std::vector<Vector3>& centerts, std::vector<int>& neighbours_id_faces,
 	const std::vector<Normals>& normals, const std::vector<Type>& squares_cell, const std::vector<Type>& volume) {
 
 	printf("start 2d task\n");
+	const int size_grid = centerts.size();
 
 	Type t = 0;
 #ifdef JET_2D
@@ -383,19 +338,14 @@ int HLLC2d(std::string& main_dir,
 	{
 		if (cur_time >= print_time)
 		{
-			if (WriteSolution(sol_cnt, main_dir + "Solve\\", U_full_2d_prev))
+			if (WriteSolution(sol_cnt, solve_dir, U_full_2d_prev))
 			{
 				return 1;
 			}
 			cur_time = 0;
 			printf("File sol: %d\n", sol_cnt++);
 
-#ifdef WRITE_LOG
-			ofstream ofile;
-			ofile.open(main_dir + "File_with_Logs_solve.txt", std::ios::app);
-			ofile << "\nt= " << t << "; tau= " << tau << "; step= " << count << '\n';
-			ofile.close();
-#endif
+			WRITE_LOG("\nt= " << t << "; tau= " << tau << "; step= " << count << '\n');			
 		}
 
 #pragma omp parallel default(none) shared(size_grid, tau, neighbours_id_faces, normals, squares_cell, volume, U_full_2d, U_full_2d_prev)
@@ -411,8 +361,6 @@ int HLLC2d(std::string& main_dir,
 
 			}
 		}
-
-		CheckState(U_full_2d);
 
 		U_full_2d.swap(U_full_2d_prev);
 		t += tau;

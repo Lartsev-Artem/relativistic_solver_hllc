@@ -7,7 +7,7 @@
 #define WriteFiles  // включение файлов vtk и создание файлов необходимых для постоения графов
 #endif
 
-#ifndef ONLY_BUILD_DATA
+#ifndef ONLY_GEO_DATA
 #define ReadFiles     // чтение сформированных файлов для построения графов и из дальнейший расчёт
 #endif
 

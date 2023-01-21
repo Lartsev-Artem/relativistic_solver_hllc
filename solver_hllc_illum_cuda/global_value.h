@@ -10,22 +10,13 @@ extern std::string BASE_ADRESS;
 
 #define PI 3.14159265358979323846
 
-
-extern std::vector<Vector3> X;
-extern std::vector<Vector2> X0;
-extern std::vector<Type> S;
+const double gamma1 = 5. / 3; // 5. / 3;  // показатель адиабаты
+const double gamma_g = gamma1 / (gamma1 - 1);
 
 const double eps = 1e-10;
 
-extern Vector3 start_point_plane_coord;   // начало координат плоскости
-extern Matrix3 transform_matrix;          // матрица перехода из базового тетраэдра в плоскость
-extern Matrix3 inverse_transform_matrix;  // матрица перехода из плоскости в базовый тетраэдр
-
-extern Matrix3	straight_face;  // 3 узла интерпол€ции
-extern Matrix3 inclined_face;  // 3 узла интерпол€ции на наклонной плоскости
-
-//std::vector<Type> Illum2;
-
+#define C_LIGHT 299792458.0
+#define C_LIGHT_INV (1.0/(C_LIGHT))
 
 #ifdef Sphere
 const Vector3 center_point(0, 0, 0);

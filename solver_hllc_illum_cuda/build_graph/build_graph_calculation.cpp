@@ -1,5 +1,7 @@
 #include "build_graph_calculation.h"
+#ifdef BUILD
 #include "../utils/grid_geometry/geometry_data.h"
+#include "../utils/grid_geometry/geometry_solve.h"
 
 //-------------------------------------------------------------------------------------
 
@@ -509,76 +511,4 @@ int NewStep(const std::vector<IntId>& all_pairs_id, const std::vector<IntId>& co
 
 #endif // USE_OMP
 
-
-int DEBUGFindCurCellWithHole(const std::set<IntId>& next_step_el, const std::vector<IntId>& count_in_face, std::vector<IntId>& count_knew_face,
-	std::vector<IntId>& cur_el, const std::set<IntId>& inner_part, std::set<IntId>& outter_part,
-	const std::map<IntId, FaceCell>& inner_cells, const std::vector<IntId>& all_pairs_id, const Vector3& direction, const std::vector<Normals>& normals) {
-
-	cur_el.clear();
-
-	const int N = next_step_el.size();
-	for (auto cell : next_step_el)
-	{
-		if (outter_part.count(cell) != 0) {
-			if (count_in_face[cell] == count_knew_face[cell] + 1) {  // граница не определена
-				IntId try_id[3] = { -1,-1,-1 };
-
-				FindIdCellInBoundary(direction, inner_part, inner_cells, normals, cell, try_id);
-
-				if (try_id[0] == -1) continue;
-
-				if (count_in_face[try_id[0]] == count_knew_face[try_id[0]]) { // если грань на другом конце определена
-
-					cur_el.push_back(cell);
-					outter_part.erase(cell);
-					count_knew_face[cell]++;
-					continue;
-				}
-			}
-			else if (count_in_face[cell] == count_knew_face[cell]) {  // граница определена
-				cur_el.push_back(cell);
-				outter_part.erase(cell);
-			}
-		}
-		else if (count_in_face[cell] == count_knew_face[cell]) {
-			cur_el.push_back(cell);
-		}
-	}
-
-	if (cur_el.size() == 0) {
-
-		// плохо, но как есть. Если не смогли найти ни одну ячейку кандидата \
-		попробовать пройти отдельно по внутренней границе, 
-
-		std::list<IntId> buf_erase;
-
-		for (auto cell : outter_part) {
-			if (count_in_face[cell] == count_knew_face[cell] + 1) {  // граница не определена
-				IntId try_id[3] = { -1,-1,-1 };
-				FindIdCellInBoundary(direction, inner_part, inner_cells, normals, cell, try_id);
-				if (try_id[0] == -1 ) continue;
-				if (count_in_face[try_id[0]] == count_knew_face[try_id[0]]) { // если грань на другом конце определена
-
-					cur_el.push_back(cell);
-					count_knew_face[cell]++;
-					buf_erase.push_back(cell);//outter_part.erase(cell);
-					continue;
-				}
-			}
-			else if (count_in_face[cell] == count_knew_face[cell]) {
-				buf_erase.push_back(cell); //outter_part.erase(cell);
-				cur_el.push_back(cell);
-			}
-		}
-
-		for (auto el : buf_erase)
-			outter_part.erase(el);
-
-		if (cur_el.size() == 0) {
-			std::cout << "NextCell is -1\n";
-			return -1;
-		}
-	}
-
-	return 0;
-}
+#endif BUILD
