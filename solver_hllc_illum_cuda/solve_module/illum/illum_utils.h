@@ -5,13 +5,15 @@
 #include "../../global_headers.h"
 #include "../solve_config.h"
 #include "../solve_global_struct.h"
-#if defined ILLUM && defined SOLVE
+#if defined ILLUM 
 
 int GetDirectionIllumFromFace(const int size_grid, const int num_dir, const std::vector<Type>& illum_on_face, std::vector<Type>& illum_in_cell);
+#endif
 
+#if defined ILLUM && defined SOLVE
 int InitIllum(file_name main_dir, grid_t& grid);
 
-int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< std::vector<int>>& face_states,
+int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< std::vector<int>>& face_states, const std::vector<int>& pairs,
 	const std::vector < std::vector<cell_local>>& vec_x0, std::vector<BasePointTetra>& vec_x, const std::vector < std::vector<int>>& sorted_id_cell,
 	//const std::vector<Type>& res_inner_bound, 
 	grid_t& grid, std::vector<Type>& Illum, std::vector<Type>& int_scattering);

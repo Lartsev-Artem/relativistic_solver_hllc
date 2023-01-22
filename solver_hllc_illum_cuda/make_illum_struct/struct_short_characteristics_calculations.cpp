@@ -43,10 +43,11 @@ int WriteCellFaces(const std::string name_file_cells, const vtkSmartPointer<vtkU
 }
 int WriteVertex(const std::string name_file_vertex, const vtkSmartPointer<vtkUnstructuredGrid>& unstructured_grid) {
 
-	std::vector< Eigen::Matrix4d> vertexs;
-	
-	const int n = unstructured_grid->GetNumberOfCells();	
-	for (size_t i = 0; i < n; i++) {
+	const int n = unstructured_grid->GetNumberOfCells();
+	std::vector<Matrix4> vertexs(n);
+			
+	for (size_t i = 0; i < n; i++) 
+	{
 		SetVertexMatrix(i, unstructured_grid, vertexs[i]);		
 	}
 

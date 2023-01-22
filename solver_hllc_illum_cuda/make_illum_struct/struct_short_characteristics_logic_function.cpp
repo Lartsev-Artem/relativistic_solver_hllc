@@ -242,6 +242,11 @@ static int CalculateNodeValue(const int num_cell, const Normals& normal, const s
 			break;
 		}
 
+		if (num_in_face == base - 1)
+		{
+			EXIT_ERR("Not found inner face\n");
+		}
+
 	}//for num_in_face
 
 	return 0;

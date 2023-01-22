@@ -68,7 +68,8 @@ static Type CalculateIllumeOnInnerFace(const int num_in_face, const std::vector<
 
 		}
 #endif
-		return I_x0;
+		cell->illum_val.coef_inter[num_in_face] = Vector3(30, 30, 30);
+		return 30;
 	}
 
 	default:
@@ -113,7 +114,7 @@ static Type GetS(const int num_cell, const Vector3& direction, const std::vector
 		Type I = 0;
 		for (int i = 0; i < base; i++)
 		{
-			illum_old[num_direction * N_cell + num_cell + i];
+			I+=illum_old[num_direction * N_cell + num_cell + i];
 		}
 		I /= base;
 		
@@ -152,7 +153,7 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 		Type Q = 0;
 		Type alpha = 2;
 		Type betta = 1;
-		Type S = 0;
+		Type S = 0;// int_scattering;// 0;
 
 		if ((x - Vector3(1, 0, 0)).norm() > 0.09) { Q = 0; alpha = 0.5;  betta = 0.5; }
 
@@ -411,7 +412,7 @@ static int GetIntScattering(const int count_cells, const grid_directions_t& grid
 	return 0;
 }
 
-int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< std::vector<int>>& face_states,
+int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< std::vector<int>>& face_states, const std::vector<int>& pairs,
 	const std::vector < std::vector<cell_local>> &vec_x0, std::vector<BasePointTetra>& vec_x, const std::vector < std::vector<int>> &sorted_id_cell,
 //const std::vector<Type>& res_inner_bound, 
 	grid_t& grid, std::vector<Type>& Illum, std::vector<Type>& int_scattering)
@@ -424,7 +425,7 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 	//int_scattering.assign(count_cells * count_directions, 0);
 
 	int count = 0;
-	Type norm = 0;
+	Type norm = 0;	
 
 	do {
 		Type _clock = -omp_get_wtime();
@@ -448,7 +449,7 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 
 				for (ShortId num_out_face = 0; num_out_face < base; ++num_out_face)
 				{
-					if (!check_bit(face_states[num_direction][num_cell], num_out_face)) continue;
+					if (check_bit(face_states[num_direction][num_cell], num_out_face)) continue;
 
 					//GetNodes
 					for (int num_node = 0; num_node < 3; ++num_node) 
@@ -475,7 +476,7 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 						//else
 						//	coef = straight_face_inverse * I;// GetInterpolationCoefInverse(straight_face_inverse, I);
 					}
-					
+#if 0// в id_r лежит €чейка. а не грань
 					const int id_face_ = cell->geo.id_faces[num_out_face]; //номер грани
 					const int id_face = grid.faces[id_face_].geo.id_r;  // признак √” + св€зь с глобальной нумерацией
 					cell->illum_val.coef_inter[num_out_face] = I;  //coef					
@@ -483,12 +484,19 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 					{						
 						grid.cells[id_face / base].illum_val.coef_inter[id_face % base] = I;
 					}
+#else															 
+					cell->illum_val.coef_inter[num_out_face] = I;  //coef					
+					const int id_face = pairs[num_cell * base + num_out_face];
+					if (id_face >= 0)
+					{
+						grid.cells[id_face / base].illum_val.coef_inter[id_face % base] = I;
+					}
+#endif
 
 				} //num_out_face						
 			}
-			/*---------------------------------- конец FOR по €чейкам----------------------------------*/
-			
-			norm = ReCalcIllum(num_direction, grid.cells, Illum);			
+			/*---------------------------------- конец FOR по €чейкам----------------------------------*/			
+			norm = ReCalcIllum(num_direction, grid.cells, Illum);						
 		}
 		/*---------------------------------- конец FOR по направлени€м----------------------------------*/		
 
@@ -552,7 +560,7 @@ static Type IntegarteDirection(const vector<Type>& Illum, const grid_directions_
 	{		
 		GET_FACE_TO_CELL(illum_cell, (&Illum[i * base]), 0);		
 		res += illum_cell * dir.area;
-		i += base;
+		i++; // = base;
 	}	
 #endif
 
@@ -634,7 +642,7 @@ static int IntegarteDirection9(const vector<Type>& Illum, const grid_directions_
 			for (size_t h = 0; h < 3; h++)
 				for (size_t k = 0; k < 3; k++)
 					{
-						impuls_face[f](i, k) += dir.dir[h] * dir.dir[k] * (Illum[i] * dir.area);
+						impuls_face[f](h, k) += dir.dir[h] * dir.dir[k] * (Illum[i] * dir.area);
 					}
 			i++;			
 		}
@@ -680,7 +688,7 @@ int CalculateIllumParam(const grid_directions_t& grid_direction, grid_t& grid)
 {
 	MakeEnergy(grid_direction, grid.cells);
 	MakeStream(grid_direction, grid);
-//	MakeDivImpuls(grid_direction, grid);
+	MakeDivImpuls(grid_direction, grid);
 
 	return 0;
 }

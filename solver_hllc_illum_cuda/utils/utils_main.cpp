@@ -1,8 +1,10 @@
 #include "../prj_config.h"
-
 #ifdef UTILS
-int RunUtilsModule(int argc, char* argv[])
+#include "rebuild_solve.h"
+
+int RunUtilsModule(int argc, char* argv[], const std::string& settings)
 {
+	rebuild_solve(settings);
 	return 0;
 }
 #endif //UTILS

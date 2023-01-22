@@ -4,7 +4,7 @@
 #include "global_headers.h"
 
 std::string BASE_ADRESS;
-
+#include "utils/rebuild_solve.h"
 int main(int argc, char* argv[])
 {
 	MPI_START(argc, argv);	
@@ -28,7 +28,7 @@ int main(int argc, char* argv[])
 #endif //SOLVE
 
 #if defined UTILS
-	RunUtilsModule(argc, argv);
+	rebuild_solve(name_file_settings);//RunUtilsModule(argc, argv, name_file_settings);
 #endif
 
 	MPI_END;

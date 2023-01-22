@@ -75,7 +75,7 @@
 #endif //SOLVE
 
 #if defined UTILS
-	int RunUtilsModule(int argc, char* argv[]);
+	int RunUtilsModule(int argc, char* argv[], const std::string& settings);
 #endif //SOLVE
 	
 

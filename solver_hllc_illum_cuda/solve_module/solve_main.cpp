@@ -75,6 +75,7 @@ int RunSolveModule(const std::string& name_file_settings)
 	const std::string name_file_dist_try = BASE_ADRESS + "dist_defining_faces";
 	const std::string name_file_id_try = BASE_ADRESS + "id_defining_faces";
 	const std::string name_file_res = BASE_ADRESS + "ResBound";
+	const std::string name_file_neib = BASE_ADRESS + "pairs.bin";
 
 #if 0
 	//--------------------------Файлы сдвигов по направлениям в расчётных файлах-----------------------------------//
@@ -113,6 +114,7 @@ int RunSolveModule(const std::string& name_file_settings)
 
 	std::vector<BasePointTetra> vec_x;
 	std::vector<Type> vec_res_bound;
+	std::vector<int> pairs;
 
 	const int cont_dir = grid_direction.size;
 	std::vector < std::vector<int>> face_states(cont_dir); //битовое поле: 0=> выходящая грань,  1=> входящая   
@@ -147,6 +149,11 @@ int RunSolveModule(const std::string& name_file_settings)
 	}
 #endif
 
+	ReadSimpleFileBin(name_file_neib, pairs);
+	for (auto& el : grid.cells)
+	{
+		el.illum_val.illum.resize(grid_direction.size * base);
+	}
 	InitIllum(BASE_ADRESS, grid);
 #endif //ILLUM
 	//------------------------------------------------------------------------------------------------------------
@@ -171,7 +178,7 @@ int RunSolveModule(const std::string& name_file_settings)
 
 #ifdef ILLUM
 
-		CalculateIllum(grid_direction, face_states, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
+		CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
 		
 		CalculateIllumParam(grid_direction, grid);
 
@@ -198,7 +205,7 @@ int RunSolveModule(const std::string& name_file_settings)
 	}// while(t < T)
 
 #elif defined ILLUM
-	CalculateIllum(grid_direction, face_states, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
+	CalculateIllum(grid_direction, face_states,pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
 	CalculateIllumParam(grid_direction, grid);
 #else
 	WRITE_LOG("No solve. Bad config\n");

@@ -1,5 +1,5 @@
 #include "illum_utils.h"
-#if defined ILLUM && defined SOLVE
+#if defined ILLUM
 
 #include "../../file_module/reader_bin.h"
 
@@ -21,6 +21,8 @@ int GetDirectionIllumFromFace(const int size_grid, const int num_dir, const std:
 	}
 	return 0;
 }
+#endif
+#if defined ILLUM && defined SOLVE
 int SolveIllumAndHLLC(const Type tau, std::vector<elem_t>& cells)
 {
 	for (auto& el : cells)

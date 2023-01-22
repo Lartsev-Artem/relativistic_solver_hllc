@@ -3,6 +3,7 @@
 
 #include "../prj_config.h"
 #include "../global_headers.h"
+#include "../global_def.h"
 
 #if defined USE_VTK && defined UTILS
 int rebuild_solve(file_name name_file_settings);

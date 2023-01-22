@@ -10,13 +10,16 @@
 
 //#define HLLC
 
-#define RHLLC
+//#define RHLLC
 
-//#define ILLUM
+#if NUMBER_OF_MEASUREMENTS == 3 // излучение доступно только для 3d
+#define ILLUM
 
 #ifdef ILLUM
 //#define SORT_ILLUM  //сорьтровать ли суммирование интегралов по возростанию
 #endif
+
+#endif //3d
 
 #ifdef USE_CUDA
 #include "../solve_short_characteristic_cuda.cuh"

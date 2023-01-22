@@ -120,8 +120,8 @@ int rebuild_solve(file_name name_file_settings)
 
 	for (int i = 0; i < max_number_of_iter; i++)
 	{
-		std::string file_solve = adress_solve + "Solve" + std::to_string(i);
-		std::string vtk_file_solve = adress_solve + "Solve" + std::to_string(i) + ".vtk";
+		std::string file_solve = adress_solve  + std::to_string(i);
+		std::string vtk_file_solve = adress_solve + std::to_string(i) + ".vtk";
 
 		if (ReBuildDataVtkArray(name_file_vtk, vtk_file_solve, file_solve))
 		{

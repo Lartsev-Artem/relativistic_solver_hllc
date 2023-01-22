@@ -140,7 +140,7 @@ int RunMakeModule(std::string name_file_settings, int a, int b)
 			GetInAndOutFaces(direction, normals[num_cell], face_state);
 			face_states[num_cell] = face_state;
 
-			for (ShortId num_out_face = 0; num_out_face < 4; ++num_out_face)
+			for (ShortId num_out_face = 0; num_out_face < base; ++num_out_face)
 			{
 				if (!check_bit(face_state, num_out_face)) // выходящие грани
 				{

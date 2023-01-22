@@ -114,6 +114,7 @@ int HLLC_INIT(file_name file_settings_hllc, hllc_value_t& hllc_set,
 #else //!USE_MPI
 	return 0;
 #endif//USE_MPI
+	return 0;
 }
 
 int HLLC_STEP(const Type tau, grid_t& grid)
@@ -128,6 +129,7 @@ int HLLC_STEP(const Type tau, grid_t& grid)
 #else //!USE_MPI
 	return 0;
 #endif//USE_MPI
+	return 0;
 }
 
 int GetTimeStep(hllc_value_t& hllc_cfg, const grid_t& grid)
@@ -142,6 +144,7 @@ int GetTimeStep(hllc_value_t& hllc_cfg, const grid_t& grid)
 #else //!USE_MPI
 	return 0;
 #endif//USE_MPI
+	return 0;
 }
 
 
