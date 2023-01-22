@@ -53,6 +53,7 @@ int RunBuildModule(const std::string& name_file_settings)
 	{
 		RETURN_ERR("Error reading build settings\n");
 	}
+	std::remove((BASE_ADRESS + "File_Logs.txt").c_str());
 
 	std::string name_file_normals = BASE_ADRESS + "normals.bin";
 	std::string name_file_pairs = BASE_ADRESS + "pairs.bin";

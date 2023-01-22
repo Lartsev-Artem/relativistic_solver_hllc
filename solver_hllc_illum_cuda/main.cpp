@@ -7,7 +7,7 @@ std::string BASE_ADRESS;
 
 int main(int argc, char* argv[])
 {
-	MPI_START(argc, argv);
+	MPI_START(argc, argv);	
 
 	std::string name_file_settings;
 	if (argc <= 1)

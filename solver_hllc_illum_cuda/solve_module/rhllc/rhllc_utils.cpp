@@ -28,7 +28,7 @@ int RHllcPhysToConv(std::vector<elem_t>& cells)
 		const Type dhGG = d * h * Gamma * Gamma;
 
 		el.conv_val.d = Gamma * d;
-		el.conv_val.v *= dhGG;
+		el.conv_val.v = el.phys_val.v*dhGG;
 		el.conv_val.p = dhGG - el.phys_val.p;
 	}
 	return 0;

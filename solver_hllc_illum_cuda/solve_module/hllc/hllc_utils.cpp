@@ -111,7 +111,7 @@ static int SetHllcSettingDefault(hllc_value_t& hllc_set)
 	hllc_set.tau = 1e-5;
 	hllc_set.CFL = 0.5;
 	hllc_set.print_timer = 0.01;
-	hllc_set.T = 0.1;
+	hllc_set.T = 0.4;
 
 #if defined Cube
 	//const Type h = 0.0007123669658939; // Soda1d_2

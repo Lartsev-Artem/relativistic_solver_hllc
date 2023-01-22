@@ -31,7 +31,23 @@ flux_t flux_t::operator- (const flux_t& x) { d -= x.d; v -= x.v; p -= x.p; retur
 flux_t flux_t::operator/ (const Type x) { d /= x; v /= x; p /= x; return *this; }
 
 // это временно для свзяи со старым кодом
-Type flux_t::operator[](const int i)
+Type flux_t::operator[](const int i) const 
+{
+	switch (i)
+	{
+	case 0: return d;
+	case 1: return v[0];
+	case 2: return v[1];
+	case 3: return v[2];
+	case 4: return p;
+
+	default:
+		printf("err idx in flux_t opreator []\n");
+		EXIT(1);
+		break;
+	}
+}
+Type& flux_t::operator[](const int i)
 {
 	switch (i)
 	{

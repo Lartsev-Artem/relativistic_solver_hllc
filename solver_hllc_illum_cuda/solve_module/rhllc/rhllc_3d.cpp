@@ -280,13 +280,16 @@ static VectorX RHLLC_stepToOMPGit(const int num_cell, const Type tau, const std:
 #endif
 		}
 
-
+		WRITE_LOG(i<<" F0= "<< F[0] << ' ' << F[1] << ' ' << F[2] << ' ' << F[3] << ' ' << F[4] << '\n');
 		VectorX buf = F;
 		F = (T.transpose()) * buf;
+
+		WRITE_LOG(i << " F1= " << F[0] << ' ' << F[1] << ' ' << F[2] << ' ' << F[3] << ' ' << F[4] << '\n');
 		SumF += F * squares_cell[4 * num_cell + i];
 	
 
 	}// for
+	WRITE_LOG(num_cell<<" SumF= " << SumF[0] << ' ' << SumF[1] << ' ' << SumF[2] << ' ' << SumF[3] << ' ' << SumF[4] << '\n');
 	return (U - SumF * tau / volume[num_cell]);
 }
 
@@ -355,7 +358,7 @@ static int ReBuildPhysicValue_ost1098(const VectorX& U, VectorX& W) {
 int RHLLC_Init_3d(const int N, const std::vector<Vector3>& centerts, std::vector<VectorX>& W) {
 
 	W.resize(N);
-	VectorX cell;
+	VectorX cell(5);
 
 	for (size_t i = 0; i < N; i++)
 	{
@@ -383,7 +386,7 @@ int RHLLC_Init_3d(const int N, const std::vector<Vector3>& centerts, std::vector
 #endif
 
 #if 1 //def SODA
-		if (x[0] < 0.499)
+		if (x[0] < 0.5)
 		{
 			cell(0) = 1;
 			cell(1) = 0.9;
@@ -407,23 +410,25 @@ int RHLLC_Init_3d(const int N, const std::vector<Vector3>& centerts, std::vector
 	return 0;
 }
 
-void RHLLC_3d(const Type tau, const std::vector<int>& neighbours_id_faces, const std::vector<Normals>& normals,
+void RHLLC_3d_old(const Type tau, const std::vector<int>& neighbours_id_faces, const std::vector<Normals>& normals,
 	const std::vector<Type>& squares_cell, const std::vector<Type>& volume, std::vector<VectorX>& U_full_prev, std::vector<VectorX>& U_full,
 	std::vector<VectorX> W_full)
 {
 	const int size_grid = U_full.size();
 
 	ReBuildDataForRHLLC(W_full, U_full_prev); // p0, v0, rho0 -> U_full_prev
-
-#pragma omp parallel default(none) shared(pressure, velocity, density, size_grid, tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev, U_full)
+	omp_set_num_threads(1);
+#pragma omp parallel default(none) shared(size_grid, tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev, U_full)
 	{
 		VectorX buf(5);
 #pragma omp for
 		for (int i = 0; i < size_grid; i++)
 		{
 			//buf = HLLC_stepToOMPRel(i, tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev); // -> U_full		
-			U_full[i] = RHLLC_stepToOMPGit(i, tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev, W_full); // -> U_full		
-#ifdef Cube
+			U_full[i] = RHLLC_stepToOMPGit(i, tau, neighbours_id_faces, normals, squares_cell, volume, U_full_prev, W_full); // -> U_full
+
+			WRITE_LOG(i << " U_full= " << U_full[i][0] << ' ' << U_full[i][1] << ' ' << U_full[i][2] << ' ' << U_full[i][3] << ' ' << U_full[i][4] << "\n\n");
+#if 0//def Cube
 			// Для 1d задачи Сода. 
 			// СЛИШКОМ СИЛЬНЫЕ КОЛЕБАНИЯ ПО Y,Z. что-то не так!!!!!!!!!!!!!!!!!!!!
 			//buf[1] = Vector3(buf[1], buf[2], buf[3]).norm();
@@ -433,7 +438,7 @@ void RHLLC_3d(const Type tau, const std::vector<int>& neighbours_id_faces, const
 		}
 	}
 
-#pragma omp parallel default(none) shared(pressure, velocity, density, size_grid,  gamma_g, U_full)
+#pragma omp parallel default(none) shared(size_grid,  gamma_g, U_full)
 	{
 #pragma omp for
 		for (int i = 0; i < size_grid; i++)
@@ -444,6 +449,51 @@ void RHLLC_3d(const Type tau, const std::vector<int>& neighbours_id_faces, const
 
 	U_full.swap(U_full_prev);
 }
+
+#include "../../file_module/writer_bin.h"
+int RHLLC_3d(const Type tau, grid_t& grid)
+{
+	std::vector<int> neighbours_id_faces;
+	std::vector<Normals> normals;
+	std::vector<Type> squares_cell;
+	std::vector<Type>volume; 
+	std::vector<Vector3> centers;
+
+	std::vector<VectorX> U_full_prev;
+	std::vector<VectorX> U_full;
+	std::vector<VectorX> W_full;
+
+	const std::string name_file_id_neighbors = BASE_ADRESS + "pairs.bin";
+	const std::string name_file_normals = BASE_ADRESS + "normals.bin";
+	const std::string name_file_centers = BASE_ADRESS + "centers.bin";
+	const std::string name_file_squares = BASE_ADRESS + "squares.bin";
+	const std::string name_file_volume = BASE_ADRESS + "volume.bin";
+
+	if (ReadSimpleFileBin(name_file_id_neighbors, neighbours_id_faces)) RETURN_ERR("Error reading file neighbours\n");
+	if (ReadNormalFile(name_file_normals, normals)) RETURN_ERR("Error reading file normals\n");
+	if (ReadSimpleFileBin(name_file_squares, squares_cell)) RETURN_ERR("Error reading file squares_faces\n");
+	if (ReadSimpleFileBin(name_file_volume, volume)) RETURN_ERR("Error reading file volume\n");
+	if (ReadSimpleFileBin(name_file_centers, centers)) RETURN_ERR("Error reading file centers\n");
+
+	RHLLC_Init_3d(centers.size(), centers, W_full);
+	ReBuildDataForRHLLC(W_full, U_full_prev);
+	U_full.assign(U_full_prev.begin(), U_full_prev.end());
+
+	RHLLC_3d_old(1e-5, neighbours_id_faces, normals, squares_cell, volume, U_full_prev, U_full, W_full);
+
+	//for (size_t i = 0; i < grid.size; i++)	
+	//{
+	//	for (size_t j = 0; j < base+1; j++)
+	//	{	
+	//		grid.cells[i].conv_val(j) = U_full[i][j];
+	//		grid.cells[i].phys_val[j] = W_full[i][j];
+	//	}
+	//	
+	//}
+	
+	return 0;
+}
+
 #else //OLD_CLASS
 
 int rhllc_get_conv_value_ost1098(const flux_t& W, flux_t& U)
@@ -569,8 +619,13 @@ https://github.com/PrincetonUniversity/Athena-Cversion/blob/master/src/rsolvers/
 		F_L.v(2) = U_L[3] * Vel_L[0];
 		F_L.p = U_L[1];
 
-		F_hll = (F_L * lambda_R - F_R * lambda_L + ((U_R - U_L) * lambda_R * lambda_L)) / (lambda_R - lambda_L);
-		U_hll = (U_R * lambda_R - U_L * lambda_L + (F_L - F_R)) / (lambda_R - lambda_L);
+		for (int i = 0; i < base+1; i++)
+		{
+			F_hll[i] = (F_L[i] * lambda_R - F_R[i] * lambda_L + ((U_R[i] - U_L[i]) * lambda_R * lambda_L)) / (lambda_R - lambda_L);
+			U_hll[i] = ((U_R[i] * lambda_R) - (U_L[i] * lambda_L) + (F_L[i] - F_R[i])) / (lambda_R - lambda_L);
+		}
+		/*F_hll = (F_L * lambda_R - F_R * lambda_L + ((U_R - U_L) * lambda_R * lambda_L)) / (lambda_R - lambda_L);		
+		U_hll = ((U_R * lambda_R) - (U_L * lambda_L) + (F_L - F_R)) / (lambda_R - lambda_L);*/
 		
 #ifdef ONLY_RHLL
 		F = F_hll;
@@ -628,9 +683,10 @@ https://github.com/PrincetonUniversity/Athena-Cversion/blob/master/src/rsolvers/
 		}
 #endif
 	}
-
+	//WRITE_LOG(" F0= " << F[0] << ' ' << F[1] << ' ' << F[2] << ' ' << F[3] << ' ' << F[4] << '\n');
 	f.f = F;
 	f.f.v = (T.transpose()) * F.v;
+	//WRITE_LOG(" F1= " << f.f[0] << ' ' << f.f[1] << ' ' << f.f[2] << ' ' << f.f[3] << ' ' << f.f[4] << '\n');
 	f.f = f.f * f.geo.S;
 
 	return 0;
@@ -639,7 +695,7 @@ https://github.com/PrincetonUniversity/Athena-Cversion/blob/master/src/rsolvers/
 
 static int rhllc_get_phys_value_ost1098(const flux_t& U, flux_t& W)
 {		
-	Type Gamma0 = 1. / sqrt(1 - W.v.dot(W.v));
+	Type Gamma0 = 1. / sqrt(1 - (W.v.dot(W.v)));
 	const Type h = 1 + gamma_g * W.p / W.d;
 
 	Type W0 = W.d * h * Gamma0 * Gamma0; //U[0] * Gamma0 * h;
@@ -691,6 +747,13 @@ static int rhllc_get_phys_value_ost1098(const flux_t& U, flux_t& W)
 
 int RHLLC_3d(const Type tau, grid_t& grid)
 {
+
+	// востановление физических переменных
+	for (auto& el : grid.cells)
+	{
+		rhllc_get_conv_value_ost1098(el.phys_val, el.conv_val);
+	}
+
 	flux_t bound_val;
 	flux_t phys_bound_val;
 	Matrix3 T;
@@ -750,6 +813,7 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 			}
 
 			bound_val = grid.cells[f.geo.id_r].conv_val;
+			phys_bound_val = grid.cells[f.geo.id_r].phys_val;
 			break;
 		}
 
@@ -757,7 +821,7 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 			grid.cells[f.geo.id_l].phys_val, phys_bound_val, f);
 	}
 
-	// ячейки
+	// ячейки	
 	for (auto& el : grid.cells)
 	{
 		flux_t sumF;
@@ -771,8 +835,8 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 			{
 				sumF -= grid.faces[el.geo.id_faces[j]].f;
 			}
-		}
-		el.conv_val -= sumF * (tau / el.geo.V);
+		}		
+		el.conv_val -= sumF * (tau / el.geo.V);		
 	}
 
 
@@ -781,7 +845,7 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 	{
 		rhllc_get_phys_value_ost1098(el.conv_val, el.phys_val);
 	}
-
+	
 	return 0;
 
 }

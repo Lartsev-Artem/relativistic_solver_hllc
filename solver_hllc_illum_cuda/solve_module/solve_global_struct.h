@@ -53,7 +53,8 @@ public:
 	flux_t operator/ (const Type x);
 
 	// это временно для свзяи со старым кодом
-	Type operator[](const int i);	
+	Type operator[](const int i) const;	
+	Type& operator[](const int i);
 	Type operator()(const int i);
 
 //private:

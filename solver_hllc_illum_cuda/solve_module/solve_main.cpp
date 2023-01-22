@@ -38,7 +38,6 @@ solve_mode_t solve_mode;
 
 int RunSolveModule(const std::string& name_file_settings)
 {
-	WRITE_LOG("start solve module\n");
 
 #ifdef  USE_MPI
 	int np, myid;
@@ -57,6 +56,8 @@ int RunSolveModule(const std::string& name_file_settings)
 	{
 		RETURN_ERR("Error reading solve settings\n");
 	}
+	WRITE_LOG("start solve module\n");
+	std::remove((BASE_ADRESS + "File_Logs.txt").c_str());
 
 #if defined HLLC || defined RHLLC
 	StartLowDimensionTask(BASE_ADRESS);
