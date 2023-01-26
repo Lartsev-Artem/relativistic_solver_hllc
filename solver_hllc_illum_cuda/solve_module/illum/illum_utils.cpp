@@ -9,6 +9,8 @@ illum_on_face - излучение на гранях по всем направлениям
 */
 int GetDirectionIllumFromFace(const int size_grid, const int num_dir, const std::vector<Type>& illum_on_face, std::vector<Type>& illum_in_cell)
 {	
+	if (illum_on_face.size() < size_grid* base +size_grid * num_dir * base) RETURN_ERR("illum_on_face hasn't enough data\n");
+
 	illum_in_cell.resize(size_grid, 0);	
 	for (size_t j = 0; j < size_grid; j++)
 	{

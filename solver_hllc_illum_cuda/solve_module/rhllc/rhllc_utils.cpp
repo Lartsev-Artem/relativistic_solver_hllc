@@ -42,9 +42,9 @@ static int SetRHllcValueDefault(std::vector<elem_t>& cells)
 	int i = 0;
 	for (auto& el : cells)
 	{
-#if defined Cylinder 
+#if defined Cylinder || defined Cone_JET
 		Vector3 x = centers[i];
-		if (Vector2(x[1], x[2]).norm() < 0.2 && x[0] < 0.5)
+		if (Vector2(x[1], x[2]).norm() < 0.03 && x[0] < 0.1)
 		{
 			el.phys_val.d = 0.1;
 			el.phys_val.p = 0.01;

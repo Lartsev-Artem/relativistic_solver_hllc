@@ -159,5 +159,13 @@ int ReadValueGrid(const std::string& main_dir, grid_t& grid)
 	return 0;
 }
 
+#if defined HLLC || defined RHLLC
+int ReadHllcInit(file_name file_init_value, std::vector<elem_t>& cells)
+{
+	READ_FILE((file_init_value).c_str(), cells, phys_val);	
+	return 0;
+}
+#endif
+
 #endif //SOLVE
 //#endif //BUILD

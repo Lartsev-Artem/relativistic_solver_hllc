@@ -4,15 +4,6 @@
 #include "prj_config.h"
 #include "global_headers.h"
 
-#ifdef USE_MPI
-#define MPI_START(argc, argv) MPI_Init(&argc, &argv);
-#define MPI_END MPI_Finalize();
-#define EXIT(a) { MPI_END exit(a); }
-#else
-#define MPI_START(argc, argv) {}
-#define MPI_END {}
-#define EXIT(a) exit(a);
-#endif //USE_MPI
 
 #ifdef USE_CUDA
 #define CUDA_ERR(str){ WRITE_LOG(str); printf(str); solve_mode.use_cuda = false;}
@@ -118,10 +109,12 @@ file.open(namefile); \
 if (!file.is_open()) RETURN_ERRS("Error : file %s is not open\n", namefile);
 
 
+#define Files_log "File_Logs.txt"
 #ifdef WRITE_GLOBAL_LOG	
+
 #define WRITE_LOG(str){  \
 ofstream ofile; \
-ofile.open(BASE_ADRESS + "File_Logs.txt", std::ios::app); \
+ofile.open(BASE_ADRESS + Files_log, std::ios::app); \
 ofile << str; \
 ofile.close(); }
 #else
@@ -166,6 +159,16 @@ fwrite(&x, sizeof(x), 1, f);	\
 fclose(f); \
 }
 
+
+#ifdef USE_MPI
+#define MPI_START(argc, argv) MPI_Init(&argc, &argv);
+#define MPI_END MPI_Finalize();
+#define EXIT(a) { MPI_END exit(a); }
+#else
+#define MPI_START(argc, argv) {std::remove((BASE_ADRESS + Files_log).c_str());}
+#define MPI_END {}
+#define EXIT(a) { exit(a);}
+#endif //USE_MPI
 
 #define SIGN(a) (a < 0.0 ? -1.0 : 1.0) 
 #endif //GLOBAL_DEF

@@ -485,7 +485,14 @@ int SetTypeOfBound(const std::vector<Vector3>& centers, const std::vector<Normal
 				//if (P[0] > inner_radius)  //x>R
 				if ((normals[num_cell].n[num_face] - Vector3(-1, 0, 0)).norm() < 1e-5)
 				{
+#ifdef Cone_JET
+					if(Vector2(P[1], P[2]).norm() < 0.03)
+						all_pairs_face[id] = eBound_OutSource; // ИСТОЧНИК джет	
+					else
+						all_pairs_face[id] = eBound_FreeBound; // свободная поверхность
+#else
 					all_pairs_face[id] = eBound_OutSource; // излучающее дно			
+#endif
 				}
 				else if ((normals[num_cell].n[num_face] - Vector3(1, 0, 0)).norm() < 1e-5)
 				{

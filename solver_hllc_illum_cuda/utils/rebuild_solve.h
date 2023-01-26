@@ -12,6 +12,7 @@ int  RunMake1d(int argc, char* argv[]);
 int BuildHLLC_1dTime(int argc, char* argv[]);
 
 int GetPhysScale();
+int MakeHllcInitFile(file_name BASE_ADRESS);
 #endif
 
 #endif //REBUILD_SOLVE_H

@@ -782,7 +782,7 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 				phys_bound_val = cell->phys_val;
 				break;
 			case eBound_OutSource:
-#ifdef Cylinder	
+#if defined Cylinder || defined Cone_JET	
 				phys_bound_val.d = 0.1;
 				phys_bound_val.v << 0.99, 0, 0;
 				phys_bound_val.p = 0.01;
@@ -798,6 +798,7 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 #endif	
 				break;
 			case eBound_LockBound:
+
 				bound_val = cell->conv_val;
 				phys_bound_val = cell->phys_val;
 				MakeRotationMatrix(f.geo.n, T);

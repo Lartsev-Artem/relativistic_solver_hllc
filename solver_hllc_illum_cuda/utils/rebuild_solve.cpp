@@ -4,6 +4,8 @@
 #include "../file_module/reader_bin.h"
 #include "../file_module/writer_bin.h"
 
+#include "../global_value.h"
+
 #if defined USE_VTK
 #include "../file_module/reader_vtk.h"
 #include "../file_module/writer_vtk.h"
@@ -370,6 +372,47 @@ int BuildHLLC_1dTime(int argc, char* argv[])
 	return 0;
 }
 
+int MakeHllcInitFile(file_name BASE_ADRESS)
+{
+	std::vector<Vector3> centers;
+	if (ReadSimpleFileBin(BASE_ADRESS + "centers.bin", centers)) RETURN_ERR("Default rhllc value not set\n");
+
+	std::vector<elem_t> cells(centers.size());
+	int i = 0;
+	for (auto& el : cells)
+	{
+#if defined Cone && defined Cone_JET
+		Vector3 x = centers[i];
+		if (Vector2(x[1], x[2]).norm() < 0.03 && x[0] < 0.1)
+		{
+			el.phys_val.d = 0.1;
+			el.phys_val.p = 0.01;
+			el.phys_val.v = Vector3(0.99, 0, 0);
+		}
+		else
+		{
+			el.phys_val.d = 10;
+			el.phys_val.p = 0.01;
+			el.phys_val.v = Vector3(0, 0, 0);
+		}
+#elif defined Cone
+		const Type betta = 0.07;
+		const Type a = 1;
+		const Type b = 0.001;
+		Type x = centers[i][0];
+
+		el.phys_val.d = (1e-10 * exp(-x * x / betta) + 1e-18) / DENSITY;
+		el.phys_val.p = (100 * exp(-x * x / betta) + (1e-4)) / PRESSURE;
+		el.phys_val.v = (Vector3(1e8, 0, 0)) / VELOCITY;
+		
+#endif
+		i++;
+	} //for
+
+	WRITE_FILE((BASE_ADRESS + "hllc_init_value_jet_099.bin").c_str(), cells, phys_val);
+
+	return 0;
+}
 
 int GetPhysScale()
 {

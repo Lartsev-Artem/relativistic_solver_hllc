@@ -26,10 +26,10 @@
 #define WRITE_GLOBAL_LOG	// писать лог файл
 
 #if defined BUILD || defined MAKE  //todo rename on BUILD_DATA_TO_ILLUM
-//#define ONLY_GEO_DATA
+#define ONLY_GEO_DATA
 #endif
 
-#ifdef UTILS
+#if defined UTILS && !defined SOLVE
 
 #define ILLUM
 #define HLLC
@@ -44,6 +44,8 @@
 //#define Step
 
 #define Cone
+
+#define Cone_JET
 
 //#define Sphere
 

@@ -3,14 +3,16 @@
 #include "rebuild_solve.h"
 #include "rebuild_grid.h"
 #include "grid_geometry/get_grid_data.h"
+#include "../global_value.h"
 
 int RunUtilsModule(int argc, char* argv[], const std::string& settings)
-{		
+{			
 //	ReNumberingGrid(argc, argv);
 	
 //	ReBuildNetgenToMetis(argc, argv);
 
-	GetPhysScale();
+//	GetPhysScale();
+	MakeHllcInitFile(BASE_ADRESS);
 
 #ifdef USE_VTK
 

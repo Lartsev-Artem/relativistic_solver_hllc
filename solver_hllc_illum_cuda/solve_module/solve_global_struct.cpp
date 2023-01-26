@@ -1,5 +1,5 @@
 #include "../prj_config.h"
-#ifdef SOLVE
+#if 1 //def SOLVE
 #include "solve_global_struct.h"
 #include "solve_config.h"
 

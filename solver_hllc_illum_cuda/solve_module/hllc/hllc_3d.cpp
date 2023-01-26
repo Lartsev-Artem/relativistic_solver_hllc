@@ -408,6 +408,15 @@ static int flux_t_calc(const flux_t& val_l, const flux_t& val_r, face_t& f)
 	return 0;
 }
 
+static void hllc_get_conv_val(const flux_t& W, flux_t& U)
+{
+	const Type v = W.v.dot(W.v);
+	const Type d = W.d;
+
+	U.d = d;
+	U.v = d * W.v;
+	U.p = W.p / (gamma1 - 1) + d * v / 2;
+}
 static void hllc_get_phys_value(const flux_t& U, flux_t& W)
 {
 	const Type d = U.d;
@@ -423,8 +432,8 @@ int HLLC_3d(const Type tau, grid_t& grid)
 #pragma omp parallel default(none) shared(grid)
 	{
 		flux_t bound_val;
-		MatrixX T(5, 5);
-		VectorX U(5);
+		flux_t phys_val;
+		Matrix3 T;		
 		elem_t* cell;
 
 
@@ -440,57 +449,27 @@ int HLLC_3d(const Type tau, grid_t& grid)
 				break;
 			case eBound_InnerSource:
 			{
-				bound_val.d = 0.1;
-				bound_val.v << 0, 0, 0;
-				bound_val.p = 0.1 / (gamma1 - 1);
+				phys_val.d = 0.1;				
+				phys_val.v << 0, 0, 0;
+				phys_val.p = 0.1;
+				hllc_get_conv_val(phys_val, bound_val);
 			}
 			//bound_val = cell->conv_val;
 			break;
 			case eBound_OutSource:
-#if 0
-				Matrix3 TT;
-				MakeRotationMatrix(f.geo.n, TT);
-				Vector3 UU = cells[f.geo.id_l].conv_val.v;
-				UU = T * UU;
-				UU[1] = -UU[1];
-				UU = (TT.transpose()) * UU;
-				bound_val.d = cells[f.geo.id_l].conv_val.d;
-				bound_val.v = UU;
-				bound_val.p = cells[f.geo.id_l].conv_val.p;
-#endif
-				MakeRotationMatrix(f.geo.n, T);
-				U << grid.cells[f.geo.id_l].conv_val.d, grid.cells[f.geo.id_l].conv_val.v(0),
-					grid.cells[f.geo.id_l].conv_val.v(1), grid.cells[f.geo.id_l].conv_val.v(2),
-					grid.cells[f.geo.id_l].conv_val.p;
-				U = T * U;
-				U[1] = -U[1];
-				U = (T.transpose()) * U;
-
-				bound_val.d = cell->conv_val.d;
-				bound_val.v(0) = U(1);
-				bound_val.v(1) = U(2);
-				bound_val.v(2) = U(3);
-				bound_val.p = cell->conv_val.p;
+				phys_val.d = 0.1;
+				phys_val.v << 0.2, 0, 0;
+				phys_val.p = 0.01;
+				hllc_get_conv_val(phys_val, bound_val);
 
 				break;
 			case eBound_LockBound:
-
+				bound_val = cell->conv_val;				
 				MakeRotationMatrix(f.geo.n, T);
-				U << cell->conv_val.d,
-					cell->conv_val.v(0),
-					cell->conv_val.v(1),
-					cell->conv_val.v(2),
-					cell->conv_val.p;
-				U = T * U;
-				U[1] = -U[1];
-				U = (T.transpose()) * U;
 
-				bound_val.d = cell->conv_val.d;
-				bound_val.v(0) = U(1);
-				bound_val.v(1) = U(2);
-				bound_val.v(2) = U(3);
-				bound_val.p = cell->conv_val.p;
-
+				bound_val.v = T * bound_val.v;				
+				bound_val.v[0] = -bound_val.v[0];
+				bound_val.v = (T.transpose()) * bound_val.v;								
 				break;
 
 			default:

@@ -3,10 +3,9 @@
 
 #include "../prj_config.h"
 #include "../global_def.h"
-#ifdef SOLVE
-
-#include "../global_def.h"
 #include "../global_value.h"
+
+#ifdef SOLVE
 
 //#define HLLC
 
@@ -14,7 +13,7 @@
 
 #if NUMBER_OF_MEASUREMENTS == 3 // излучение доступно только для 3d
 
-#define ILLUM
+//#define ILLUM
 
 #ifdef ILLUM
 //#define SORT_ILLUM  //сорьтровать ли суммирование интегралов по возростанию
@@ -26,6 +25,9 @@
 #include "../solve_short_characteristic_cuda.cuh"
 #endif
 
+#ifndef CLASTER
+//#define RUN_TEST
+#endif
 
 #endif //SOLVE
 #endif //SOLVE_CONFIG_H

@@ -202,4 +202,32 @@ int StartLowDimensionTask(file_name main_dir)
 #endif
 }
 
+
+#ifdef RUN_TEST
+int TestDivStream(file_name BASE_ADRESS)
+{
+	const std::string name_file_geometry_faces = BASE_ADRESS + "geo_faces.bin";
+	const std::string name_file_geometry_cells = BASE_ADRESS + "geo_cells.bin";
+	const std::string name_file_centers_faces = BASE_ADRESS + "center_face.bin";
+
+	grid_t grid;
+	if (ReadGeometryGrid(name_file_geometry_cells, name_file_geometry_faces, grid))
+	{
+		WRITE_LOG("Error reading grid, try read parts geo\n");
+
+		ReWriteGeoFiles(name_file_geometry_faces, name_file_geometry_cells);
+
+		if (ReadGeometryGrid(name_file_geometry_cells, name_file_geometry_faces, grid)) RETURN_ERR("Error reading grid\n");
+	}
+	WRITE_LOG("Reading geometry grid\n");
+
+
+	std::vector<Vector3> center_cells;
+	ReadSimpleFileBin(name_file_centers_faces, center_cells);
+	TestDivStream(center_cells, grid);
+	WriteFileSolution(BASE_ADRESS+"Solve0", std::vector<Type>(), grid.cells); //печать начальной сетки
+
+	return 0;
+}
+#endif //RUN_TEST
 #endif //SOLVE

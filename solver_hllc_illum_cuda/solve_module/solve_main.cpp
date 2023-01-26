@@ -51,19 +51,24 @@ int RunSolveModule(const std::string& name_file_settings)
 	std::string name_file_sphere_direction;
 	std::string adress_graph_file;
 	std::string adress_solve;
+	std::string name_file_value_init = BASE_ADRESS + "hllc_init_value.bin";
 
-	if (ReadStartSettings(name_file_settings, solve_mode.class_vtk, name_file_vtk, name_file_sphere_direction, adress_graph_file, BASE_ADRESS, adress_solve, solve_mode.max_number_of_iter))
+	if (ReadStartSettings(name_file_settings, solve_mode.class_vtk, name_file_vtk, name_file_sphere_direction, adress_graph_file, BASE_ADRESS, adress_solve, solve_mode.max_number_of_iter,
+		name_file_value_init))
 	{
 		RETURN_ERR("Error reading solve settings\n");
 	}
-	WRITE_LOG("start solve module\n");
-	std::remove((BASE_ADRESS + "File_Logs.txt").c_str());
+	WRITE_LOG("start solve module\n");	
 
 #if defined HLLC || defined RHLLC
 	StartLowDimensionTask(BASE_ADRESS);
 #endif
 
-	const std::string name_file_value_init = BASE_ADRESS + "hllc_init_value.bin";
+#ifdef RUN_TEST
+	TestDivStream(BASE_ADRESS);
+	return 0;
+#endif // RUN_TEST
+	
 	const std::string name_file_hllc_set = BASE_ADRESS + "hllc_settings.txt";
 
 	//--------------------------Файлы расчётных данных(отдельные файлы по направлениям)-----------------------------------//
@@ -76,7 +81,7 @@ int RunSolveModule(const std::string& name_file_settings)
 	const std::string name_file_id_try = BASE_ADRESS + "id_defining_faces";
 	const std::string name_file_res = BASE_ADRESS + "ResBound";
 	const std::string name_file_neib = BASE_ADRESS + "pairs.bin";
-
+	
 #if 0
 	//--------------------------Файлы сдвигов по направлениям в расчётных файлах-----------------------------------//
 	const std::string name_file_shift_out = BASE_ADRESS + "ShiftOut";
@@ -169,8 +174,10 @@ int RunSolveModule(const std::string& name_file_settings)
 	Type cur_timer = 0;
 	
 	if (HLLC_INIT(name_file_hllc_set, hllc_cfg, name_file_value_init, grid.cells)) RETURN_ERR("Bad init hllc\n");  //Начальные данные для HLLC
-
+	
 	WriteFileSolution(adress_solve + std::to_string(res_count++), Illum, grid.cells); //печать начальной сетки
+
+	WRITE_LOG("Start main task\n");
 
 	while (t < hllc_cfg.T)
 	{	
