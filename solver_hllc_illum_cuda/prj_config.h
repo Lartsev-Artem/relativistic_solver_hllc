@@ -43,9 +43,9 @@
 
 //#define Step
 
-//#define Cone
+#define Cone
 
-#define Sphere
+//#define Sphere
 
 //#define Cylinder
 

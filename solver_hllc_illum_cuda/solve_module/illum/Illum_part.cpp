@@ -188,7 +188,7 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 					I = 0;
 				return I;*/
 	}
-	
+
 	case 1: // test task
 	{
 
@@ -234,7 +234,7 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 
 		return I;
 	}
-	
+
 	case 3:
 	{
 
@@ -295,56 +295,48 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 	case 11: // HLLC + Illum для конуса
 	{
 
-		Type S = int_scattering;
-		Type Ie = 1;
-		Type alpha = 0.5;
-		Type betta = 0.5;
+		Type S = int_scattering * RADIATION;
 
+		Type d = cell.phys_val.d * DENSITY;
+		Type v = cell.phys_val.v.norm() * VELOCITY;
+		Type p = cell.phys_val.p * PRESSURE;
+
+		Type T = p / (d * R_gas);
+
+		if (x[0] < 0.05)
 		{
-			const Type R = 8.314;
-			const Type c = 3 * 1e8;
-			const Type h = 6.62 * 1e-34;
-			const Type k = 1.38 * 1e-23;
-			const Type sigma = 6.652 * 1e-29;
-			const Type m = 1.6735575 * 1e-27;
-
-			Type d = cell.phys_val.d;			
-			Type v = cell.phys_val.v.norm();
-			Type p = cell.phys_val.p;
-
-			Type T = p / (d * R);
-
-			if (x[0] < 0.05)
-			{
-				d = 0.1;
-				p = 0.01;
-				T = p / (d * R);
-			}
-
-			Ie = 2 * pow(k * PI * T, 4) / (15 * h * h * h * c * c);
-			betta = sigma * d / m;
-			alpha = betta;  			//alpha = ???			
+			//d = 0.1;
+			//p = 0.01;
+			//T = p / (d * R);
 		}
+
+		Type 	Ie = 2 * pow(k_boltzmann * PI * T, 4) / (15 * h_plank * h_plank * h_plank * c_light * c_light);
+		Type 	betta = sigma_thomson * d / m_hydrogen;
+		Type	alpha = betta; 			//alpha = ???			
+
 
 		Type Q = alpha * Ie;
 
 		Type k = alpha + betta;
 
+		Type ss = s * DIST;
+		Type I0 = I_0 * RADIATION;
+
 		Type I;
 		if (k > 1e-10)
-			I = (exp(-k * s) * (I_0* k + (exp(k * s) - 1) * (Q + S * betta))) / k;
+			I = (exp(-k * ss) * (I0 * k + (exp(k * ss) - 1) * (Q + S * betta))) / k;
 		else
-			I = (1 - s * k) * (I_0 + s * (Q + S * betta));
+			I = (1 - ss * k) * (I0 + ss * (Q + S * betta));
 
 		if (I < 0)
 		{
 			return 0;
 		}
 
-		return I;
+		return I / RADIATION;
 	}
-	
-	
+
+
 	default:
 		EXIT_ERR("unknow class_vtk in get illum\n");
 	}
@@ -568,9 +560,15 @@ static Type IntegarteDirection(const vector<Type>& Illum, const grid_directions_
 }
 static int MakeEnergy(const grid_directions_t& grid_direction, std::vector<elem_t>& cells) {
 		
-	for (auto &el : cells)
+	//for (auto &el : cells)
+#pragma omp parallel  default(none) shared(grid_direction, cells) 
 	{
-		el.illum_val.energy = IntegarteDirection(el.illum_val.illum, grid_direction);
+#pragma omp for
+		for (int i = 0; i < cells.size(); i++)
+		{
+			elem_t& el = cells[i];
+			el.illum_val.energy = IntegarteDirection(el.illum_val.illum, grid_direction);
+		}
 	}
 	return 0;
 }
@@ -600,28 +598,33 @@ static int IntegarteDirection3(const vector<Type>& Illum, const grid_directions_
 }
 static int MakeStream(const grid_directions_t& grid_direction, grid_t& grid) 
 {
-	for (auto& el : grid.cells)
-	{				
-		 Vector3 Stream[base];
-		 IntegarteDirection3(el.illum_val.illum, grid_direction, Stream);
+#pragma omp parallel  default(none) shared(grid_direction, grid) 
+	{
+#pragma omp for
+		for (int i = 0; i < grid.cells.size(); i++)
+		{
+			elem_t& el = grid.cells[i];
 
-		 GET_FACE_TO_CELL(el.illum_val.stream, Stream, Vector3::Zero());
-		 
-		el.illum_val.div_stream = 0;
-		for (int j = 0; j < base; j++)
-		{			
-			geo_face_t* geo_f = &grid.faces[el.geo.id_faces[j]].geo;
-			if (el.geo.sign_n)
+			Vector3 Stream[base];
+			IntegarteDirection3(el.illum_val.illum, grid_direction, Stream);
+
+			GET_FACE_TO_CELL(el.illum_val.stream, Stream, Vector3::Zero());
+
+			el.illum_val.div_stream = 0;
+			for (int j = 0; j < base; j++)
 			{
-				el.illum_val.div_stream += Stream[j].dot(geo_f->n) * geo_f->S;
+				geo_face_t* geo_f = &grid.faces[el.geo.id_faces[j]].geo;
+				if (el.geo.sign_n)
+				{
+					el.illum_val.div_stream += Stream[j].dot(geo_f->n) * geo_f->S;
+				}
+				else
+				{
+					el.illum_val.div_stream -= Stream[j].dot(geo_f->n) * geo_f->S;
+				}
 			}
-			else
-			{
-				el.illum_val.div_stream -= Stream[j].dot(geo_f->n) * geo_f->S;
-			}						
+			el.illum_val.div_stream /= el.geo.V;
 		}
-		el.illum_val.div_stream /= el.geo.V;
-		
 	}
 	return 0;
 }
@@ -657,30 +660,35 @@ static int IntegarteDirection9(const vector<Type>& Illum, const grid_directions_
 }
 static int MakeDivImpuls(const grid_directions_t& grid_direction, grid_t& grid)
 {
-
-	for (auto& el : grid.cells)
+#pragma omp parallel  default(none) shared(grid_direction, grid) 
 	{
-		Matrix3 Impuls[base];
-		IntegarteDirection9(el.illum_val.illum, grid_direction, Impuls);
-
-		GET_FACE_TO_CELL(el.illum_val.impuls, Impuls, Matrix3::Zero());
-
-		el.illum_val.div_impuls = Vector3::Zero();
-		for (int j = 0; j < base; j++)
+#pragma omp for
+		for (int i = 0; i < grid.cells.size(); i++)
 		{
-			geo_face_t* geo_f = &grid.faces[el.geo.id_faces[j]].geo;
-			if (el.geo.sign_n)
-			{
-				el.illum_val.div_impuls += Impuls[j]*(geo_f->n) * geo_f->S;
-			}
-			else
-			{
-				el.illum_val.div_impuls += Impuls[j]*(-geo_f->n) * geo_f->S;
-			}
-		}
-		el.illum_val.div_impuls /= el.geo.V;		
-	}
+			elem_t& el = grid.cells[i];
 
+			Matrix3 Impuls[base];
+			IntegarteDirection9(el.illum_val.illum, grid_direction, Impuls);
+
+			GET_FACE_TO_CELL(el.illum_val.impuls, Impuls, Matrix3::Zero());
+
+			el.illum_val.div_impuls = Vector3::Zero();
+			for (int j = 0; j < base; j++)
+			{
+				geo_face_t* geo_f = &grid.faces[el.geo.id_faces[j]].geo;
+				if (el.geo.sign_n)
+				{
+					el.illum_val.div_impuls += Impuls[j] * (geo_f->n) * geo_f->S;
+				}
+				else
+				{
+					el.illum_val.div_impuls += Impuls[j] * (-geo_f->n) * geo_f->S;
+				}
+			}
+			el.illum_val.div_impuls /= el.geo.V;
+		}
+
+	}
 	return 0;
 }
 

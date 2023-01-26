@@ -419,106 +419,121 @@ static void hllc_get_phys_value(const flux_t& U, flux_t& W)
 
 int HLLC_3d(const Type tau, grid_t& grid)
 {
-	flux_t bound_val;
-	MatrixX T(5, 5);
-	VectorX U(5);
-	elem_t* cell;
 	// потоки
-	for(auto &f : grid.faces)
-	{			
-		cell = &grid.cells[f.geo.id_l];
-		switch (f.geo.id_r)// id соседа она же признак ГУ
+#pragma omp parallel default(none) shared(grid)
+	{
+		flux_t bound_val;
+		MatrixX T(5, 5);
+		VectorX U(5);
+		elem_t* cell;
+
+
+#pragma omp for
+		for (int i = 0; i < grid.faces.size(); i++)					
 		{
-		case eBound_FreeBound:
-			bound_val = cell->conv_val;
-			break;
-		case eBound_InnerSource:
-			bound_val = cell->conv_val;
-			break;
-		case eBound_OutSource:			
-#if 0
-			Matrix3 TT;
-			MakeRotationMatrix(f.geo.n, TT);
-			Vector3 UU = cells[f.geo.id_l].conv_val.v;
-			UU = T * UU;
-			UU[1] = -UU[1];
-			UU = (TT.transpose()) * UU;
-			bound_val.d = cells[f.geo.id_l].conv_val.d;
-			bound_val.v = UU;
-			bound_val.p = cells[f.geo.id_l].conv_val.p;
-#endif
-			MakeRotationMatrix(f.geo.n, T);
-			U << grid.cells[f.geo.id_l].conv_val.d, grid.cells[f.geo.id_l].conv_val.v(0),
-				grid.cells[f.geo.id_l].conv_val.v(1), grid.cells[f.geo.id_l].conv_val.v(2),
-				grid.cells[f.geo.id_l].conv_val.p;
-			U = T * U;
-			U[1] = -U[1];
-			U = (T.transpose()) * U;
-
-			bound_val.d = cell->conv_val.d;
-			bound_val.v(0) = U(1);
-			bound_val.v(1) = U(2);
-			bound_val.v(2) = U(3);			
-			bound_val.p = cell->conv_val.p;
-
-			break;
-		case eBound_LockBound:
-
-			MakeRotationMatrix(f.geo.n, T);
-			U << cell->conv_val.d,
-				cell->conv_val.v(0),
-				cell->conv_val.v(1),
-				cell->conv_val.v(2),
-				cell->conv_val.p;
-			U = T * U;
-			U[1] = -U[1];
-			U = (T.transpose()) * U;
-
-			bound_val.d = cell->conv_val.d;
-			bound_val.v(0) = U(1);
-			bound_val.v(1) = U(2);
-			bound_val.v(2) = U(3);
-			bound_val.p = cell->conv_val.p;
-
-			break;
-
-		default:
-			if (f.geo.id_r < 0)
+			face_t& f = grid.faces[i];			
+			cell = &grid.cells[f.geo.id_l];
+			switch (f.geo.id_r)// id соседа она же признак ГУ
 			{
-				printf("Err bound in HLLC_3d\n");
-				EXIT(1);				
+			case eBound_FreeBound:
+				bound_val = cell->conv_val;
+				break;
+			case eBound_InnerSource:
+			{
+				bound_val.d = 0.1;
+				bound_val.v << 0, 0, 0;
+				bound_val.p = 0.1 / (gamma1 - 1);
+			}
+			//bound_val = cell->conv_val;
+			break;
+			case eBound_OutSource:
+#if 0
+				Matrix3 TT;
+				MakeRotationMatrix(f.geo.n, TT);
+				Vector3 UU = cells[f.geo.id_l].conv_val.v;
+				UU = T * UU;
+				UU[1] = -UU[1];
+				UU = (TT.transpose()) * UU;
+				bound_val.d = cells[f.geo.id_l].conv_val.d;
+				bound_val.v = UU;
+				bound_val.p = cells[f.geo.id_l].conv_val.p;
+#endif
+				MakeRotationMatrix(f.geo.n, T);
+				U << grid.cells[f.geo.id_l].conv_val.d, grid.cells[f.geo.id_l].conv_val.v(0),
+					grid.cells[f.geo.id_l].conv_val.v(1), grid.cells[f.geo.id_l].conv_val.v(2),
+					grid.cells[f.geo.id_l].conv_val.p;
+				U = T * U;
+				U[1] = -U[1];
+				U = (T.transpose()) * U;
+
+				bound_val.d = cell->conv_val.d;
+				bound_val.v(0) = U(1);
+				bound_val.v(1) = U(2);
+				bound_val.v(2) = U(3);
+				bound_val.p = cell->conv_val.p;
+
+				break;
+			case eBound_LockBound:
+
+				MakeRotationMatrix(f.geo.n, T);
+				U << cell->conv_val.d,
+					cell->conv_val.v(0),
+					cell->conv_val.v(1),
+					cell->conv_val.v(2),
+					cell->conv_val.p;
+				U = T * U;
+				U[1] = -U[1];
+				U = (T.transpose()) * U;
+
+				bound_val.d = cell->conv_val.d;
+				bound_val.v(0) = U(1);
+				bound_val.v(1) = U(2);
+				bound_val.v(2) = U(3);
+				bound_val.p = cell->conv_val.p;
+
+				break;
+
+			default:
+				if (f.geo.id_r < 0)
+				{
+					printf("Err bound in HLLC_3d\n");
+					EXIT(1);
+				}
+
+				bound_val = grid.cells[f.geo.id_r].conv_val;
+				break;
 			}
 
-			bound_val = grid.cells[f.geo.id_r].conv_val;
-			break;
+			flux_t_calc(grid.cells[f.geo.id_l].conv_val, bound_val, f);
 		}
-
-		flux_t_calc(grid.cells[f.geo.id_l].conv_val, bound_val, f);
-	}
+	
+	}// omp
 
 	// ячейки
-	for (auto& el : grid.cells)
-	{		
-		flux_t sumF;
-		for (int j = 0; j < base; j++)
-		{
-			if (el.geo.sign_n[j])
-			{
-				sumF += grid.faces[el.geo.id_faces[j]].f;
-			}
-			else
-			{
-				sumF -= grid.faces[el.geo.id_faces[j]].f;
-			}
-		}
-		el.conv_val -= sumF * (tau / el.geo.V);
-	}
-
-	// востановление физических переменных
-	for (auto& el : grid.cells)
+#pragma omp parallel default(none) shared(tau, grid)
 	{
-		hllc_get_phys_value(el.conv_val, el.phys_val);
-	}
+
+#pragma omp for
+		for (int i = 0; i < grid.cells.size(); i++)
+		{
+			elem_t& el = grid.cells[i]; ////for (auto& el : grid.cells)
+			flux_t sumF;
+			for (int j = 0; j < base; j++)
+			{
+				if (el.geo.sign_n[j])
+				{
+					sumF += grid.faces[el.geo.id_faces[j]].f;
+				}
+				else
+				{
+					sumF -= grid.faces[el.geo.id_faces[j]].f;
+				}
+			}
+			el.conv_val -= sumF * (tau / el.geo.V);
+
+			hllc_get_phys_value(el.conv_val, el.phys_val);
+		}
+	}//omp
 
 	return 0;
 

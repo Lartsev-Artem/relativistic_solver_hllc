@@ -747,105 +747,117 @@ static int rhllc_get_phys_value_ost1098(const flux_t& U, flux_t& W)
 
 int RHLLC_3d(const Type tau, grid_t& grid)
 {
-
+#ifdef ILLUM
 	// востановление физических переменных
 	for (auto& el : grid.cells)
 	{
 		rhllc_get_conv_value_ost1098(el.phys_val, el.conv_val);
 	}
+#endif
 
-	flux_t bound_val;
-	flux_t phys_bound_val;
-	Matrix3 T;
-	elem_t* cell;
-
-	// потоки
-	for (auto& f : grid.faces)
+#pragma omp parallel default(none) shared(grid)
 	{
-		cell = &grid.cells[f.geo.id_l];
-		switch (f.geo.id_r)// id соседа она же признак ГУ
-		{			
-		case eBound_FreeBound:
-			bound_val = cell->conv_val;
-			phys_bound_val = cell->phys_val;
-			break;
-		case eBound_InnerSource:
-			bound_val = cell->conv_val;
-			phys_bound_val = cell->phys_val;
-			break;
-		case eBound_OutSource:
-#ifdef Cylinder	
-			phys_bound_val.d = 0.1;
-			phys_bound_val.v << 0.99, 0, 0;
-			phys_bound_val.p = 0.01;
+		flux_t bound_val;
+		flux_t phys_bound_val;
+		Matrix3 T;
+		Matrix3 TT;
+		elem_t* cell;
 
-			bound_val.d = 0.7088812050083355;
-			bound_val.v << 6.218592964824112, 0, 0;
-			bound_val.p = 6.271407035175871;
-#else
-			bound_val = cell->conv_val;
-			phys_bound_val = cell->phys_val;
-#endif	
-			break;
-		case eBound_LockBound:	
-			bound_val = cell->conv_val;
-			phys_bound_val = cell->phys_val;
-			MakeRotationMatrix(f.geo.n, T);
-
-			bound_val.v = T * bound_val.v;
-			phys_bound_val.v = T * phys_bound_val.v;
-
-			bound_val.v[0] = -bound_val.v[0];
-			phys_bound_val.v[0] = -phys_bound_val.v[0];
-
-			T = T.transpose();
-
-			bound_val.v = T * bound_val.v;
-			phys_bound_val.v = T * phys_bound_val.v;
-						
-			break;
-
-		default:
-			if (f.geo.id_r < 0)
+		// потоки
+#pragma omp for
+		for (int i = 0; i < grid.faces.size(); i++)
+		{
+			face_t& f = grid.faces[i];
+			cell = &grid.cells[f.geo.id_l];
+			switch (f.geo.id_r)// id соседа она же признак ГУ
 			{
-				printf("Err bound in RHLLC_3d\n");
-				EXIT(1);
+			case eBound_FreeBound:
+				bound_val = cell->conv_val;
+				phys_bound_val = cell->phys_val;
+				break;
+			case eBound_InnerSource:
+				//phys_bound_val.d = 0.1; phys_bound_val.v << 0, 0, 0; phys_bound_val.p = 0.1;
+				//rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
+				bound_val = cell->conv_val;
+				phys_bound_val = cell->phys_val;
+				break;
+			case eBound_OutSource:
+#ifdef Cylinder	
+				phys_bound_val.d = 0.1;
+				phys_bound_val.v << 0.99, 0, 0;
+				phys_bound_val.p = 0.01;
+				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
+#elif defined Cone
+				phys_bound_val.d = (1e-10  + 1e-18) / DENSITY;
+				phys_bound_val.p = (100  + (1e-4)) / PRESSURE;
+				phys_bound_val.v = (Vector3(1e7, 0, 0)) / VELOCITY;				
+				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);				
+#else
+				bound_val = cell->conv_val;
+				phys_bound_val = cell->phys_val;
+#endif	
+				break;
+			case eBound_LockBound:
+				bound_val = cell->conv_val;
+				phys_bound_val = cell->phys_val;
+				MakeRotationMatrix(f.geo.n, T);
+
+				bound_val.v = T * bound_val.v;
+				phys_bound_val.v = T * phys_bound_val.v;
+
+				bound_val.v[0] = -bound_val.v[0];
+				phys_bound_val.v[0] = -phys_bound_val.v[0];
+
+				TT = T.transpose();
+
+				bound_val.v = TT * bound_val.v;
+				phys_bound_val.v = TT * phys_bound_val.v;
+
+				break;
+
+			default:
+				if (f.geo.id_r < 0)
+				{
+					printf("Err bound in RHLLC_3d\n");
+					EXIT(1);
+				}
+
+				bound_val = grid.cells[f.geo.id_r].conv_val;
+				phys_bound_val = grid.cells[f.geo.id_r].phys_val;
+				break;
 			}
 
-			bound_val = grid.cells[f.geo.id_r].conv_val;
-			phys_bound_val = grid.cells[f.geo.id_r].phys_val;
-			break;
+			flux_t_calc(grid.cells[f.geo.id_l].conv_val, bound_val,
+				grid.cells[f.geo.id_l].phys_val, phys_bound_val, f);
 		}
 
-		flux_t_calc(grid.cells[f.geo.id_l].conv_val, bound_val,
-			grid.cells[f.geo.id_l].phys_val, phys_bound_val, f);
-	}
+	}//omp
 
 	// ячейки	
-	for (auto& el : grid.cells)
+#pragma omp parallel default(none) shared(tau, grid)
 	{
-		flux_t sumF;
-		for (int j = 0; j < base; j++)
+#pragma omp for
+		for (int i = 0; i < grid.cells.size(); i++)
 		{
-			if (el.geo.sign_n[j])
+			elem_t& el = grid.cells[i];
+			flux_t sumF;
+			for (int j = 0; j < base; j++)
 			{
-				sumF += grid.faces[el.geo.id_faces[j]].f;
+				if (el.geo.sign_n[j])
+				{
+					sumF += grid.faces[el.geo.id_faces[j]].f;
+				}
+				else
+				{
+					sumF -= grid.faces[el.geo.id_faces[j]].f;
+				}
 			}
-			else
-			{
-				sumF -= grid.faces[el.geo.id_faces[j]].f;
-			}
-		}		
-		el.conv_val -= sumF * (tau / el.geo.V);		
+			el.conv_val -= sumF * (tau / el.geo.V);
+
+			rhllc_get_phys_value_ost1098(el.conv_val, el.phys_val); // востановление физических переменных
+		}
 	}
 
-
-	// востановление физических переменных
-	for (auto& el : grid.cells)
-	{
-		rhllc_get_phys_value_ost1098(el.conv_val, el.phys_val);
-	}
-	
 	return 0;
 
 }

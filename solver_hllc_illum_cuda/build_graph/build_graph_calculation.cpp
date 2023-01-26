@@ -110,7 +110,7 @@ int InitFacesState(const std::vector<IntId>& all_pairs_id, std::vector<State>& f
 	faces_state.assign(n, 0);
 
 	for (size_t i = 0; i < n; i++) {
-		if (all_pairs_id[i] == -1)
+		if (all_pairs_id[i] < 0)
 			faces_state[i] = 1;
 	}
 
@@ -324,7 +324,7 @@ int NewStep(const std::vector<IntId>& all_pairs_id, const std::vector<IntId>& co
 		for (size_t j = 0; j < 4; j++)
 		{
 			int neighbour = all_pairs_id[cell * 4 + j];
-			if (neighbour == -1) continue;
+			if (neighbour  < 0) continue;
 			neighbour /= 4;
 
 			if (count_in_face[neighbour] > count_knew_face[neighbour]) {
@@ -494,7 +494,7 @@ int NewStep(const std::vector<IntId>& all_pairs_id, const std::vector<IntId>& co
 		for (size_t j = 0; j < 4; j++)
 		{
 			int neighbour = all_pairs_id[cell * 4 + j];
-			if (neighbour == -1) continue;
+			if (neighbour < 0) continue;
 			neighbour /= 4;
 
 			if (count_in_face[neighbour] > count_knew_face[neighbour]) {
@@ -511,4 +511,4 @@ int NewStep(const std::vector<IntId>& all_pairs_id, const std::vector<IntId>& co
 
 #endif // USE_OMP
 
-#endif BUILD
+#endif //BUILD

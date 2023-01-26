@@ -7,7 +7,7 @@
 #include <iomanip>
 #include <algorithm>
 
-#include <execution>
+//#include <execution>
 #include <fstream>
 #include <iostream>
 #include <list>

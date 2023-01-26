@@ -151,6 +151,21 @@ for (auto& el : data) \
 fclose(f);\
 }
 
+#define WRITE_FILE_PHYS(name_file, data, value, type, param) \
+{ \
+FILE* f;\
+int n = data.size(); \
+f = fopen(name_file, "wb"); \
+if(!f) RETURN_ERRS("file %s not open\n",name_file); \
+fwrite(&n, sizeof(int), 1, f); \
+for (auto& el : data) \
+{	\
+type x = el.value*param; \
+fwrite(&x, sizeof(x), 1, f);	\
+}	\
+fclose(f); \
+}
+
 
 #define SIGN(a) (a < 0.0 ? -1.0 : 1.0) 
 #endif //GLOBAL_DEF

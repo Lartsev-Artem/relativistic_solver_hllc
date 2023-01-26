@@ -32,11 +32,19 @@ size_t WriteFileSolution(const std::string& main_dir, const std::vector<Type>& v
 
 #if defined HLLC || defined RHLLC
 
+#ifndef Cone	
+	WRITE_FILE_PHYS((main_dir + "density.bin").c_str(), cells, phys_val.d, Type, DENSITY);
+
+	WRITE_FILE_PHYS((main_dir + "pressure.bin").c_str(), cells, phys_val.p, Type, PRESSURE);
+
+	WRITE_FILE_PHYS((main_dir + "velocity.bin").c_str(), cells, phys_val.v, Vector3, VELOCITY);
+#else
 	WRITE_FILE((main_dir + "density.bin").c_str(), cells, phys_val.d);
 
 	WRITE_FILE((main_dir + "pressure.bin").c_str(), cells, phys_val.p);
 
 	WRITE_FILE((main_dir + "velocity.bin").c_str(), cells, phys_val.v);
+#endif
 #endif
 
 	return 0;

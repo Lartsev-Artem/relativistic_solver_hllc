@@ -10,9 +10,10 @@
 
 //#define HLLC
 
-//#define RHLLC
+#define RHLLC
 
 #if NUMBER_OF_MEASUREMENTS == 3 // излучение доступно только для 3d
+
 #define ILLUM
 
 #ifdef ILLUM

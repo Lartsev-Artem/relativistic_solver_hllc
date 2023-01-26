@@ -1,6 +1,7 @@
 #include "build_graph_prj_config.h"
 
 #ifdef BUILD
+#include "../global_value.h"
 
 #ifdef WriteFiles
 #include "../file_module/reader_vtk.h"
@@ -8,7 +9,7 @@
 #include "../utils/grid_geometry/geometry_data.h"
 #include "../file_module/writer_bin.h"
 #include "../file_module/reader_bin.h"
-#include "../global_value.h"
+
 
 static int ReWritePairsByType(const std::string& name_file_pairs, const std::string& name_file_normals, const std::string& name_file_centers)
 {

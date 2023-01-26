@@ -70,6 +70,18 @@ static int SetRHllcValueDefault(std::vector<elem_t>& cells)
 			el.phys_val.p = 10;
 			el.phys_val.v = Vector3(0, 0, 0);
 		}
+#elif defined Cone
+		const Type betta = 0.07;
+		const Type a = 1;
+		const Type b = 0.001;
+		Type x = centers[i][0];
+		el.phys_val.d = (1e-10 * exp(-x * x / betta) + 1e-18) / DENSITY;
+		el.phys_val.p = (100 * exp(-x * x / betta) + (1e-4)) / PRESSURE;
+		el.phys_val.v = (Vector3(1e7, 0, 0)) / VELOCITY;
+#else
+		el.phys_val.d = 0.1;
+		el.phys_val.p = 0.01;
+		el.phys_val.v = Vector3(0, 0, 0);
 #endif // Cube
 
 		i++;
@@ -83,16 +95,17 @@ static int SetHllcSettingDefault(hllc_value_t& hllc_set)
 {
 	hllc_set.h = 0.005; // default
 #ifdef ILLUM
-	hllc_set.tau = 1e-8;
+	hllc_set.h = 0.0012548169651948;
+	hllc_set.tau = 1e-5;
 	hllc_set.CFL = 0.001;
-	hllc_set.print_timer = 1e-5;
-	hllc_set.T = 0.5;
+	hllc_set.print_timer = 0.001;
+	hllc_set.T = 1;
 #else //ILUM
 
 	hllc_set.tau = 1e-5;
-	hllc_set.CFL = 0.5;
-	hllc_set.print_timer = 0.01;
-	hllc_set.T = 0.1;
+	hllc_set.CFL = 0.7;
+	hllc_set.print_timer = 0.5;
+	hllc_set.T = 10;
 
 #if defined Cube
 	//const Type h = 0.0007123669658939; // Soda1d_2
