@@ -16,7 +16,7 @@ int main(int argc, char* argv[])
 		if (ReadStartSettings(name_file_settings, a, foo, foo, foo, BASE_ADRESS, foo, a))
 		{
 			RETURN_ERR("Err reading default settings file\n");
-		}
+		}		
 	}
 	else
 		name_file_settings = argv[1];

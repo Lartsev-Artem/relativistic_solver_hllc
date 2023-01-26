@@ -112,14 +112,18 @@ if (!file.is_open()) RETURN_ERRS("Error : file %s is not open\n", namefile);
 #define Files_log "File_Logs_illum.txt"
 #ifdef WRITE_GLOBAL_LOG	
 
+#ifdef WRITE_LOG_ON_SCREAN
+#define WRITE_LOG(str){std::cout<<str;}
+#else
 #define WRITE_LOG(str){  \
-ofstream ofile; \
+std::ofstream ofile; \
 ofile.open(BASE_ADRESS + Files_log, std::ios::app); \
 ofile << str; \
 ofile.close(); }
+#endif  //WRITE_LOG_ON_SCREAN
 #else
 #define WRITE_LOG(ofile, str) {}
-#endif
+#endif //WRITE_GLOBAL_LOG
 
 #ifdef _MSC_VER
 #define fwrite_unlocked _fwrite_nolock

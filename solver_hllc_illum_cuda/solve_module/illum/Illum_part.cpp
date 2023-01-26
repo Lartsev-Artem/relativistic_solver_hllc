@@ -8,7 +8,7 @@
 #include "../../global_def.h"
 
 
-static Type CalculateIllumeOnInnerFace(const int num_in_face, const std::vector<face_t>& faces, elem_t* cell)
+static Type CalculateIllumeOnInnerFace(const int num_in_face, const std::vector<face_t>& faces, elem_t* cell, Vector3& inter_coef)
 {	
 	const int id_face_ = cell->geo.id_faces[num_in_face]; //номер грани
 	const int neigh_id = faces[id_face_].geo.id_r;  // признак √” + св€зь с глобальной нумерацией
@@ -17,16 +17,17 @@ static Type CalculateIllumeOnInnerFace(const int num_in_face, const std::vector<
 	switch (neigh_id)
 	{
 	case eBound_OutSource: // дно конуса
-		cell->illum_val.coef_inter[num_in_face] = Vector3(30, 30, 30);
+		inter_coef = Vector3(30, 30, 30);//cell->illum_val.coef_inter[num_in_face] = Vector3(30, 30, 30);
 		return 30;
 	case eBound_FreeBound:
-		cell->illum_val.coef_inter[num_in_face] = Vector3(0, 0, 0);
+		//cell->illum_val.coef_inter[num_in_face] = Vector3(0, 0, 0);
+		inter_coef = Vector3(0, 0, 0);
 		/*√раничные услови€*/
 		//I_x0 = BoundaryFunction(num_cell, x, direction, illum_old, directions, squares);
 		return I_x0;
 
 	case eBound_LockBound:
-		cell->illum_val.coef_inter[num_in_face] = Vector3(0, 0, 0);
+		inter_coef = Vector3(0, 0, 0); //cell->illum_val.coef_inter[num_in_face] = Vector3(0, 0, 0);
 		/*√раничные услови€*/
 		//I_x0 = BoundaryFunction(num_cell, x, direction, illum_old, directions, squares);
 		return I_x0;
@@ -68,7 +69,7 @@ static Type CalculateIllumeOnInnerFace(const int num_in_face, const std::vector<
 
 		}
 #endif
-		cell->illum_val.coef_inter[num_in_face] = Vector3(30, 30, 30);
+		inter_coef = Vector3(30, 30, 30);//cell->illum_val.coef_inter[num_in_face] = Vector3(30, 30, 30);
 		return 30;
 	}
 
@@ -76,7 +77,7 @@ static Type CalculateIllumeOnInnerFace(const int num_in_face, const std::vector<
 	{
 
 		//Vector3 coef = grid[num_cell].nodes_value[num_in_face];
-		Vector3 coef = cell->illum_val.coef_inter[num_in_face];
+		Vector3 coef = inter_coef; // cell->illum_val.coef_inter[num_in_face];
 
 		//сейчас храним значени€ а не коэффициента интерпол€ции
 
@@ -342,21 +343,22 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 	}
 }
 
-static Type ReCalcIllum(const int num_dir, std::vector<elem_t>& cells, std::vector<Type>& Illum)
-{
+//static Type ReCalcIllum(const int num_dir, std::vector<elem_t>& cells, std::vector<Type>& Illum)
+static Type ReCalcIllum(const int num_dir, std::vector<elem_t>& cells, const std::vector<Vector3>& inter_coef, std::vector<Type>& Illum)
+{	
 	Type norm = -1;
-#pragma omp parallel default(none) shared(num_dir, cells, Illum, norm)
+//#pragma omp parallel default(none) shared(num_dir, cells, Illum, norm)
 	{		
 		Type norm_loc = -1;
 		const int size = cells.size();
 		const int shift_dir = num_dir * size;
 
-#pragma omp for
+//#pragma omp for
 		for (int num_cell = 0; num_cell < size; num_cell++)
 		{
 			for (int i = 0; i < base; i++)
 			{
-				Vector3 Il = cells[num_cell].illum_val.coef_inter[i];
+				Vector3 Il = inter_coef[num_cell * base + i]; //cells[num_cell].illum_val.coef_inter[i];
 				const Type curI = (Il[0] + Il[1] + Il[2]) / 3;
 				const int id = base * (shift_dir + num_cell) + i;
 				{
@@ -370,7 +372,7 @@ static Type ReCalcIllum(const int num_dir, std::vector<elem_t>& cells, std::vect
 			//cells[num_cell].illum_val.illum[num_dir] /= base; //пересчЄт по направлению дл€ расчЄта энергий и т.д.
 		}
 
-#pragma omp critical
+//#pragma omp critical
 		{
 			if (norm_loc > norm)
 			{
@@ -418,79 +420,112 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 
 	int count = 0;
 	Type norm = 0;	
+	
+	const int number_of_trhed = 4;
+	omp_set_num_threads(number_of_trhed);
 
+	static std::vector<std::vector<Vector3>> inter_coef_all(number_of_trhed);
+	for (size_t i = 0; i < number_of_trhed; i++)
+	{
+		inter_coef_all[i].resize(count_cells * base);
+	}
+		
 	do {
 		Type _clock = -omp_get_wtime();
 
 		norm = -1;
 		/*---------------------------------- далее FOR по направлени€м----------------------------------*/
-
-		for (register int num_direction = 0; num_direction < count_directions; ++num_direction)
-		{			
-			int posX0 = 0;								
-			Vector3 I;
-
-			/*---------------------------------- далее FOR по €чейкам----------------------------------*/
-			for (int h = 0; h < count_cells; ++h) 
+		
+#pragma omp parallel default(none) shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, int_scattering,Illum, norm, inter_coef_all)
+		{
+			Type loc_norm = -1;
+			//std::vector<Vector3> inter_coef(count_cells * base);
+			const int num = omp_get_thread_num();
+			std::vector<Vector3>* inter_coef = &inter_coef_all[num];
+#pragma omp for
+			for (register int num_direction = 0; num_direction < count_directions; ++num_direction)
 			{
-				const int num_cell = sorted_id_cell[num_direction][h];
+				/*---------------------------------- далее FOR по €чейкам----------------------------------*/
 
-				elem_t* cell = &grid.cells[num_cell];
-				
-				//sumI = 0;
 
-				for (ShortId num_out_face = 0; num_out_face < base; ++num_out_face)
+				int posX0 = 0;
+				Vector3 I;
+
+				for (int h = 0; h < count_cells; ++h)
 				{
-					if (check_bit(face_states[num_direction][num_cell], num_out_face)) continue;
+					const int num_cell = sorted_id_cell[num_direction][h];
 
-					//GetNodes
-					for (int num_node = 0; num_node < 3; ++num_node) 
-					{						
-						Vector3 x = vec_x[num_cell].x[num_out_face][num_node];
+					elem_t* cell = &grid.cells[num_cell];
 
-						cell_local x0 = vec_x0[num_direction][posX0++];
+					//sumI = 0;
 
-						ShortId num_in_face = x0.in_face_id;
-						Type s = x0.s;
-						Vector2 X0 = x0.x0;
-
-						Type I_x0 = CalculateIllumeOnInnerFace(num_in_face, grid.faces, cell);
-
-						I[num_node] = GetCurIllum(x, s, I_x0, int_scattering[num_direction * count_cells + num_cell], *cell);
-
-					}//num_node
-
-					// если хранить не знгачени€ у коэфф. интерпол€ции
+					for (ShortId num_out_face = 0; num_out_face < base; ++num_out_face)
 					{
-						//Vector3 coef;
-						//if (num_out_face == 3)
-						//	coef = inclined_face_inverse * I;// GetInterpolationCoefInverse(inclined_face_inverse, I);
-						//else
-						//	coef = straight_face_inverse * I;// GetInterpolationCoefInverse(straight_face_inverse, I);
-					}
+						if (check_bit(face_states[num_direction][num_cell], num_out_face)) continue;
+
+						//GetNodes
+						for (int num_node = 0; num_node < 3; ++num_node)
+						{
+							Vector3 x = vec_x[num_cell].x[num_out_face][num_node];
+
+							cell_local x0 = vec_x0[num_direction][posX0++];
+
+							ShortId num_in_face = x0.in_face_id;
+							Type s = x0.s;
+							Vector2 X0 = x0.x0;
+
+							Type I_x0 = CalculateIllumeOnInnerFace(num_in_face, grid.faces, cell,  (*inter_coef)[num_cell * base + num_in_face]);
+
+							I[num_node] = GetCurIllum(x, s, I_x0, int_scattering[num_direction * count_cells + num_cell], *cell);
+
+						}//num_node
+
+						// если хранить не знгачени€ у коэфф. интерпол€ции
+						{
+							//Vector3 coef;
+							//if (num_out_face == 3)
+							//	coef = inclined_face_inverse * I;// GetInterpolationCoefInverse(inclined_face_inverse, I);
+							//else
+							//	coef = straight_face_inverse * I;// GetInterpolationCoefInverse(straight_face_inverse, I);
+						}
 #if 0// в id_r лежит €чейка. а не грань
-					const int id_face_ = cell->geo.id_faces[num_out_face]; //номер грани
-					const int id_face = grid.faces[id_face_].geo.id_r;  // признак √” + св€зь с глобальной нумерацией
-					cell->illum_val.coef_inter[num_out_face] = I;  //coef					
-					if (id_face >= 0)
-					{						
-						grid.cells[id_face / base].illum_val.coef_inter[id_face % base] = I;
-					}
+						const int id_face_ = cell->geo.id_faces[num_out_face]; //номер грани
+						const int id_face = grid.faces[id_face_].geo.id_r;  // признак √” + св€зь с глобальной нумерацией
+						cell->illum_val.coef_inter[num_out_face] = I;  //coef					
+						if (id_face >= 0)
+						{
+							grid.cells[id_face / base].illum_val.coef_inter[id_face % base] = I;
+						}
 #else															 
-					cell->illum_val.coef_inter[num_out_face] = I;  //coef					
-					const int id_face = pairs[num_cell * base + num_out_face];
-					if (id_face >= 0)
-					{
-						grid.cells[id_face / base].illum_val.coef_inter[id_face % base] = I;
-					}
+						//cell->illum_val.coef_inter[num_out_face] = I;  //coef					
+						(*inter_coef)[num_cell * base + num_out_face] = I;
+						const int id_face = pairs[num_cell * base + num_out_face];
+						if (id_face >= 0)
+						{
+							//grid.cells[id_face / base].illum_val.coef_inter[id_face % base] = I;
+							(* inter_coef)[id_face] = I;
+						}
 #endif
 
-				} //num_out_face						
+					} //num_out_face						
+				}
+
+				/*---------------------------------- конец FOR по €чейкам----------------------------------*/
+				loc_norm = ReCalcIllum(num_direction, grid.cells, *inter_coef, Illum);
 			}
-			/*---------------------------------- конец FOR по €чейкам----------------------------------*/			
-			norm = ReCalcIllum(num_direction, grid.cells, Illum);						
+			/*---------------------------------- конец FOR по направлени€м----------------------------------*/
+
+			if (loc_norm > norm)
+			{
+#pragma omp critical
+				{
+					if (loc_norm > norm)
+					{
+						norm = loc_norm;
+					}
+				}
+			}
 		}
-		/*---------------------------------- конец FOR по направлени€м----------------------------------*/		
 
 		if (solve_mode.max_number_of_iter > 1)  // пропуск первой итерации
 		{
@@ -501,8 +536,7 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 
 		WRITE_LOG("Error:= " << norm << '\n' << "End iter_count number: " << count << "time= " << _clock << '\n');
 
-		count++;
-
+		count++;		
 	} while (norm > solve_mode.accuracy && count < solve_mode.max_number_of_iter);
 
 

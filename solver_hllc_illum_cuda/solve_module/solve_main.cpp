@@ -208,9 +208,12 @@ int RunSolveModule(const std::string& name_file_settings)
 			printf("\n t= %f,  tau= %lf,  res_step= %d\n", t, hllc_cfg.tau, res_count);
 			cur_timer = 0;
 		}
-
+		
 		time_step += omp_get_wtime();
-		WRITE_LOG("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << "time= " << time_step << " c\n");
+		WRITE_LOG("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << " time= " << time_step << " c\n");
+
+		break;
+
 	}// while(t < T)
 
 #elif defined ILLUM

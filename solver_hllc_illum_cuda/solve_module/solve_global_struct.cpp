@@ -116,10 +116,10 @@ illum_value_t::illum_value_t(const int num_dir)
 	absorp_coef = 0;
 	rad_en_loose_rate = 0;
 
-	for (int i = 0; i < base; i++)
+	/*for (int i = 0; i < base; i++)
 	{
 		coef_inter[i] = Vector3::Zero();
-	}	
+	}*/	
 }
 
 #endif //SOVLE

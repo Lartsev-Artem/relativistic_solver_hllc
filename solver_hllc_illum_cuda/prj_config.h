@@ -25,8 +25,10 @@
 
 #define WRITE_GLOBAL_LOG	// писать лог файл
 
+#define WRITE_LOG_ON_SCREAN
+
 #if defined BUILD || defined MAKE  //todo rename on BUILD_DATA_TO_ILLUM
-#define ONLY_GEO_DATA
+//#define ONLY_GEO_DATA
 #endif
 
 #if defined UTILS && !defined SOLVE

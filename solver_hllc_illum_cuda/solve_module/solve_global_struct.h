@@ -111,7 +111,7 @@ struct illum_value_t
 	Type absorp_coef;
 	Type rad_en_loose_rate;
 
-	Vector3 coef_inter[base]; // коэффициенты интерпол€ции 
+	//Vector3 coef_inter[base]; // коэффициенты интерпол€ции 
 
 	illum_value_t(const int num_dir = 0);
 };
@@ -119,9 +119,9 @@ struct elem_t
 {
 	flux_t  phys_val;
 
-#if defined HLLC || defined RHLLC
+//#if defined HLLC || defined RHLLC
 	flux_t  conv_val;	
-#endif
+//#endif
 
 #ifdef ILLUM	
 	illum_value_t illum_val;	

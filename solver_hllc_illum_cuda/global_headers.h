@@ -105,6 +105,7 @@ int ReadStartSettings(const std::string& name_file_settings, int& class_file_vtk
 	ifile >> number_of_iter;
 	
 	ifile.close();
+
 	return 0;
 }
 
