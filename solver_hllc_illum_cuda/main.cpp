@@ -4,7 +4,6 @@
 #include "global_headers.h"
 
 std::string BASE_ADRESS;
-#include "utils/rebuild_solve.h"
 int main(int argc, char* argv[])
 {
 	MPI_START(argc, argv);	
@@ -27,29 +26,9 @@ int main(int argc, char* argv[])
 	RunSolveModule(name_file_settings);
 #endif //SOLVE
 
-#if defined UTILS
-	Type L = 1 * 1e12;
-	Type V = 3 * 1e8;
-	Type M = 1 * 1e21;
-
-	Type t = L / V;
-
-	Type d = M / (L * L * L);
-	Type p = M / (L * t * t);
-
-	Type e = M * L * L / (t * t);
-	Type I = e / (t * L * L);
-	Type data[10] = {L,V,M,t,0,d,p,e,I};
-
-	for (size_t i = 0; i < 10; i++)
-	{
-		std::cout << std::setprecision(16) << data[i] << '\n';
-	}
-	return 0;
-
-
-	rebuild_solve(name_file_settings);//RunUtilsModule(argc, argv, name_file_settings);
-#endif
+#if defined UTILS	
+	RunUtilsModule(argc, argv, name_file_settings);	
+#endif //UTILS
 
 	MPI_END;
 	return EXIT_SUCCESS;

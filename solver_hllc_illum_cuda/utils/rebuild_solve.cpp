@@ -105,19 +105,37 @@ static size_t ReBuildDataVtkArray(file_name name_file_vtk, file_name name_file_o
 	return 0;
 }
 
-int rebuild_solve(file_name name_file_settings)
-{
+int rebuild_solve(int argc, char* argv[], file_name name_file_settings)
+{	
 	std::string name_file_vtk;	
 	std::string foo;
 	std::string adress_solve;
-	int max_number_of_iter;
+	int max_number_of_iter = 0;
 	int class_vtk;
 
-	if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, foo, foo, foo, adress_solve, max_number_of_iter))
+	switch (argc)
 	{
-		RETURN_ERR("Error reading solve settings\n");
+	case 2:
+		if (ReadStartSettings(argv[1], class_vtk, name_file_vtk, foo, foo, foo, adress_solve, max_number_of_iter))
+		{
+			RETURN_ERR("Error reading settings\n");
+		}
+		break;
+	case 3:
+		if (ReadStartSettings(argv[1], class_vtk, name_file_vtk, foo, foo, foo, adress_solve, max_number_of_iter))
+		{
+			RETURN_ERR("Error reading settings\n");
+		}
+		max_number_of_iter = std::stoi(argv[2]);
+		break;
+	default:
+		if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, foo, foo, foo, adress_solve, max_number_of_iter))
+		{
+			RETURN_ERR("Error default reading settings\n");
+		}
+		break;
 	}
-
+		
 	for (int i = 0; i < max_number_of_iter; i++)
 	{
 		std::string file_solve = adress_solve  + std::to_string(i);
@@ -135,7 +153,7 @@ int rebuild_solve(file_name name_file_settings)
 	return 0;
 }
 
-int rewrite_vtk_array(file_name name_file_settings)
+int rewrite_vtk_array(int argc, char* argv[], file_name name_file_settings)
 {
 	std::string name_file_vtk;
 	std::string foo;
@@ -143,11 +161,20 @@ int rewrite_vtk_array(file_name name_file_settings)
 	int max_number_of_iter;
 	int class_vtk;
 
-	if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, foo, foo, base_adress, foo, max_number_of_iter))
+	switch (argc)
 	{
-		RETURN_ERR("Error reading solve settings\n");
+	case 2:
+		if (ReadStartSettings(argv[1], class_vtk, name_file_vtk, foo, foo, base_adress, foo, max_number_of_iter))
+		{
+			RETURN_ERR("Error reading  settings\n");
+		}
+	default:
+		if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, foo, foo, base_adress, foo, max_number_of_iter))
+		{
+			RETURN_ERR("Error reading default settings\n");
+		}
+		break;
 	}
-
 	vtkSmartPointer<vtkUnstructuredGrid> unstructured_grid = vtkSmartPointer<vtkUnstructuredGrid>::New();
 
 	if (ReadFileVtk(name_file_vtk, unstructured_grid)) RETURN_ERR("Error reading the file vtk\n");
@@ -343,5 +370,28 @@ int BuildHLLC_1dTime(int argc, char* argv[])
 	return 0;
 }
 
+
+int GetPhysScale()
+{
+	Type L = 1 * 1e12;
+	Type V = 3 * 1e8;
+	Type M = 1 * 1e21;
+
+	Type t = L / V;
+
+	Type d = M / (L * L * L);
+	Type p = M / (L * t * t);
+
+	Type e = M * L * L / (t * t);
+	Type I = e / (t * L * L);
+
+	Type data[10] = { L,V,M,t,0,d,p,e,I };
+
+	for (size_t i = 0; i < 10; i++)
+	{
+		std::cout << std::setprecision(16) << data[i] << '\n';
+	}
+	return 0;
+}
 #endif // USE_VTK
 #endif //UTILS

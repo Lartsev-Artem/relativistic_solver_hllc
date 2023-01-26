@@ -6,10 +6,12 @@
 #include "../global_def.h"
 
 #if defined USE_VTK && defined UTILS
-int rebuild_solve(file_name name_file_settings);
-int rewrite_vtk_array(file_name name_file_settings);
+int rebuild_solve(int argc, char* argv[], file_name name_file_settings);
+int rewrite_vtk_array(int argc, char* argv[], file_name name_file_settings);
 int  RunMake1d(int argc, char* argv[]);
 int BuildHLLC_1dTime(int argc, char* argv[]);
+
+int GetPhysScale();
 #endif
 
 #endif //REBUILD_SOLVE_H
