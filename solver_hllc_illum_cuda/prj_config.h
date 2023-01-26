@@ -21,7 +21,7 @@
 
 //#define USE_MPI  // подключение технологии mpi
 
-//#define USE_CUDA  // подключение технологии cuda
+#define USE_CUDA  // подключение технологии cuda
 
 #define WRITE_GLOBAL_LOG	// писать лог файл
 
@@ -45,7 +45,7 @@
 
 #define Cone
 
-#define Cone_JET
+//#define Cone_JET
 
 //#define Sphere
 

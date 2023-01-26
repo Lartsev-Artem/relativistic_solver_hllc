@@ -181,6 +181,7 @@ int RunSolveModule(const std::string& name_file_settings)
 
 	while (t < hllc_cfg.T)
 	{	
+		Type time_step = -omp_get_wtime();
 		HLLC_STEP(hllc_cfg.tau, grid);
 
 #ifdef ILLUM
@@ -208,7 +209,8 @@ int RunSolveModule(const std::string& name_file_settings)
 			cur_timer = 0;
 		}
 
-		WRITE_LOG("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << '\n');
+		time_step += omp_get_wtime();
+		WRITE_LOG("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << "time= " << time_step << " c\n");
 	}// while(t < T)
 
 #elif defined ILLUM

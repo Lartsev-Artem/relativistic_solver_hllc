@@ -16,7 +16,9 @@ int RunUtilsModule(int argc, char* argv[], const std::string& settings)
 
 #ifdef USE_VTK
 
-	rebuild_solve(argc, argv, settings);
+//MakeHllcInitFromGrid(argc, argv, settings);
+
+	//rebuild_solve(argc, argv, settings);
 
 //	BuildHLLC_1dTime(argc, argv);
 

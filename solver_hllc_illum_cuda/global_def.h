@@ -109,7 +109,7 @@ file.open(namefile); \
 if (!file.is_open()) RETURN_ERRS("Error : file %s is not open\n", namefile);
 
 
-#define Files_log "File_Logs.txt"
+#define Files_log "File_Logs_illum.txt"
 #ifdef WRITE_GLOBAL_LOG	
 
 #define WRITE_LOG(str){  \

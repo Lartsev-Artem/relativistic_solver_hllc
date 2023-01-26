@@ -26,7 +26,7 @@
 #endif
 
 #ifndef CLASTER
-#define RUN_TEST
+//#define RUN_TEST
 #endif
 
 #endif //SOLVE

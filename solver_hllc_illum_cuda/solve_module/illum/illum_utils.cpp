@@ -33,8 +33,8 @@ int SolveIllumAndHLLC(const Type tau, std::vector<elem_t>& cells)
 		//el.phys_val.v += (C_LIGHT*DIST/TIME/PRESSURE) * tau * (-el.illum_val.div_impuls * C_LIGHT_INV);  //- tau*(stream[i][0] - prev_stream[i][0]) / tau / c / c);  // +F_g //vx
 		//el.phys_val.p += (1./TIME/RADIATION)*tau * (-el.illum_val.div_stream); //  tau*(-(energy[i] - prev_energy[i]) / tau / c)  //+F_g.dot(vel)  //e
 
-		el.conv_val.v += (C_LIGHT * DIST / TIME / PRESSURE) * tau * (-el.illum_val.div_impuls * C_LIGHT_INV);  //- tau*(stream[i][0] - prev_stream[i][0]) / tau / c / c);  // +F_g //vx
-		el.conv_val.p += (1. / TIME / RADIATION) * tau * (-el.illum_val.div_stream); //  tau*(-(energy[i] - prev_energy[i]) / tau / c)  //+F_g.dot(vel)  //e
+		el.conv_val.v +=   tau * (-el.illum_val.div_impuls * 1);  //- tau*(stream[i][0] - prev_stream[i][0]) / tau / c / c);  // +F_g //vx
+		el.conv_val.p +=   tau * (-el.illum_val.div_stream); //  tau*(-(energy[i] - prev_energy[i]) / tau / c)  //+F_g.dot(vel)  //e
 	}	
 	return 0;
 }

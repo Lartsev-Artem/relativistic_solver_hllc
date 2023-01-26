@@ -387,7 +387,7 @@ int MakeHllcInitFile(file_name BASE_ADRESS)
 		{
 			el.phys_val.d = 0.1;
 			el.phys_val.p = 0.01;
-			el.phys_val.v = Vector3(0.99, 0, 0);
+			el.phys_val.v = Vector3(0.05, 0, 0);
 		}
 		else
 		{
@@ -403,13 +403,13 @@ int MakeHllcInitFile(file_name BASE_ADRESS)
 
 		el.phys_val.d = (1e-10 * exp(-x * x / betta) + 1e-18) / DENSITY;
 		el.phys_val.p = (100 * exp(-x * x / betta) + (1e-4)) / PRESSURE;
-		el.phys_val.v = (Vector3(1e8, 0, 0)) / VELOCITY;
+		el.phys_val.v = (Vector3(1e6, 0, 0)) / VELOCITY;
 		
 #endif
 		i++;
 	} //for
 
-	WRITE_FILE((BASE_ADRESS + "hllc_init_value_jet_099.bin").c_str(), cells, phys_val);
+	WRITE_FILE((BASE_ADRESS + "hllc_init_value_illum_jet.bin").c_str(), cells, phys_val);
 
 	return 0;
 }
@@ -436,5 +436,52 @@ int GetPhysScale()
 	}
 	return 0;
 }
+
+
+//! Функция создает начальное приближение для hllc из предыдущего решения (позволяет начать расчёт не с нуля)
+int MakeHllcInitFromGrid(int argc, char* argv[], file_name name_file_settings)
+{
+	int a;
+	std::string base_adress;
+	std::string name_file_vtk;
+	std::string foo;
+	std::string file_init;
+	switch (argc)
+	{
+	case 2:
+		if (ReadStartSettings(argv[1], a, name_file_vtk, foo, foo, base_adress, foo, a, file_init))
+		{
+			RETURN_ERR("Error reading  settings\n");
+		}
+	default:
+		if (ReadStartSettings(name_file_settings, a, name_file_vtk, foo, foo, base_adress, foo, a, file_init))
+		{
+			RETURN_ERR("Error reading default settings\n");
+		}
+		break;
+	}
+
+	vtkDataArray* pressure;
+	vtkDataArray* velocity;
+	vtkDataArray* density;
+	vtkSmartPointer<vtkUnstructuredGrid> unstructured_grid = vtkSmartPointer<vtkUnstructuredGrid>::New();
+
+	if (ReadFileVtk(5, name_file_vtk, unstructured_grid, density, pressure, velocity, true)) RETURN_ERR("Error reading  vtk grid\n");
+	
+	const int n = unstructured_grid->GetNumberOfCells();
+	std::vector<flux_t> cells(n);
+	
+	for (size_t i = 0; i < n; i++)
+	{
+		cells[i].d = density->GetTuple1(i);
+		cells[i].p = pressure->GetTuple1(i);
+		cells[i].v = Vector3(velocity->GetTuple3(i));
+	}
+	
+	WriteSimpleFileBin(file_init, cells);
+	
+	return 0;
+}
+
 #endif // USE_VTK
 #endif //UTILS
