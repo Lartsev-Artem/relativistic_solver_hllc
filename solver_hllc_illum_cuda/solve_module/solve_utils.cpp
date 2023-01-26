@@ -225,7 +225,7 @@ int TestDivStream(file_name BASE_ADRESS)
 	std::vector<Vector3> center_cells;
 	ReadSimpleFileBin(name_file_centers_faces, center_cells);
 	TestDivStream(center_cells, grid);
-	WriteFileSolution(BASE_ADRESS+"Solve0", std::vector<Type>(), grid.cells); //печать начальной сетки
+	WriteFileSolution(BASE_ADRESS+"Solve\\Solve0", std::vector<Type>(), grid.cells); //печать начальной сетки
 
 	return 0;
 }

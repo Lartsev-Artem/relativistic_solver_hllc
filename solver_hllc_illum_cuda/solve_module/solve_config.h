@@ -13,7 +13,7 @@
 
 #if NUMBER_OF_MEASUREMENTS == 3 // излучение доступно только для 3d
 
-//#define ILLUM
+#define ILLUM
 
 #ifdef ILLUM
 //#define SORT_ILLUM  //сорьтровать ли суммирование интегралов по возростанию
@@ -26,7 +26,7 @@
 #endif
 
 #ifndef CLASTER
-//#define RUN_TEST
+#define RUN_TEST
 #endif
 
 #endif //SOLVE

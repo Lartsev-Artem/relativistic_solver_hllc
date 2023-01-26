@@ -614,7 +614,7 @@ static int MakeStream(const grid_directions_t& grid_direction, grid_t& grid)
 			for (int j = 0; j < base; j++)
 			{
 				geo_face_t* geo_f = &grid.faces[el.geo.id_faces[j]].geo;
-				if (el.geo.sign_n)
+				if (el.geo.sign_n[j])
 				{
 					el.illum_val.div_stream += Stream[j].dot(geo_f->n) * geo_f->S;
 				}
@@ -676,7 +676,7 @@ static int MakeDivImpuls(const grid_directions_t& grid_direction, grid_t& grid)
 			for (int j = 0; j < base; j++)
 			{
 				geo_face_t* geo_f = &grid.faces[el.geo.id_faces[j]].geo;
-				if (el.geo.sign_n)
+				if (el.geo.sign_n[j])
 				{
 					el.illum_val.div_impuls += Impuls[j] * (geo_f->n) * geo_f->S;
 				}
@@ -701,28 +701,26 @@ int CalculateIllumParam(const grid_directions_t& grid_direction, grid_t& grid)
 	return 0;
 }
 
-
-
 int TestDivStream(const std::vector<Vector3>& centers_face, grid_t& grid)
-{
+{	
 	for (int i = 0; i < grid.cells.size(); i++)
-	{
+	{		
 		elem_t& el = grid.cells[i];
 
 		Vector3 Stream[base];
 		for (int j = 0; j < base; j++)
 		{
 			Vector3 x = centers_face[i * base + j];
-			Stream[j] = Vector3(sin(x(0)), 0, 0);
+			Stream[j] = Vector3(3*x[0], 0, 0);
 		}
 
 		GET_FACE_TO_CELL(el.illum_val.stream, Stream, Vector3::Zero());
 
-		el.illum_val.div_stream = 0;
+		el.illum_val.div_stream = 0;		
 		for (int j = 0; j < base; j++)
 		{
 			geo_face_t* geo_f = &grid.faces[el.geo.id_faces[j]].geo;
-			if (el.geo.sign_n)
+			if (el.geo.sign_n[j])
 			{
 				el.illum_val.div_stream += Stream[j].dot(geo_f->n) * geo_f->S;
 			}
@@ -731,7 +729,8 @@ int TestDivStream(const std::vector<Vector3>& centers_face, grid_t& grid)
 				el.illum_val.div_stream -= Stream[j].dot(geo_f->n) * geo_f->S;
 			}
 		}
-		el.illum_val.div_stream /= el.geo.V;
+		
+		el.illum_val.div_stream /= el.geo.V;		
 	}
 
 	return 0;
