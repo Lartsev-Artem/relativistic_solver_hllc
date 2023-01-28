@@ -11,6 +11,10 @@
 
 #endif // USE_VTK
 
+#ifdef  USE_MPI
+#include "../solve_module/solve_utils.h"
+#endif
+
 
 int ReadNormalFile(const std::string& name_file_normals, std::vector<Normals>& normals) {
 
@@ -138,11 +142,31 @@ int ReadIllumGeometry(const int count_dir,
 	if (ReadSimpleFileBin(file_x, vec_x)) return 1;
 	if (ReadSimpleFileBin(file_res, vec_res_bound)) return 1;
 
-	for (size_t i = 0; i < count_dir; i++)
+	std::vector<int> disp;
+	std::vector<int> send;
+
+#ifdef  USE_MPI
+	int np, myid;
+	MPI_Comm_size(MPI_COMM_WORLD, &np);
+	MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+
+	GetDisp(np, count_dir, disp);
+	GetSend(np, count_dir, send);		
+#else
+	disp.resize(1, 0);
+	send.resize(1, count_dir);
+	int myid = 0;
+#endif
+
+	vec_x0.resize(send[myid]);
+	sorted_id_cell.resize(send[myid]);
+	face_states.resize(send[myid]);
+
+	for (int i = 0; i < send[myid]; i++)	
 	{
-		if (ReadSimpleFileBin(file_x0 + std::to_string(i) + ".bin", vec_x0[i])) return 1;
-		if (ReadSimpleFileBin(file_graph + std::to_string(i) + ".bin", sorted_id_cell[i])) return 1;
-		if (ReadSimpleFileBin(file_state + std::to_string(i) + ".bin", face_states[i])) return 1;
+		if (ReadSimpleFileBin(file_x0 + std::to_string(disp[myid]+i) + ".bin", vec_x0[i])) return 1;
+		if (ReadSimpleFileBin(file_graph + std::to_string(disp[myid]+i) + ".bin", sorted_id_cell[i])) return 1;
+		if (ReadSimpleFileBin(file_state + std::to_string(disp[myid]+i) + ".bin", face_states[i])) return 1;
 	}
 
 	return 0;

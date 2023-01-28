@@ -26,5 +26,12 @@ int StartLowDimensionTask(file_name main_dir);
 
 int TestDivStream(const std::vector<Vector3>& centers_face, grid_t& grid);
 int TestDivStream(file_name BASE_ADRESS);
+
 #endif //SOLVE
+
+#ifdef USE_MPI
+void GetSend(const int np, const int n, std::vector<int>& send_count);
+void GetDisp(const int np, const int n, std::vector<int>& disp);
+#endif //USE_MPI
+
 #endif //SOLVE_UTILS_H

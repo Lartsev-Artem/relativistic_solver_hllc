@@ -20,7 +20,7 @@ size_t ReadSimpleFileBin(file_name name_file, std::vector<T>& data_array) {
 
 	fclose(f);
 
-	printf("read simple data: %s \n", name_file.c_str());
+	//printf("read simple data: %s \n", name_file.c_str());
 	return 0;
 }
 

@@ -15,20 +15,20 @@
 
 #define NUMBER_OF_MEASUREMENTS 3
 
-#define BUILD  // запуск модуля построителя графов
+//#define BUILD  // запуск модуля построителя графов
 
 //#define MAKE   // запуск модуля подготовительных расчётов для излучения
 
 #define SOLVE  // запуск модуля решения
 
-//#define USE_MPI  // подключение технологии mpi
+#define USE_MPI  // подключение технологии mpi
 
-#define USE_CUDA  // подключение технологии cuda
+//#define USE_CUDA  // подключение технологии cuda
 
 #define WRITE_GLOBAL_LOG	// писать лог файл
 
 #if defined BUILD || defined MAKE  //todo rename on BUILD_DATA_TO_ILLUM
-#define ONLY_GEO_DATA
+//#define ONLY_GEO_DATA
 #endif
 
 #if defined UTILS && !defined SOLVE
@@ -45,11 +45,11 @@
 
 //#define Step
 
-#define Cone
+//#define Cone
 
 //#define Cone_JET
 
-//#define Sphere
+#define Sphere
 
 //#define Cylinder
 

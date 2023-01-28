@@ -202,7 +202,6 @@ int StartLowDimensionTask(file_name main_dir)
 #endif
 }
 
-
 #ifdef RUN_TEST
 int TestDivStream(file_name BASE_ADRESS)
 {
@@ -231,3 +230,32 @@ int TestDivStream(file_name BASE_ADRESS)
 }
 #endif //RUN_TEST
 #endif //SOLVE
+
+#ifdef USE_MPI
+void GetSend(const int np, const int n, std::vector<int>& send_count)
+{
+	// вычисление  числа тел на узел
+	send_count.resize(np, n / np);
+
+	if (n % np)  // если число процессов не кратно размерности задачи 
+	{
+		for (int i = 0; i < n % np; i++) // первые процессы берут на единицу больше тел
+			++send_count[i];
+	}
+}
+
+void GetDisp(const int np, const int n, std::vector<int>& disp)
+{
+	// вычисление сдвигов  на узел
+	disp.resize(np, 0);
+	for (int i = 1; i < np; i++)
+		disp[i] = i * (n / np);
+
+	if (n % np)  // если число процессов не кратно размерности задачи 
+	{
+		for (int i = 1; i < np; i++) // смещения для процессов за ними увеличивается начиная со второго
+			++disp[i];
+	}
+}
+
+#endif //USE_MP

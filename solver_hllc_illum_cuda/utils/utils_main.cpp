@@ -12,11 +12,12 @@ int RunUtilsModule(int argc, char* argv[], const std::string& settings)
 //	ReBuildNetgenToMetis(argc, argv);
 
 //	GetPhysScale();
-	MakeHllcInitFile(BASE_ADRESS);
+
+//	MakeHllcInitFile(BASE_ADRESS);
 
 #ifdef USE_VTK
 
-//MakeHllcInitFromGrid(argc, argv, settings);
+ MakeHllcInitFromGrid(argc, argv, settings);
 
 	//rebuild_solve(argc, argv, settings);
 

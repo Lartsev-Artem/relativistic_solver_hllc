@@ -1,17 +1,18 @@
 #include "../solve_config.h"
-#if defined ILLUM && defined SOLVE && !defined USE_MPI
+#if defined ILLUM && defined SOLVE && defined USE_MPI
 
 #include "illum_utils.h"
 
 #include "../solve_global_struct.h"
 #include "../../global_value.h"
 #include "../../global_def.h"
+#include "../solve_utils.h"
 
 
-static Type CalculateIllumeOnInnerFace(const int num_in_face, const std::vector<face_t>& faces, elem_t* cell, Vector3& inter_coef)
+static Type CalculateIllumeOnInnerFace(const int neigh_id, Vector3& inter_coef)
 {	
-	const int id_face_ = cell->geo.id_faces[num_in_face]; //номер грани
-	const int neigh_id = faces[id_face_].geo.id_r;  // признак √” + св€зь с глобальной нумерацией
+	//const int id_face_ = cell->geo.id_faces[num_in_face]; //номер грани
+	//const int neigh_id = faces[id_face_].geo.id_r;  // признак √” + св€зь с глобальной нумерацией
 	Type I_x0 = 0;
 
 	switch (neigh_id)
@@ -145,7 +146,7 @@ static int CalculateIntCPU(const int num_cells, const std::vector<Type>& illum, 
 }
 
 
-static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Type int_scattering, const elem_t& cell)
+static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Type int_scattering, const flux_t& cell)
 {
 	switch (solve_mode.class_vtk)
 	{
@@ -195,8 +196,8 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 
 		//U_Full[cur_id][0] -> density;
 		Type S = int_scattering;
-		Type Q = cell.illum_val.rad_en_loose_rate;  //Q=alpha*Ie
-		Type alpha = cell.illum_val.absorp_coef;
+		Type Q = 1;// cell.illum_val.rad_en_loose_rate;  //Q=alpha*Ie
+		Type alpha = 1;// cell.illum_val.absorp_coef;
 
 		Type betta = alpha / 2;  // просто из головы
 		Type k = alpha + betta;
@@ -219,8 +220,10 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 	{
 		const Type ss = s * 388189 * 1e5;  // числа --- переход к размерным параметрам
 
-		Type Q = cell.illum_val.rad_en_loose_rate;  //Q=alpha*Ie
-		Type alpha = cell.phys_val.d * cell.illum_val.absorp_coef;
+		//Type Q = cell.illum_val.rad_en_loose_rate;  //Q=alpha*Ie
+		//Type alpha = cell.d * cell.illum_val.absorp_coef;
+		Type alpha = 1;
+		Type Q = 1;
 
 		Type I;
 		if (alpha > 1e-15)
@@ -239,7 +242,7 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 	case 3:
 	{
 
-		const Type d = cell.phys_val.d;
+		const Type d = cell.d;
 		Type S = int_scattering;
 
 		//alpha = d*XXX...
@@ -298,9 +301,9 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 
 		Type S = int_scattering * RADIATION;
 
-		Type d = cell.phys_val.d * DENSITY;
-		Type v = cell.phys_val.v.norm() * VELOCITY;
-		Type p = cell.phys_val.p * PRESSURE;
+		Type d = cell.d * DENSITY;
+		Type v = cell.v.norm() * VELOCITY;
+		Type p = cell.p * PRESSURE;
 
 		Type T = p / (d * R_gas);
 
@@ -344,13 +347,13 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 }
 
 //static Type ReCalcIllum(const int num_dir, std::vector<elem_t>& cells, std::vector<Type>& Illum)
-static Type ReCalcIllum(const int num_dir, std::vector<elem_t>& cells, const std::vector<Vector3>& inter_coef, std::vector<Type>& Illum)
+static Type ReCalcIllum(const int num_dir, const std::vector<Vector3>& inter_coef, std::vector<Type>& Illum)
 {	
 	Type norm = -1;
 //#pragma omp parallel default(none) shared(num_dir, cells, Illum, norm)
 	{		
 		Type norm_loc = -1;
-		const int size = cells.size();
+		const int size = inter_coef.size()/base;
 		const int shift_dir = num_dir * size;
 
 //#pragma omp for
@@ -365,9 +368,7 @@ static Type ReCalcIllum(const int num_dir, std::vector<elem_t>& cells, const std
 					Type buf_norm = fabs(Illum[id] - curI) / curI;
 					if (buf_norm > norm_loc) norm_loc = buf_norm;
 				}
-				Illum[id] = curI;
-
-				cells[num_cell].illum_val.illum[num_dir * base + i] = curI; //на каждой грани по направлени€м
+				Illum[id] = curI;			
 			}
 			//cells[num_cell].illum_val.illum[num_dir] /= base; //пересчЄт по направлению дл€ расчЄта энергий и т.д.
 		}
@@ -384,7 +385,23 @@ static Type ReCalcIllum(const int num_dir, std::vector<elem_t>& cells, const std
 	return norm;
 }
 
-
+static Type ReCalcIllumGlobal(const int dir_size, std::vector<elem_t>& cells, std::vector<Type>& Illum)
+{
+	const int size = cells.size();
+	for (size_t num_dir = 0; num_dir < dir_size; num_dir++)
+	{
+		const int shift_dir = num_dir * size;
+		for (int num_cell = 0; num_cell < size; num_cell++)
+		{
+			for (int i = 0; i < base; i++)
+			{
+				const int id = base * (shift_dir + num_cell) + i;
+				cells[num_cell].illum_val.illum[num_dir * base + i] = Illum[id]; //на каждой грани по направлени€м
+			}
+		}
+	}
+	return 0;
+}
 static int GetIntScattering(const int count_cells, const grid_directions_t& grid_direction,  std::vector<Type>& Illum, std::vector<Type>& int_scattering)
 {
 #ifdef USE_CUDA
@@ -407,138 +424,217 @@ static int GetIntScattering(const int count_cells, const grid_directions_t& grid
 }
 
 int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< std::vector<int>>& face_states, const std::vector<int>& pairs,
-	const std::vector < std::vector<cell_local>> &vec_x0, std::vector<BasePointTetra>& vec_x, const std::vector < std::vector<int>> &sorted_id_cell,
-//const std::vector<Type>& res_inner_bound, 
+	const std::vector < std::vector<cell_local>>& vec_x0, std::vector<BasePointTetra>& vec_x,
+	const std::vector < std::vector<int>>& sorted_id_cell,
+	//const std::vector<Type>& res_inner_bound, 
 	grid_t& grid, std::vector<Type>& Illum, std::vector<Type>& int_scattering)
 {
+	// пусть пока сетка будет на всех узлах
 	const int count_directions = grid_direction.size;
-	const int count_cells = grid.size;
 
-	// вроде не об€зательно. ѕ–ќ¬≈–»“№
-	//Illum.assign(4 * count_cells * count_directions, 0);
-	//int_scattering.assign(count_cells * count_directions, 0);
+	
+	/*const*/ int count_cells = grid.size;
+
+	MPI_Bcast(&count_cells, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+	int np = 1, myid = 0;
+
+	MPI_Comm_size(MPI_COMM_WORLD, &np);
+	MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+	
+	std::vector<int> send_count;
+	std::vector<int> disp;
+
+	std::vector<int> send_count_illum(np,0);
+	std::vector<int> disp_illum(np,0);
+
+	std::vector<int> send_count_scattering(np,0);
+	std::vector<int> disp_scattering(np,0);
+
+	GetSend(np, count_directions, send_count);
+	GetDisp(np, count_directions, disp);
+
+	for (int i = 0; i < np; i++)
+	{
+		send_count_illum[i] = send_count[i] * base * count_cells;
+		send_count_scattering[i] = send_count[i] * count_cells;
+
+		disp_illum[i] = disp[i] * base * count_cells;
+		disp_scattering[i] = disp[i] * count_cells;
+	}
+
+	const int local_size = send_count[myid];
+	const int local_disp = disp[myid];
+
+	/*
+	нужны:
+	часть интеграла рассе€ни€ (разослать всем)
+	illum after recalc -> прислать всем
+	---
+	сетка не нужна целиком, от неЄ достаточно вз€ть переменные на старте(phys_val + illum_val)
+	и разослать после расчЄта (illum_val)
+
+	struct flux_t
+	{
+		Type d;
+		Vector3 v;
+		Type p;
+	}
+
+	struct illum_value_t
+	{
+		std::vector<Type> illum; //num_dir*base
+		Type energy;
+		Vector3 stream;
+
+		Matrix3 impuls;
+		Type div_stream;
+		Vector3 div_impuls;
+		Type absorp_coef;
+		Type rad_en_loose_rate;
+	}
+
+	struct elem_t
+	{
+		flux_t  phys_val;
+		flux_t  conv_val;
+		illum_value_t illum_val;
+	}
+	*/
+
+	MPI_Datatype MPI_flux_t;
+	{
+		int len[3 + 1] = { 1,3,1,  1 };
+		MPI_Aint pos[4] = { 0,sizeof(Type), sizeof(Vector3) ,sizeof(flux_t) };
+		MPI_Datatype typ[4] = { MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE, MPI_UB };
+		MPI_Type_struct(4, len, pos, typ, &MPI_flux_t);
+		MPI_Type_commit(&MPI_flux_t);
+	}
+
+	MPI_Datatype MPI_illum_t;
+	{
+		int len[2 + 1] = { 1,1, 1 };
+		MPI_Aint pos[3] = { 0, sizeof(Type),sizeof(illum_value_t) };
+		MPI_Datatype typ[3] = { MPI_DOUBLE, MPI_DOUBLE,MPI_UB };
+		MPI_Type_struct(3, len, pos, typ, &MPI_illum_t);
+		MPI_Type_commit(&MPI_illum_t);
+	}
+	MPI_Datatype MPI_elem_t;
+	{
+		int len[2 + 1] = { 1,1, 1 };
+		MPI_Aint pos[3] = { 0, 2 * sizeof(flux_t),sizeof(elem_t) };
+		MPI_Datatype typ[3] = { MPI_flux_t,MPI_illum_t, MPI_UB };
+		MPI_Type_struct(3, len, pos, typ, &MPI_elem_t);
+		MPI_Type_commit(&MPI_elem_t);
+	}
+	MPI_Datatype MPI_elem_t_phys;
+	{
+		int len[1 + 1] = { 1, 1 };
+		MPI_Aint pos[2] = { 0, sizeof(elem_t) };
+		MPI_Datatype typ[2] = { MPI_flux_t, MPI_UB };
+		MPI_Type_struct(2, len, pos, typ, &MPI_elem_t_phys);
+		MPI_Type_commit(&MPI_elem_t_phys);
+	}
+
+
+	printf("Run\n");
 
 	int count = 0;
-	Type norm = 0;	
+	Type norm = -1;
 	
-	const int number_of_trhed = 4;
-	omp_set_num_threads(number_of_trhed);
+	std::vector<flux_t> phys_local(count_cells);
 
-	static std::vector<std::vector<Vector3>> inter_coef_all(number_of_trhed);
-	for (size_t i = 0; i < number_of_trhed; i++)
-	{
-		inter_coef_all[i].resize(count_cells * base);
-	}
-		
+	static std::vector<Vector3> inter_coef(count_cells * base);
+
+	static std::vector<Type> loc_illum(count_cells * base * local_size, 0); //кроме id 0
+
+	static std::vector<Type>int_scattering_local(count_cells * local_size);
+
 	do {
 		Type _clock = -omp_get_wtime();
 
 		norm = -1;
 		/*---------------------------------- далее FOR по направлени€м----------------------------------*/
-		
-#pragma omp parallel default(none) shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, int_scattering,Illum, norm, inter_coef_all)
+
+		for (register int num_direction = 0; num_direction < local_size; ++num_direction)
 		{
-			Type loc_norm = -1;
-			//std::vector<Vector3> inter_coef(count_cells * base);
-			const int num = omp_get_thread_num();
-			std::vector<Vector3>* inter_coef = &inter_coef_all[num];
-#pragma omp for
-			for (register int num_direction = 0; num_direction < count_directions; ++num_direction)
+			int posX0 = 0;
+			Vector3 I;
+			/*---------------------------------- далее FOR по €чейкам----------------------------------*/
+			for (int h = 0; h < count_cells; ++h)
 			{
-				/*---------------------------------- далее FOR по €чейкам----------------------------------*/
+				const int num_cell = sorted_id_cell[num_direction][h];
 
+				//elem_t* cell = &grid.cells[num_cell];
 
-				int posX0 = 0;
-				Vector3 I;
+				//sumI = 0;
 
-				for (int h = 0; h < count_cells; ++h)
+				for (ShortId num_out_face = 0; num_out_face < base; ++num_out_face)
 				{
-					const int num_cell = sorted_id_cell[num_direction][h];
+					if (check_bit(face_states[num_direction][num_cell], num_out_face)) continue;
 
-					elem_t* cell = &grid.cells[num_cell];
-
-					//sumI = 0;
-
-					for (ShortId num_out_face = 0; num_out_face < base; ++num_out_face)
+					//GetNodes
+					for (int num_node = 0; num_node < 3; ++num_node)
 					{
-						if (check_bit(face_states[num_direction][num_cell], num_out_face)) continue;
+						Vector3 x = vec_x[num_cell].x[num_out_face][num_node];
 
-						//GetNodes
-						for (int num_node = 0; num_node < 3; ++num_node)
-						{
-							Vector3 x = vec_x[num_cell].x[num_out_face][num_node];
+						cell_local x0 = vec_x0[num_direction][posX0++];
 
-							cell_local x0 = vec_x0[num_direction][posX0++];
+						ShortId num_in_face = x0.in_face_id;
+						Type s = x0.s;
+						Vector2 X0 = x0.x0;
 
-							ShortId num_in_face = x0.in_face_id;
-							Type s = x0.s;
-							Vector2 X0 = x0.x0;
+						Type I_x0 = CalculateIllumeOnInnerFace(pairs[num_cell * base + num_in_face], inter_coef[num_cell * base + num_in_face]);
 
-							Type I_x0 = CalculateIllumeOnInnerFace(num_in_face, grid.faces, cell,  (*inter_coef)[num_cell * base + num_in_face]);
+						I[num_node] = GetCurIllum(x, s, I_x0, int_scattering_local[num_direction * count_cells + num_cell], phys_local[num_cell]);
 
-							I[num_node] = GetCurIllum(x, s, I_x0, int_scattering[num_direction * count_cells + num_cell], *cell);
+					}//num_node
 
-						}//num_node
-
-						// если хранить не знгачени€ у коэфф. интерпол€ции
-						{
-							//Vector3 coef;
-							//if (num_out_face == 3)
-							//	coef = inclined_face_inverse * I;// GetInterpolationCoefInverse(inclined_face_inverse, I);
-							//else
-							//	coef = straight_face_inverse * I;// GetInterpolationCoefInverse(straight_face_inverse, I);
-						}
-#if 0// в id_r лежит €чейка. а не грань
-						const int id_face_ = cell->geo.id_faces[num_out_face]; //номер грани
-						const int id_face = grid.faces[id_face_].geo.id_r;  // признак √” + св€зь с глобальной нумерацией
-						cell->illum_val.coef_inter[num_out_face] = I;  //coef					
-						if (id_face >= 0)
-						{
-							grid.cells[id_face / base].illum_val.coef_inter[id_face % base] = I;
-						}
-#else															 
-						//cell->illum_val.coef_inter[num_out_face] = I;  //coef					
-						(*inter_coef)[num_cell * base + num_out_face] = I;
-						const int id_face = pairs[num_cell * base + num_out_face];
-						if (id_face >= 0)
-						{
-							//grid.cells[id_face / base].illum_val.coef_inter[id_face % base] = I;
-							(* inter_coef)[id_face] = I;
-						}
-#endif
-
-					} //num_out_face						
-				}
-
-				/*---------------------------------- конец FOR по €чейкам----------------------------------*/
-				loc_norm = ReCalcIllum(num_direction, grid.cells, *inter_coef, Illum);
-			}
-			/*---------------------------------- конец FOR по направлени€м----------------------------------*/
-
-			if (loc_norm > norm)
-			{
-#pragma omp critical
-				{
-					if (loc_norm > norm)
+					inter_coef[num_cell * base + num_out_face] = I;
+					const int id_face = pairs[num_cell * base + num_out_face];
+					if (id_face >= 0)
 					{
-						norm = loc_norm;
+						inter_coef[id_face] = I;
 					}
-				}
+
+				} //num_out_face	
+
 			}
-		}
 
-		if (solve_mode.max_number_of_iter > 1)  // пропуск первой итерации
+			/*---------------------------------- конец FOR по €чейкам----------------------------------*/
+			norm = ReCalcIllum(num_direction, inter_coef, loc_illum);
+
+		}
+		/*---------------------------------- конец FOR по направлени€м----------------------------------*/
+				
+
+		MPI_Gatherv(loc_illum.data(), loc_illum.size(), MPI_DOUBLE, Illum.data(), send_count_illum.data(), disp_illum.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+		if (myid == 0)		
 		{
-			GetIntScattering(count_cells, grid_direction, Illum, int_scattering);
+			if (solve_mode.max_number_of_iter > 1)  // пропуск первой итерации
+			{
+				GetIntScattering(count_cells, grid_direction, Illum, int_scattering);
+			}
+
+			_clock += omp_get_wtime();
+			WRITE_LOG("Error:= " << norm << '\n' << "End iter_count number: " << count << " time= " << _clock << '\n');									
 		}
+
+		MPI_Barrier(MPI_COMM_WORLD); // ждем расчЄт интеграла рассе€ни€
+
+		MPI_Scatterv(int_scattering.data(), send_count_scattering.data(), disp_scattering.data(), MPI_DOUBLE,
+			int_scattering_local.data(), int_scattering_local.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 		
-		_clock += omp_get_wtime();
 
-		WRITE_LOG("Error:= " << norm << '\n' << "End iter_count number: " << count << "time= " << _clock << '\n');
-
-		count++;		
+		count++;
 	} while (norm > solve_mode.accuracy && count < solve_mode.max_number_of_iter);
 
+	// wait все узлы
+	if (myid == 0)
+	{
+		ReCalcIllumGlobal(grid_direction.size, grid.cells, Illum);
+	}
 
 	return 0;
 }
@@ -557,28 +653,6 @@ val /= base; \
 
 static Type IntegarteDirection(const vector<Type>& Illum, const grid_directions_t& grid_direction)
 {		
-#ifdef SORT_ILLUM
-	std::vector<Type> I(grid_direction.size);
-	int i = 0;
-	Type illum_cell;
-	for (auto& dir : grid_direction.directions)
-	{
-		GET_FACE_TO_CELL(illum_cell, (&Illum[i * base]), 0);
-		I[i / base] += illum_cell * dir.area;
-		i += base;
-	}
-
-	auto cmp{ [](const Type left, const Type right) { return left < right; } };
-	std::sort(I.begin(), I.end(), cmp);
-
-	Type res = 0;
-	for (size_t i = 0; i < grid_direction.size; i++)
-	{
-		res += I[i];
-	}
-
-#else
-	
 	Type res = 0;
 	Type illum_cell;
 	int i = 0;
@@ -588,8 +662,6 @@ static Type IntegarteDirection(const vector<Type>& Illum, const grid_directions_
 		res += illum_cell * dir.area;
 		i++; // = base;
 	}	
-#endif
-
 	return res / grid_direction.full_area;
 }
 static int MakeEnergy(const grid_directions_t& grid_direction, std::vector<elem_t>& cells) {
@@ -772,4 +844,6 @@ int TestDivStream(const std::vector<Vector3>& centers_face, grid_t& grid)
 	}
 	return 0;
 }
+
+
 #endif //ILLUM

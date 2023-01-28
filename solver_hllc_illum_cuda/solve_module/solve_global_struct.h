@@ -92,9 +92,13 @@ struct geo_cell_t
 };
 struct illum_value_t
 {
-	//std::vector<Type> int_scattering; // (count_cells* count_directions, 0);
+	//Type density;
+	Type absorp_coef;
+	Type rad_en_loose_rate;
 
 	std::vector<Type> illum; //num_dir*base
+
+	//std::vector<Type> int_scattering; // (count_cells* count_directions, 0);	
 	Type energy;
 	Vector3 stream;
 
@@ -106,10 +110,6 @@ struct illum_value_t
 	Vector3 div_impuls;
 
 	// сейчас эти переменные лежат отдельно(они нужны дл€ статического расчЄта излучени€)
-
-	//Type density;
-	Type absorp_coef;
-	Type rad_en_loose_rate;
 
 	//Vector3 coef_inter[base]; // коэффициенты интерпол€ции 
 
