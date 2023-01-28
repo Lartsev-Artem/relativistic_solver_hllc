@@ -178,11 +178,12 @@ int RunSolveModule(const std::string& name_file_settings)
 	WriteFileSolution(adress_solve + std::to_string(res_count++), Illum, grid.cells); //печать начальной сетки
 
 	WRITE_LOG("Start main task\n");
-
+	
 	while (t < hllc_cfg.T)
 	{	
 		Type time_step = -omp_get_wtime();
 		HLLC_STEP(hllc_cfg.tau, grid);
+
 
 #ifdef ILLUM
 

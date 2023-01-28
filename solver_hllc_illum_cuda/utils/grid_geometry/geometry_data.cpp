@@ -489,7 +489,7 @@ int SetTypeOfBound(const std::vector<Vector3>& centers, const std::vector<Normal
 					if(Vector2(P[1], P[2]).norm() < 0.03)
 						all_pairs_face[id] = eBound_OutSource; // ИСТОЧНИК джет	
 					else
-						all_pairs_face[id] = eBound_FreeBound; // свободная поверхность
+						all_pairs_face[id] = eBound_InnerSource; // свободная поверхность
 #else
 					all_pairs_face[id] = eBound_OutSource; // излучающее дно			
 #endif

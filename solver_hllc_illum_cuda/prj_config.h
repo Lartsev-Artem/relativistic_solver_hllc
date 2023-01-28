@@ -9,11 +9,13 @@
 
 //#define UTILS
 
+#define WRITE_LOG_ON_SCREAN //писать лог не в файл, а на экран
+
 #endif
 
 #define NUMBER_OF_MEASUREMENTS 3
 
-//#define BUILD  // запуск модуля построителя графов
+#define BUILD  // запуск модуля построителя графов
 
 //#define MAKE   // запуск модуля подготовительных расчётов для излучения
 
@@ -25,10 +27,8 @@
 
 #define WRITE_GLOBAL_LOG	// писать лог файл
 
-#define WRITE_LOG_ON_SCREAN
-
 #if defined BUILD || defined MAKE  //todo rename on BUILD_DATA_TO_ILLUM
-//#define ONLY_GEO_DATA
+#define ONLY_GEO_DATA
 #endif
 
 #if defined UTILS && !defined SOLVE

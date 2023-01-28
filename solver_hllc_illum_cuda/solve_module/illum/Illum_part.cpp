@@ -422,7 +422,7 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 	Type norm = 0;	
 	
 	const int number_of_trhed = 4;
-	omp_set_num_threads(number_of_trhed);
+	//omp_set_num_threads(number_of_trhed);
 
 	static std::vector<std::vector<Vector3>> inter_coef_all(number_of_trhed);
 	for (size_t i = 0; i < number_of_trhed; i++)
