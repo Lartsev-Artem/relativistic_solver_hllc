@@ -9,7 +9,7 @@
 
 //#define HLLC
 
-//#define RHLLC
+#define RHLLC
 
 #if NUMBER_OF_MEASUREMENTS == 3 // излучение доступно только для 3d
 
@@ -26,6 +26,8 @@
 #endif
 
 #ifdef USE_MPI
+
+#include "mpi.h"
 
 #ifdef ILLUM
 #define ILLUM_MPI

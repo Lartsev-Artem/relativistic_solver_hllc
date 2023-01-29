@@ -5,7 +5,7 @@
 #ifdef USE_CUDA
 #include "global_def.h"
 
-#include "solve_module/solve_config.h"
+//#include "solve_module/solve_config.h"
 
 
 //************Global Value**********************

@@ -232,7 +232,7 @@ int InitDevice(const int num_dir, const int num_cell, const int mod) {
 
     if (CheckError(cudaMalloc(&dev_directions, num_dir * NUMBER_OF_MEASUREMENTS * sizeof(double)), "cudaMalloc failed!")) return 1;
     if (CheckError(cudaMalloc(&dev_squares, num_dir * sizeof(double)), "cudaMalloc failed!")) return 1;
-    if (CheckError(cudaMalloc(&dev_illum, base * num_dir * num_cell * sizeof(double)), "cudaMalloc failed!")) return 1;
+    if (CheckError(cudaMalloc(&dev_illum, 4 * num_dir * num_cell * sizeof(double)), "cudaMalloc failed!")) return 1;
     if (CheckError(cudaMalloc(&dev_int_scattering, num_dir * num_cell * sizeof(double)), "cudaMalloc failed!")) return 1;
 
     if (mod) //extended
@@ -266,8 +266,9 @@ int HostToDevice(const grid_directions_t& host_directions, std::vector<Type>& ho
             i++;
         }
                 
-        if (CheckError(cudaMemcpy(&dev_square_surface, &host_directions.full_area, 1 * sizeof(double), cudaMemcpyHostToDevice),
-            "cudaMemcpy failed square_surface!")) return 1;
+        dev_square_surface = host_directions.full_area;
+        /*if (CheckError(cudaMemcpy(&dev_square_surface, &host_directions.full_area, 1 * sizeof(double), cudaMemcpyHostToDevice),
+            "cudaMemcpy failed square_surface!")) return 1;*/
 
         if (CheckError(cudaMemcpy( dev_directions, dev_dir.data(), dev_dir.size() * sizeof(dev_Vector3), cudaMemcpyHostToDevice),
             "cudaMemcpy failed dir!")) return 1;

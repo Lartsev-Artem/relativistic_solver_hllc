@@ -21,7 +21,9 @@
 
 #define SOLVE  // запуск модуля решения
 
+#if !__NVCC__
 #define USE_MPI  // подключение технологии mpi
+#endif
 
 #define USE_CUDA  // подключение технологии cuda
 

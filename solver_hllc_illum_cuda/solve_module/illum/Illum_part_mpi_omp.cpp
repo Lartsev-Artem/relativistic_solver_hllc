@@ -357,9 +357,7 @@ static Type ReCalcIllum(const int num_dir, const std::vector<Vector3>& inter_coe
 		Type norm_loc = -1;
 		const int size = inter_coef.size()/base;
 		const int shift_dir = num_dir * size;
-
-		int myid; MPI_Comm_rank(MPI_COMM_WORLD, &myid);		
-
+	
 //#pragma omp for
 		for (int num_cell = 0; num_cell < size; num_cell++)
 		{
@@ -370,10 +368,10 @@ static Type ReCalcIllum(const int num_dir, const std::vector<Vector3>& inter_coe
 				const int id = base * (shift_dir + num_cell) + i;
 				{					
 					Type buf_norm = fabs(Illum[id] - curI) / curI;
-					if (curI < 1e-250) buf_norm = 1;
+					//if (curI < 1e-250) buf_norm = 1;
 					if (buf_norm > norm_loc) norm_loc = buf_norm;
 				}
-				Illum[id] = curI;			
+				Illum[id] = curI;	
 			}
 			//cells[num_cell].illum_val.illum[num_dir] /= base; //пересчёт по направлению для расчёта энергий и т.д.
 		}
@@ -392,16 +390,21 @@ static Type ReCalcIllum(const int num_dir, const std::vector<Vector3>& inter_coe
 
 static Type ReCalcIllumGlobal(const int dir_size, std::vector<elem_t>& cells, const std::vector<Type>& Illum)
 {
-	const int size = cells.size();
-	for (size_t num_dir = 0; num_dir < dir_size; num_dir++)
+	
+#pragma omp parallel default(none) shared(dir_size, cells,Illum)
 	{
-		const int shift_dir = num_dir * size;
-		for (int num_cell = 0; num_cell < size; num_cell++)
+		const int size = cells.size();
+#pragma omp for
+		for (int num_dir = 0; num_dir < dir_size; num_dir++)
 		{
-			for (int i = 0; i < base; i++)
+			const int shift_dir = num_dir * size;
+			for (int num_cell = 0; num_cell < size; num_cell++)
 			{
-				const int id = base * (shift_dir + num_cell) + i;
-				cells[num_cell].illum_val.illum[num_dir * base + i] = Illum[id]; //на каждой грани по направлениям
+				for (int i = 0; i < base; i++)
+				{
+					const int id = base * (shift_dir + num_cell) + i;
+					cells[num_cell].illum_val.illum[num_dir * base + i] = Illum[id]; //на каждой грани по направлениям
+				}
 			}
 		}
 	}
@@ -467,7 +470,8 @@ int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vecto
 		Type _clock = -omp_get_wtime();
 		norm = -1;		
 		
-#pragma omp parallel default(none) shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, int_scattering,Illum, norm, inter_coef_all,local_size)
+#pragma omp parallel default(none) shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, int_scattering,Illum, \
+		norm, inter_coef_all,local_size, int_scattering_local, phys_local, loc_illum)
 		{
 			Type loc_norm = -1;
 			const int num = omp_get_thread_num();
@@ -521,7 +525,7 @@ int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vecto
 						(*inter_coef)[face_block_id + num_out_face] = I;
 						if (out_id_face >= 0)
 						{
-							(* inter_coef)[out_id_face] = I;
+							(*inter_coef)[out_id_face] = I;
 						}
 
 					} //num_out_face	
@@ -546,27 +550,35 @@ int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vecto
 			}
 		} // end omp
 
+		//WRITE_LOG_MPI("iter time without send = " << _clock + omp_get_wtime() << '\n', myid);
+
 		MPI_Gatherv(loc_illum.data(), loc_illum.size(), MPI_DOUBLE, Illum.data(), send_count_illum.data(), disp_illum.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);				
 		MPI_Gather(&norm, 1, MPI_DOUBLE, norms.data(), 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-						
+		
+		//WRITE_LOG_MPI("time after MPI_Gatherv = " << _clock + omp_get_wtime() << '\n', myid);
+
 		if (myid == 0)		
 		{			
+			Type int_time = -omp_get_wtime();
 			if (solve_mode.max_number_of_iter > 1)  // пропуск первой итерации
 			{
 				GetIntScattering(count_cells, grid_direction, Illum, int_scattering);
-			}
-
-			_clock += omp_get_wtime();						
+			}			
+		//	WRITE_LOG_MPI("time int= " << int_time + omp_get_wtime() << '\n', myid);
 		}
 
 		MPI_Barrier(MPI_COMM_WORLD); // ждем расчёт интеграла рассеяния		
 		MPI_Scatterv(int_scattering.data(), send_count_scattering.data(), disp_scattering.data(), MPI_DOUBLE,
-			int_scattering_local.data(), int_scattering_local.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+					 int_scattering_local.data(), int_scattering_local.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 		
-						
+		//WRITE_LOG_MPI("time after MPI_Scatterv = " << _clock + omp_get_wtime() << '\n', myid);
+
+		_clock += omp_get_wtime();
 		if (myid == 0)
 		{
-			for (auto n : norms) if (n > norm) norm = n; 			
+			for (auto n : norms) if (n > norm) norm = n; 		
+						
+			WRITE_LOG("Error:= " << norm << '\n' << "End iter_count number: " << count << "time= " << _clock << '\n');
 		}
 		MPI_Bcast(&norm, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
@@ -745,7 +757,7 @@ static int MakeDivImpuls(const grid_directions_t& grid_direction, grid_t& grid)
 int CalculateIllumParam(const grid_directions_t& grid_direction, grid_t& grid) 
 {
 
-#ifdef USE_CUDA
+#if 0 //def USE_CUDA
 	std::vector<Type> energy(grid.size);
 	std::vector<Vector3> stream(grid.size);
 	std::vector<Matrix3> impuls(grid.size);
@@ -755,9 +767,9 @@ int CalculateIllumParam(const grid_directions_t& grid_direction, grid_t& grid)
 		CalculateStream(32, grid.size, grid_direction.size, stream);
 		CalculateImpuls(32, grid.size, grid_direction.size, impuls);
 
-		WriteSimpleFileBin(BASE_ADRESS + "cuda_energy.bin", energy);
-		WriteSimpleFileBin(BASE_ADRESS + "cuda_stream.bin", stream);
-		WriteSimpleFileBin(BASE_ADRESS + "cuda_impuls.bin", impuls);
+		WriteSimpleFileBin(BASE_ADRESS + "Solve\\cuda_energy.bin", energy);
+		WriteSimpleFileBin(BASE_ADRESS + "Solve\\cuda_stream.bin", stream);
+		WriteSimpleFileBin(BASE_ADRESS + "Solve\\cuda_impuls.bin", impuls);
 	}
 	else
 #endif

@@ -25,8 +25,10 @@
 
 #include <omp.h>
 
+#if !__NVCC__
 #if defined USE_MPI
 #include "mpi.h"
+#endif
 #endif
 
 #if !defined CLASTER
