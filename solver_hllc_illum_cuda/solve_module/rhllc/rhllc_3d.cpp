@@ -1,5 +1,5 @@
 #include "../solve_config.h"
-#if defined RHLLC && NUMBER_OF_MEASUREMENTS == 3 && !defined USE_MPI && defined SOLVE
+#if defined RHLLC && NUMBER_OF_MEASUREMENTS == 3 && !defined RHLLC_MPI && defined SOLVE
 #include "../solve_global_struct.h"
 #include "../../file_module/reader_bin.h"
 #include "../../utils/grid_geometry/geometry_solve.h"
@@ -776,10 +776,13 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 				phys_bound_val = cell->phys_val;
 				break;
 			case eBound_InnerSource:
-				//phys_bound_val.d = 0.1; phys_bound_val.v << 0, 0, 0; phys_bound_val.p = 0.1;
-				//rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
+#ifdef Sphere
+				phys_bound_val.d = 0.1; phys_bound_val.v << 0, 0, 0; phys_bound_val.p = 0.1;
+				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
+#else
 				bound_val = cell->conv_val;
 				phys_bound_val = cell->phys_val;
+#endif
 				break;
 			case eBound_OutSource:
 #if defined Cylinder || defined Cone_JET	

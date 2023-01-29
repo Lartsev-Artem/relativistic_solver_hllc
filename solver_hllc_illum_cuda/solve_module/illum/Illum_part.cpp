@@ -7,6 +7,8 @@
 #include "../../global_value.h"
 #include "../../global_def.h"
 
+#include "../../file_module/reader_txt.h"
+
 
 static Type CalculateIllumeOnInnerFace(const int num_in_face, const std::vector<face_t>& faces, elem_t* cell, Vector3& inter_coef)
 {	
@@ -421,7 +423,7 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 	int count = 0;
 	Type norm = 0;	
 	
-	const int number_of_trhed = 4;
+	const int number_of_trhed = 1;
 	omp_set_num_threads(number_of_trhed);
 
 	static std::vector<std::vector<Vector3>> inter_coef_all(number_of_trhed);
@@ -446,8 +448,17 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 			for (register int num_direction = 0; num_direction < count_directions; ++num_direction)
 			{
 				/*---------------------------------- далее FOR по €чейкам----------------------------------*/
+				{
+					std::vector<int> graph(sorted_id_cell[num_direction].begin(), sorted_id_cell[num_direction].end());
+					WriteSimpleFileTxt(BASE_ADRESS + "Debug\\" + "order_graph" + std::to_string(num_direction) + ".txt", graph);
 
+					std::vector<int> faces(face_states[num_direction].begin(), face_states[num_direction].end());
+					WriteSimpleFileTxt(BASE_ADRESS + "Debug\\" + "order_faces" + std::to_string(num_direction) + ".txt", faces);
 
+					std::vector<cell_local> vec(vec_x0[num_direction].begin(), vec_x0[num_direction].end());
+					WriteSimpleFileTxt(BASE_ADRESS + "Debug\\" + "order_vec_x0" + std::to_string(num_direction) + ".txt", vec);
+				}
+				ofstream log_file(BASE_ADRESS + "Debug\\log_full_order.txt");
 				int posX0 = 0;
 				Vector3 I;
 
@@ -458,10 +469,18 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 					elem_t* cell = &grid.cells[num_cell];
 
 					//sumI = 0;
-
+					log_file << num_cell << " - ";
 					for (ShortId num_out_face = 0; num_out_face < base; ++num_out_face)
 					{
-						if (check_bit(face_states[num_direction][num_cell], num_out_face)) continue;
+						log_file << face_states[num_direction][num_cell] << ',' << (int)num_out_face << " - ";
+						if (check_bit(face_states[num_direction][num_cell], num_out_face))
+						{
+							if (pairs[face_block_id + num_out_face] < 0)
+							{
+								inter_coef[face_block_id + num_out_face] = Vector3(0, 0, 0);
+							}
+							continue;
+						}
 
 						//GetNodes
 						for (int num_node = 0; num_node < 3; ++num_node)
@@ -473,7 +492,7 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 							ShortId num_in_face = x0.in_face_id;
 							Type s = x0.s;
 							Vector2 X0 = x0.x0;
-
+							log_file << x0 << "  " << pairs[num_cell * base + num_in_face] << " - ";
 							Type I_x0 = CalculateIllumeOnInnerFace(num_in_face, grid.faces, cell,  (*inter_coef)[num_cell * base + num_in_face]);
 
 							I[num_node] = GetCurIllum(x, s, I_x0, int_scattering[num_direction * count_cells + num_cell], *cell);
@@ -497,9 +516,13 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 							grid.cells[id_face / base].illum_val.coef_inter[id_face % base] = I;
 						}
 #else															 
+
 						//cell->illum_val.coef_inter[num_out_face] = I;  //coef					
 						(*inter_coef)[num_cell * base + num_out_face] = I;
 						const int id_face = pairs[num_cell * base + num_out_face];
+
+						log_file << id_face << "  " << num_cell * base + num_out_face<<' '<< I << " - ";
+
 						if (id_face >= 0)
 						{
 							//grid.cells[id_face / base].illum_val.coef_inter[id_face % base] = I;
@@ -512,6 +535,9 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 
 				/*---------------------------------- конец FOR по €чейкам----------------------------------*/
 				loc_norm = ReCalcIllum(num_direction, grid.cells, *inter_coef, Illum);
+				WriteSimpleFileTxt(BASE_ADRESS + "Debug\\order_" + std::to_string(num_direction) + ".txt", *inter_coef);
+				log_file.close();
+				break;
 			}
 			/*---------------------------------- конец FOR по направлени€м----------------------------------*/
 

@@ -95,10 +95,10 @@ static int SetHllcSettingDefault(hllc_value_t& hllc_set)
 {
 	hllc_set.h = 0.005; // default
 #ifdef ILLUM
-	hllc_set.h = 0.0012548169651948;
+	hllc_set.h = 0.01;//hllc_set.h = 0.0012548169651948;
 	hllc_set.tau = 1e-5;
-	hllc_set.CFL = 0.001;
-	hllc_set.print_timer = 0.001;
+	hllc_set.CFL = 0.7;
+	hllc_set.print_timer = 0.05;
 	hllc_set.T = 1;
 #else //ILUM
 

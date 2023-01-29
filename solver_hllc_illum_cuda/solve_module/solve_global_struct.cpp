@@ -122,4 +122,16 @@ illum_value_t::illum_value_t(const int num_dir)
 	}*/	
 }
 
+std::ostream& operator<< (std::ostream& out, const cell_local& p)
+{
+	out << (int)p.in_face_id << ' ' << p.s << ' ' << p.x0[0] << ' ' << p.x0[1] << '\n';
+	return out;
+}
+
+
+#ifdef  USE_MPI
+MPI_Datatype MPI_flux_t;
+MPI_Datatype MPI_hllc_value_t;
+#endif //  USE_MPI
+
 #endif //SOVLE

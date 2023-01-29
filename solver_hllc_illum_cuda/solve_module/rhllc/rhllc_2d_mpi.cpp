@@ -1,5 +1,5 @@
 #include "../solve_config.h"
-#if defined RHLLC && NUMBER_OF_MEASUREMENTS == 2 && defined USE_MPI
+#if defined RHLLC && NUMBER_OF_MEASUREMENTS == 2 && defined RHLLC_MPI
 #include "../solve_global_struct.h"
 #include "../../file_module/writer_bin.h"
 #include "../../utils/grid_geometry/geometry_solve.h"

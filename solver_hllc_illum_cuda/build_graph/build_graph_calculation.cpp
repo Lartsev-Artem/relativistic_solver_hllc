@@ -93,7 +93,7 @@ int FindInAndOutFaces(const Vector3& direction, const int number_cell, const std
 	//face_state  -0=> выходящая грань,  1=> входящая  face_state.size=4!!!  
 
 	Normals cell = normals[number_cell];
-	const Type eps = 1e-6;
+	const Type eps = 1e-10;
 	for (size_t i = 0; i < 4; ++i) {
 
 		if (cell.n[i].dot(direction) < -eps)

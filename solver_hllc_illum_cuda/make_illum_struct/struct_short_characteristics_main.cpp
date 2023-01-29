@@ -135,10 +135,11 @@ int RunMakeModule(std::string name_file_settings, int a, int b)
 		for (int h = 0; h < count_cells; ++h)
 		{
 			num_cell = sorted_id_cell[num_direction][h];
-
+			
 			int face_state = 0;
 			GetInAndOutFaces(direction, normals[num_cell], face_state);
 			face_states[num_cell] = face_state;
+
 
 			for (ShortId num_out_face = 0; num_out_face < base; ++num_out_face)
 			{
@@ -154,8 +155,7 @@ int RunMakeModule(std::string name_file_settings, int a, int b)
 
 		if (WriteSimpleFileBin(name_file_state_face + std::to_string(num_direction) + ".bin", face_states)) RETURN_ERR("Error vec_x");
 		if (WriteSimpleFileBin(name_file_x0_loc + std::to_string(num_direction) + ".bin", vec_x0)) RETURN_ERR("Error vec_x");
-
-		printf("End direction number #%d\n", num_direction);
+		
 		WRITE_LOG("End direction number #" << num_direction << '\n');
 	}
 	/*---------------------------------- конец FOR по направлениям----------------------------------*/

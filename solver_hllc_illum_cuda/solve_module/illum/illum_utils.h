@@ -21,5 +21,15 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 int SolveIllumAndHLLC(const Type tau, std::vector<elem_t>& cells);
 int CalculateIllumParam(const grid_directions_t& grid_direction, grid_t& grid);
 
+Type BoundaryConditions(const int type_bound, Vector3& inter_coef);
+
+#ifdef USE_MPI
+int InitSendDispIllumArray(const int myid, const int np, const int count_directions, const int count_cells);
+int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vector< std::vector<int>>& face_states, const std::vector<int>& pairs,
+	const std::vector < std::vector<cell_local>>& vec_x0, std::vector<BasePointTetra>& vec_x, const std::vector < std::vector<int>>& sorted_id_cell,
+	//const std::vector<Type>& res_inner_bound, 
+	grid_t& grid, std::vector<Type>& Illum, std::vector<Type>& int_scattering);
+#endif
+
 #endif //ILLUM
 #endif //ILLUM_UTILS_H

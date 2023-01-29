@@ -66,30 +66,72 @@ int InitIllum(file_name main_dir, grid_t& grid)
 	return 0;
 }
 
-#endif //ILLUM
 
+Type BoundaryConditions(const int type_bound, Vector3& inter_coef)
+{
+	Type I0 = 0;
+	switch (type_bound)
+	{
+	case eBound_OutSource: // дно конуса
+		I0 = 30;
+		break;
+	case eBound_FreeBound:
+		I0 = 0;
+		break;
 
-Matrix3 IntegarteDirection9(const int num_cell, const vector<Type>& Illum, const vector<Vector3>& directions, const vector<Type>& squares, const Type scuare_surface) {
-	Matrix3 res = Matrix3::Zero();
-	int n = squares.size();  // number of directions
-	int m = Illum.size() / n;  // number of cells
+	case eBound_LockBound:
+		I0 = 0;
+		break;
 
-	for (size_t i = 0; i < 3; i++)
-		for (size_t k = 0; k < 3; k++)
+	case eBound_InnerSource:  // внутренняя граница	
+	{
+#if 0
+		id_try_pos++;
+		grid[num_cell].nodes_value[num_in_face] = Vector3(res_on_inner_bound, res_on_inner_bound, res_on_inner_bound);
+		return res_on_inner_bound;
 
-			for (size_t j = 0; j < n; j++) {
-				res(i, k) += directions[j][i] * directions[j][k] * (Illum[m * j + num_cell] * squares[j]);
-			}
+		Type data = res_inner_bound[ShiftRes + pos_in_res++]; // защита на выход из диапазона??
+		if (data >= 0) //данные от пересечения с диском или шаром
+		{
+			/*
+				 Проверить порядок. Данные в массиве должны лежать в соответствии с упорядоченным графом
+				 от направления к направлению
+			*/
+			return res_on_inner_bound; // I_x0;
+			return data;
+		}
+		else // определяющимм являются противолежаащие грани (возможен расчет с учетом s=(x-x0).norm())
+		{
 
-	return res / scuare_surface;
-}
-int MakeImpuls(const vector<Type>& Illum, const vector<Vector3>& directions, const vector<Type>& squares, const Type scuare_surface, vector<Matrix3>& impuls) {
+			// результат не вполне понятен. Пока лучше использовать константу или другие параметры области (шар == граница)
 
-	const int n = impuls.size();
+			//+dist_try_surface			
+			int id = id_try_surface[ShiftTry + id_try_pos - 1];  // будет лежать id грани			
+			const int cell = id / 4;
+			const int face = id % 4;
 
-	for (size_t i = 0; i < n; ++i) {
-		impuls[i] = IntegarteDirection9(i, Illum, directions, squares, scuare_surface);
+			Vector3 coef = grid[cell].nodes_value[face];
+			Vector2	x0_local = X0[ShiftX0 + posX0++];//grid[num_cell].x0_loc[num_in_face_dir];
+
+			I_x0 = x0_local[0] * coef[0] + x0_local[1] * coef[1] + coef[2];
+
+			//if (I_x0 < 0) I_x0 = 0;
+			return  res_on_inner_bound; // I_x0;
+
+		}
+#endif
+		I0 = 30;
+		break;
+	}
+	default:
+
+		WRITE_LOG("unknown bound type in illum\n");
+		I0 = 0;
+		break;
 	}
 
-	return 0;
+	inter_coef = Vector3(I0, I0, I0);
+	return I0;
 }
+
+#endif //ILLUM

@@ -1,6 +1,10 @@
 #include "../solve_config.h"
 #if defined ILLUM && defined SOLVE && defined USE_MPI
 
+#include "../../file_module/reader_bin.h"
+#include "../../file_module/reader_txt.h"
+#include "../../file_module/writer_bin.h"
+
 #include "illum_utils.h"
 
 #include "../solve_global_struct.h"
@@ -8,93 +12,81 @@
 #include "../../global_def.h"
 #include "../solve_utils.h"
 
+static std::vector<int> send_count;
+static std::vector<int> disp;
 
-static Type CalculateIllumeOnInnerFace(const int neigh_id, Vector3& inter_coef)
-{	
-	//const int id_face_ = cell->geo.id_faces[num_in_face]; //номер грани
-	//const int neigh_id = faces[id_face_].geo.id_r;  // признак ГУ + связь с глобальной нумерацией
-	Type I_x0 = 0;
+static std::vector<int> send_count_illum;
+static std::vector<int> disp_illum;
 
-	switch (neigh_id)
+static std::vector<int> send_count_scattering;
+static std::vector<int> disp_scattering;
+
+static std::vector<flux_t> phys_local; 
+static std::vector<Vector3> inter_coef; 
+static std::vector<Type> loc_illum; 	
+static std::vector<Type>int_scattering_local;
+
+int InitSendDispIllumArray(const int myid, const int np, const int count_directions, const int count_cells)
+{
+	GetSend(np, count_directions, send_count);
+	GetDisp(np, count_directions, disp);
+
+	send_count_illum.resize(np);
+	send_count_scattering.resize(np);
+
+	disp_illum.resize(np);
+	disp_scattering.resize(np);
+
+	for (int i = 0; i < np; i++)
 	{
-	case eBound_OutSource: // дно конуса
-		inter_coef = Vector3(30, 30, 30);//cell->illum_val.coef_inter[num_in_face] = Vector3(30, 30, 30);
-		return 30;
-	case eBound_FreeBound:
-		//cell->illum_val.coef_inter[num_in_face] = Vector3(0, 0, 0);
-		inter_coef = Vector3(0, 0, 0);
-		/*Граничные условия*/
-		//I_x0 = BoundaryFunction(num_cell, x, direction, illum_old, directions, squares);
-		return I_x0;
+		send_count_illum[i] = send_count[i] * base * count_cells;
+		send_count_scattering[i] = send_count[i] * count_cells;
 
-	case eBound_LockBound:
-		inter_coef = Vector3(0, 0, 0); //cell->illum_val.coef_inter[num_in_face] = Vector3(0, 0, 0);
-		/*Граничные условия*/
-		//I_x0 = BoundaryFunction(num_cell, x, direction, illum_old, directions, squares);
-		return I_x0;
-
-	case eBound_InnerSource:  // внутренняя граница	
-	{
-#if 0
-		id_try_pos++;
-		grid[num_cell].nodes_value[num_in_face] = Vector3(res_on_inner_bound, res_on_inner_bound, res_on_inner_bound);
-		return res_on_inner_bound;
-
-		Type data = res_inner_bound[ShiftRes + pos_in_res++]; // защита на выход из диапазона??
-		if (data >= 0) //данные от пересечения с диском или шаром
-		{
-			/*
-				 Проверить порядок. Данные в массиве должны лежать в соответствии с упорядоченным графом
-				 от направления к направлению
-			*/
-			return res_on_inner_bound; // I_x0;
-			return data;
-		}
-		else // определяющимм являются противолежаащие грани (возможен расчет с учетом s=(x-x0).norm())
-		{
-
-			// результат не вполне понятен. Пока лучше использовать константу или другие параметры области (шар == граница)
-
-			//+dist_try_surface			
-			int id = id_try_surface[ShiftTry + id_try_pos - 1];  // будет лежать id грани			
-			const int cell = id / 4;
-			const int face = id % 4;
-
-			Vector3 coef = grid[cell].nodes_value[face];
-			Vector2	x0_local = X0[ShiftX0 + posX0++];//grid[num_cell].x0_loc[num_in_face_dir];
-
-			I_x0 = x0_local[0] * coef[0] + x0_local[1] * coef[1] + coef[2];
-
-			//if (I_x0 < 0) I_x0 = 0;
-			return  res_on_inner_bound; // I_x0;
-
-		}
-#endif
-		inter_coef = Vector3(30, 30, 30);//cell->illum_val.coef_inter[num_in_face] = Vector3(30, 30, 30);
-		return 30;
+		disp_illum[i] = disp[i] * base * count_cells;
+		disp_scattering[i] = disp[i] * count_cells;
 	}
 
-	default:
 	{
+		int len[3 + 1] = { 1,3,1,  1 };
+		MPI_Aint pos[4] = { offsetof(flux_t, d), offsetof(flux_t, v),offsetof(flux_t, p) ,sizeof(flux_t) };
+		MPI_Datatype typ[4] = { MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE, MPI_UB };
+		MPI_Type_struct(4, len, pos, typ, &MPI_flux_t);
+		MPI_Type_commit(&MPI_flux_t);
+	}
 
-		//Vector3 coef = grid[num_cell].nodes_value[num_in_face];
-		Vector3 coef = inter_coef; // cell->illum_val.coef_inter[num_in_face];
+	const int local_size = send_count[myid];
+
+	phys_local.resize(count_cells);
+	inter_coef.resize(count_cells * base, Vector3::Zero());
+	loc_illum.resize(count_cells * base * local_size, 0); //кроме id 0	
+	int_scattering_local.resize(count_cells * local_size, 0);
+
+	return 0;
+}
+
+static Type CalculateIllumeOnInnerFace(const int neigh_id, Vector3& inter_coef)
+{		
+	Type I_x0 = 0;
+
+	if (neigh_id < 0)
+	{
+		I_x0 = BoundaryConditions(neigh_id, inter_coef);
+	}
+	else	
+	{
+		Vector3 coef = inter_coef;
 
 		//сейчас храним значения а не коэффициента интерполяции
-
-		//Vector2	x0_local = X0[ShiftX0 + posX0++]; // grid[num_cell].x0_loc[num_in_face_dir];
-		//I_x0 = x0_local[0] * coef[0] + x0_local[1] * coef[1] + coef[2];
-
 		I_x0 = (coef[0] + coef[1] + coef[2]) / 3;
 
 		if (I_x0 < 0)
 		{
+			WRITE_LOG("Error illum value\n");
 			return 0;
-		}
+		}			
+	}
 
-		return I_x0;
-	}
-	}
+	return I_x0;
 }
 
 static Type GetS(const int num_cell, const Vector3& direction, const std::vector<Type>& illum_old,
@@ -356,6 +348,9 @@ static Type ReCalcIllum(const int num_dir, const std::vector<Vector3>& inter_coe
 		const int size = inter_coef.size()/base;
 		const int shift_dir = num_dir * size;
 
+		int myid; MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+		WRITE_LOG_MPI("size= " << size <<" dir= "<< num_dir << '\n', myid);
+
 //#pragma omp for
 		for (int num_cell = 0; num_cell < size; num_cell++)
 		{
@@ -364,8 +359,9 @@ static Type ReCalcIllum(const int num_dir, const std::vector<Vector3>& inter_coe
 				Vector3 Il = inter_coef[num_cell * base + i]; //cells[num_cell].illum_val.coef_inter[i];
 				const Type curI = (Il[0] + Il[1] + Il[2]) / 3;
 				const int id = base * (shift_dir + num_cell) + i;
-				{
+				{					
 					Type buf_norm = fabs(Illum[id] - curI) / curI;
+					if (curI < 1e-250) buf_norm = 1;
 					if (buf_norm > norm_loc) norm_loc = buf_norm;
 				}
 				Illum[id] = curI;			
@@ -385,7 +381,7 @@ static Type ReCalcIllum(const int num_dir, const std::vector<Vector3>& inter_coe
 	return norm;
 }
 
-static Type ReCalcIllumGlobal(const int dir_size, std::vector<elem_t>& cells, std::vector<Type>& Illum)
+static Type ReCalcIllumGlobal(const int dir_size, std::vector<elem_t>& cells, const std::vector<Type>& Illum)
 {
 	const int size = cells.size();
 	for (size_t num_dir = 0; num_dir < dir_size; num_dir++)
@@ -423,178 +419,94 @@ static int GetIntScattering(const int count_cells, const grid_directions_t& grid
 	return 0;
 }
 
-int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< std::vector<int>>& face_states, const std::vector<int>& pairs,
+int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vector< std::vector<int>>& face_states, const std::vector<int>& pairs,
 	const std::vector < std::vector<cell_local>>& vec_x0, std::vector<BasePointTetra>& vec_x,
 	const std::vector < std::vector<int>>& sorted_id_cell,
 	//const std::vector<Type>& res_inner_bound, 
 	grid_t& grid, std::vector<Type>& Illum, std::vector<Type>& int_scattering)
-{
-	// пусть пока сетка будет на всех узлах
-	const int count_directions = grid_direction.size;
-
+{	
+	const int count_directions = grid_direction.size;	
+	const int count_cells = grid.size;
 	
-	/*const*/ int count_cells = grid.size;
-
-	MPI_Bcast(&count_cells, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
 	int np = 1, myid = 0;
 
 	MPI_Comm_size(MPI_COMM_WORLD, &np);
 	MPI_Comm_rank(MPI_COMM_WORLD, &myid);
-	
-	std::vector<int> send_count;
-	std::vector<int> disp;
-
-	std::vector<int> send_count_illum(np,0);
-	std::vector<int> disp_illum(np,0);
-
-	std::vector<int> send_count_scattering(np,0);
-	std::vector<int> disp_scattering(np,0);
-
-	GetSend(np, count_directions, send_count);
-	GetDisp(np, count_directions, disp);
-
-	for (int i = 0; i < np; i++)
-	{
-		send_count_illum[i] = send_count[i] * base * count_cells;
-		send_count_scattering[i] = send_count[i] * count_cells;
-
-		disp_illum[i] = disp[i] * base * count_cells;
-		disp_scattering[i] = disp[i] * count_cells;
-	}
-
+		
 	const int local_size = send_count[myid];
 	const int local_disp = disp[myid];
-
-	/*
-	нужны:
-	часть интеграла рассеяния (разослать всем)
-	illum after recalc -> прислать всем
-	---
-	сетка не нужна целиком, от неё достаточно взять переменные на старте(phys_val + illum_val)
-	и разослать после расчёта (illum_val)
-
-	struct flux_t
-	{
-		Type d;
-		Vector3 v;
-		Type p;
-	}
-
-	struct illum_value_t
-	{
-		std::vector<Type> illum; //num_dir*base
-		Type energy;
-		Vector3 stream;
-
-		Matrix3 impuls;
-		Type div_stream;
-		Vector3 div_impuls;
-		Type absorp_coef;
-		Type rad_en_loose_rate;
-	}
-
-	struct elem_t
-	{
-		flux_t  phys_val;
-		flux_t  conv_val;
-		illum_value_t illum_val;
-	}
-	*/
-
-	MPI_Datatype MPI_flux_t;
-	{
-		int len[3 + 1] = { 1,3,1,  1 };
-		MPI_Aint pos[4] = { 0,sizeof(Type), sizeof(Vector3) ,sizeof(flux_t) };
-		MPI_Datatype typ[4] = { MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE, MPI_UB };
-		MPI_Type_struct(4, len, pos, typ, &MPI_flux_t);
-		MPI_Type_commit(&MPI_flux_t);
-	}
-
-	MPI_Datatype MPI_illum_t;
-	{
-		int len[2 + 1] = { 1,1, 1 };
-		MPI_Aint pos[3] = { 0, sizeof(Type),sizeof(illum_value_t) };
-		MPI_Datatype typ[3] = { MPI_DOUBLE, MPI_DOUBLE,MPI_UB };
-		MPI_Type_struct(3, len, pos, typ, &MPI_illum_t);
-		MPI_Type_commit(&MPI_illum_t);
-	}
-	MPI_Datatype MPI_elem_t;
-	{
-		int len[2 + 1] = { 1,1, 1 };
-		MPI_Aint pos[3] = { 0, 2 * sizeof(flux_t),sizeof(elem_t) };
-		MPI_Datatype typ[3] = { MPI_flux_t,MPI_illum_t, MPI_UB };
-		MPI_Type_struct(3, len, pos, typ, &MPI_elem_t);
-		MPI_Type_commit(&MPI_elem_t);
-	}
-	MPI_Datatype MPI_elem_t_phys;
-	{
-		int len[1 + 1] = { 1, 1 };
-		MPI_Aint pos[2] = { 0, sizeof(elem_t) };
-		MPI_Datatype typ[2] = { MPI_flux_t, MPI_UB };
-		MPI_Type_struct(2, len, pos, typ, &MPI_elem_t_phys);
-		MPI_Type_commit(&MPI_elem_t_phys);
-	}
-
-
-	printf("Run\n");
-
+		
 	int count = 0;
 	Type norm = -1;
-	
-	std::vector<flux_t> phys_local(count_cells);
+	std::vector<Type> norms;
 
-	static std::vector<Vector3> inter_coef(count_cells * base);
+	if (myid == 0)
+	{
+		int i = 0;
+		for (auto &el : grid.cells)
+		{			
+			phys_local[i++] = el.phys_val;
+			// сюда же absorp_coef, если понадобиться
+		}
 
-	static std::vector<Type> loc_illum(count_cells * base * local_size, 0); //кроме id 0
+		norms.resize(np, -10);
+	}	
+	MPI_Bcast(phys_local.data(), count_cells , MPI_flux_t, 0, MPI_COMM_WORLD);
 
-	static std::vector<Type>int_scattering_local(count_cells * local_size);
-
+		
 	do {
+		
 		Type _clock = -omp_get_wtime();
-
-		norm = -1;
+		norm = -1;		
+		
 		/*---------------------------------- далее FOR по направлениям----------------------------------*/
-
 		for (register int num_direction = 0; num_direction < local_size; ++num_direction)
 		{
+			//inter_coef.assign(inter_coef.size(), Vector3::Zero()); //была ситуация не инициализации границы. Лучше уж ноль, чем мусор
+
 			int posX0 = 0;
-			Vector3 I;
+			Vector3 I;			
 			/*---------------------------------- далее FOR по ячейкам----------------------------------*/
 			for (int h = 0; h < count_cells; ++h)
 			{
 				const int num_cell = sorted_id_cell[num_direction][h];
-
-				//elem_t* cell = &grid.cells[num_cell];
-
-				//sumI = 0;
+				const int face_block_id = num_cell * base;
 
 				for (ShortId num_out_face = 0; num_out_face < base; ++num_out_face)
-				{
-					if (check_bit(face_states[num_direction][num_cell], num_out_face)) continue;
+				{					
+					const int out_id_face = pairs[face_block_id + num_out_face];
+					if (check_bit(face_states[num_direction][num_cell], (int)num_out_face))
+					{
+						//формально обрабатываем мы только выходящие грани, т.к. входящие к этому моменту определены,
+						// но границу надо инициализировать. Не для расчета, но для конечного интегрирования
+						if (out_id_face < 0) 
+						{		
+							BoundaryConditions(out_id_face, inter_coef[face_block_id + num_out_face]);
+						}
+						continue;
+					}
 
 					//GetNodes
 					for (int num_node = 0; num_node < 3; ++num_node)
 					{
-						Vector3 x = vec_x[num_cell].x[num_out_face][num_node];
+						const Vector3 x = vec_x[num_cell].x[num_out_face][num_node];
 
-						cell_local x0 = vec_x0[num_direction][posX0++];
+						const cell_local x0 = vec_x0[num_direction][posX0++];
 
-						ShortId num_in_face = x0.in_face_id;
-						Type s = x0.s;
-						Vector2 X0 = x0.x0;
-
-						Type I_x0 = CalculateIllumeOnInnerFace(pairs[num_cell * base + num_in_face], inter_coef[num_cell * base + num_in_face]);
+						const ShortId num_in_face = x0.in_face_id;
+						const Type s = x0.s;
+						const Vector2 X0 = x0.x0;
+						
+						const Type I_x0 = CalculateIllumeOnInnerFace(pairs[face_block_id + num_in_face], inter_coef[face_block_id + num_in_face]);
 
 						I[num_node] = GetCurIllum(x, s, I_x0, int_scattering_local[num_direction * count_cells + num_cell], phys_local[num_cell]);
 
 					}//num_node
 
-					inter_coef[num_cell * base + num_out_face] = I;
-					const int id_face = pairs[num_cell * base + num_out_face];
-					if (id_face >= 0)
-					{
-						inter_coef[id_face] = I;
+					inter_coef[face_block_id + num_out_face] = I;													
+					if (out_id_face >= 0)
+					{					
+						inter_coef[out_id_face] = I;
 					}
 
 				} //num_out_face	
@@ -603,39 +515,43 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 
 			/*---------------------------------- конец FOR по ячейкам----------------------------------*/
 			norm = ReCalcIllum(num_direction, inter_coef, loc_illum);
-
 		}
-		/*---------------------------------- конец FOR по направлениям----------------------------------*/
-				
-
-		MPI_Gatherv(loc_illum.data(), loc_illum.size(), MPI_DOUBLE, Illum.data(), send_count_illum.data(), disp_illum.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
+		/*---------------------------------- конец FOR по направлениям----------------------------------*/						
+			
+		MPI_Gatherv(loc_illum.data(), loc_illum.size(), MPI_DOUBLE, Illum.data(), send_count_illum.data(), disp_illum.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);				
+		MPI_Gather(&norm, 1, MPI_DOUBLE, norms.data(), 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+						
 		if (myid == 0)		
-		{
+		{			
 			if (solve_mode.max_number_of_iter > 1)  // пропуск первой итерации
 			{
 				GetIntScattering(count_cells, grid_direction, Illum, int_scattering);
 			}
 
-			_clock += omp_get_wtime();
-			WRITE_LOG("Error:= " << norm << '\n' << "End iter_count number: " << count << " time= " << _clock << '\n');									
+			_clock += omp_get_wtime();						
 		}
 
-		MPI_Barrier(MPI_COMM_WORLD); // ждем расчёт интеграла рассеяния
-
+		MPI_Barrier(MPI_COMM_WORLD); // ждем расчёт интеграла рассеяния		
 		MPI_Scatterv(int_scattering.data(), send_count_scattering.data(), disp_scattering.data(), MPI_DOUBLE,
 			int_scattering_local.data(), int_scattering_local.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 		
+						
+		if (myid == 0)
+		{
+			for (auto n : norms) if (n > norm) norm = n; 			
+		}
+		MPI_Bcast(&norm, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 		count++;
 	} while (norm > solve_mode.accuracy && count < solve_mode.max_number_of_iter);
-
-	// wait все узлы
-	if (myid == 0)
+	
+	
+	if (myid == 0) // это уйдет, когда все интегралы перейдут в cuda
 	{
-		ReCalcIllumGlobal(grid_direction.size, grid.cells, Illum);
-	}
-
+		ReCalcIllumGlobal(grid_direction.size, grid.cells, Illum);		
+		//WriteFileSolution(BASE_ADRESS + "Illum_result.txt", Illum);
+	}		
+		
 	return 0;
 }
 

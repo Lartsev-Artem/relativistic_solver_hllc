@@ -61,7 +61,7 @@ static int WriteNormalAndSquaresFile(const std::string& name_file_normals, const
 	for (size_t i = 0; i < n; i++)
 	{
 		for (size_t j = 0; j < base; j++)
-		{
+		{			
 			//fwrite(normals.data(), sizeof(Normals), n, file_norm.get());
 			fwrite(&normals[i].n[j], sizeof(Vector3), 1, file_norm.get());
 		}

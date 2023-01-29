@@ -215,6 +215,8 @@ int GetInAndOutFaces(const Vector3& direction, const Normals& normals, int& face
 
 	for (size_t i = 0; i < base; ++i) 
 	{
+		Type sca = normals.n[i].dot(direction);
+
 		if (normals.n[i].dot(direction) < -eps)
 			face_state = set_bit(face_state, i);
 		else

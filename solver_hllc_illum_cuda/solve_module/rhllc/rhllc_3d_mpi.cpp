@@ -1,5 +1,5 @@
 #include "../solve_config.h"
-#if defined RHLLC && NUMBER_OF_MEASUREMENTS == 3 && defined USE_MPI
+#if defined RHLLC && NUMBER_OF_MEASUREMENTS == 3 && defined RHLLC_MPI
 #include "../solve_global_struct.h"
 #include "../../file_module/reader_bin.h"
 #include "../../utils/grid_geometry/geometry_solve.h"
@@ -269,32 +269,6 @@ inline int GetLocalId(const int neighb_glob, const int shift_node)
 	//{
 	//	return neighb_glob;
 	//}
-}
-
-void GetSend(const int np, const int n, std::vector<int>& send_count)
-{
-	// вычисление  числа тел на узел
-	send_count.resize(np, n / np);
-
-	if (n % np)  // если число процессов не кратно размерности задачи 
-	{
-		for (int i = 0; i < n % np; i++) // первые процессы берут на единицу больше тел
-			++send_count[i];
-	}
-}
-
-void GetDisp(const int np, const int n, std::vector<int>& disp)
-{
-	// вычисление сдвигов  на узел
-	disp.resize(np, 0);
-	for (int i = 1; i < np; i++)
-		disp[i] = i * (n / np);
-
-	if (n % np)  // если число процессов не кратно размерности задачи 
-	{
-		for (int i = 1; i < np; i++) // смещения для процессов за ними увеличивается начиная со второго
-			++disp[i];
-	}
 }
 
 int  RHLLC_MPI(std::string& main_dir,

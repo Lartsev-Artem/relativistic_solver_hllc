@@ -11,6 +11,15 @@ struct hllc_value_t
 	Type print_timer;
 	
 	Type tau;
+
+	hllc_value_t()
+	{
+		T = 66; 1;
+		CFL = 66; 0.5;
+		h = 66; 0.1;
+		tau = 66; 0.01;
+		print_timer = 66; 0.05;
+	}
 };
 
 struct solve_mode_t

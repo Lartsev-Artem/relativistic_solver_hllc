@@ -104,7 +104,7 @@ int ReWriteGeoFiles(file_name name_file_geometry_faces, file_name name_file_geom
 int HLLC_INIT(file_name file_settings_hllc, hllc_value_t& hllc_set,
 	file_name file_init_value, std::vector<elem_t>& cells)
 {
-#if !defined USE_MPI
+#if !defined RHLLC_MPI
 #if defined HLLC && NUMBER_OF_MEASUREMENTS == 3 
 	return InitHLLC(file_settings_hllc, hllc_set, file_init_value, cells);  //Начальные данные для HLLC
 #elif defined RHLLC && NUMBER_OF_MEASUREMENTS == 3 
@@ -119,7 +119,7 @@ int HLLC_INIT(file_name file_settings_hllc, hllc_value_t& hllc_set,
 
 int HLLC_STEP(const Type tau, grid_t& grid)
 {
-#if !defined USE_MPI
+#if !defined RHLLC_MPI
 #if defined HLLC && NUMBER_OF_MEASUREMENTS == 3 
 	return HLLC_3d(tau, grid);
 #elif defined RHLLC && NUMBER_OF_MEASUREMENTS == 3 
@@ -134,7 +134,7 @@ int HLLC_STEP(const Type tau, grid_t& grid)
 
 int GetTimeStep(hllc_value_t& hllc_cfg, const grid_t& grid)
 {
-#if !defined USE_MPI
+#if !defined RHLLC_MPI
 #if defined HLLC && NUMBER_OF_MEASUREMENTS == 3 
 	return HllcGetTimeStep(hllc_cfg, grid.cells);
 #elif defined RHLLC && NUMBER_OF_MEASUREMENTS == 3 

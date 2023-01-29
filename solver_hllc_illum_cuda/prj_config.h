@@ -9,7 +9,7 @@
 
 //#define UTILS
 
-#define WRITE_LOG_ON_SCREAN //писать лог не в файл, а на экран
+//#define WRITE_LOG_ON_SCREAN //писать лог не в файл, а на экран
 
 #endif
 
@@ -45,11 +45,11 @@
 
 //#define Step
 
-//#define Cone
+#define Cone
 
 //#define Cone_JET
 
-#define Sphere
+//#define Sphere
 
 //#define Cylinder
 

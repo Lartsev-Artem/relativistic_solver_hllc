@@ -74,7 +74,7 @@ int MakeArrayX(const std::vector<Eigen::Matrix4d>& vertexs, std::vector<BasePoin
 static Vector2 CalculateIllumeOnInnerFace(const int num_in_face, const int neib_id, const Matrix4& vertex_tetra,
 	const Vector3& x, const Vector3& x0,  std::vector<Type>& vec_res_bound) 
 {
-	Vector2 x0_local(-100, -100);
+	Vector2 x0_local(0, 0);
 
 	Type I_x0 = 0;
 	switch (neib_id)

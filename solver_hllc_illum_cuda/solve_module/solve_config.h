@@ -25,6 +25,22 @@
 #include "../solve_short_characteristic_cuda.cuh"
 #endif
 
+#ifdef USE_MPI
+
+#ifdef ILLUM
+#define ILLUM_MPI
+#endif
+
+#ifdef HLLC
+#define HLLC_MPI
+#endif
+
+#ifdef RHLLC
+//#define RHLLC_MPI
+#endif
+
+#endif
+
 #ifndef CLASTER
 //#define RUN_TEST
 #endif

@@ -102,6 +102,8 @@ struct cell_local // дл€ каждой €чейки и каждого направлени€
 	Type s;    //рассто€ние x0-x
 	Vector2 x0; //локальна€ координата входного узла дл€ интерпол€ции
 	ShortId in_face_id; //id выходной грани
+
+	friend std::ostream& operator<< (std::ostream& out, const cell_local& point);
 };
 
 #define OPEN_FSTREAM(file, namefile) \
@@ -109,17 +111,27 @@ file.open(namefile); \
 if (!file.is_open()) RETURN_ERRS("Error : file %s is not open\n", namefile);
 
 
-#define Files_log "File_Logs_illum.txt"
+#define Files_log "File_Logs.txt"
 #ifdef WRITE_GLOBAL_LOG	
 
 #ifdef WRITE_LOG_ON_SCREAN
 #define WRITE_LOG(str){std::cout<<str;}
 #else
+
+
 #define WRITE_LOG(str){  \
 std::ofstream ofile; \
 ofile.open(BASE_ADRESS + Files_log, std::ios::app); \
 ofile << str; \
 ofile.close(); }
+
+#define WRITE_LOG_MPI(str, id){  \
+std::ofstream ofile; \
+ofile.open(BASE_ADRESS + "File_MPI_LOG" + std::to_string(id)+".txt", std::ios::app); \
+ofile << str; \
+ofile.close(); }
+
+
 #endif  //WRITE_LOG_ON_SCREAN
 #else
 #define WRITE_LOG(ofile, str) {}
@@ -175,4 +187,10 @@ fclose(f); \
 #endif //USE_MPI
 
 #define SIGN(a) (a < 0.0 ? -1.0 : 1.0) 
+
+
+#ifdef  USE_MPI
+extern MPI_Datatype MPI_flux_t;
+extern MPI_Datatype MPI_hllc_value_t;
+#endif
 #endif //GLOBAL_DEF

@@ -150,6 +150,7 @@ int ReadIllumGeometry(const int count_dir,
 	MPI_Comm_size(MPI_COMM_WORLD, &np);
 	MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
+	//myid++; np++;
 	GetDisp(np, count_dir, disp);
 	GetSend(np, count_dir, send);		
 #else

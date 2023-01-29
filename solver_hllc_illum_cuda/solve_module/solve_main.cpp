@@ -107,6 +107,11 @@ int RunSolveModule(const std::string& name_file_settings)
 		}
 		WRITE_LOG("Reading geometry grid\n");
 	}
+
+#ifdef USE_MPI
+	MPI_Bcast(&grid.size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+#endif // USE_MPI
+	
 	double _clock;
 
 	//------------------------------ Illume section-----------------------------
@@ -168,6 +173,10 @@ int RunSolveModule(const std::string& name_file_settings)
 		InitIllum(BASE_ADRESS, grid);
 
 	} //myid==0
+
+#ifdef USE_MPI
+	InitSendDispIllumArray(myid, np, grid_direction.size, grid.size);
+#endif
 #endif //ILLUM
 	//------------------------------------------------------------------------------------------------------------
 
@@ -188,52 +197,88 @@ int RunSolveModule(const std::string& name_file_settings)
 
 		WRITE_LOG("Start main task\n");
 	}
-	else
-	{
-		hllc_cfg.T = 1;
+
+#ifdef USE_MPI
+	{		
+		int len[5 + 1] = { 1,1,1,1,1,  1 };
+		MPI_Aint pos[6] = { offsetof(hllc_value_t,T),offsetof(hllc_value_t,CFL),offsetof(hllc_value_t,h)
+			,offsetof(hllc_value_t,print_timer) ,offsetof(hllc_value_t,tau) ,sizeof(hllc_value_t)};
+		MPI_Datatype typ[6] = { MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE, MPI_UB };
+		MPI_Type_struct(6, len, pos, typ, &MPI_hllc_value_t);
+		MPI_Type_commit(&MPI_hllc_value_t);
 	}
+	MPI_Bcast(&hllc_cfg, 1, MPI_hllc_value_t, 0, MPI_COMM_WORLD);
+
+#endif // USE_MPI
 
 	while (t < hllc_cfg.T)
 	{
 		Type time_step = -omp_get_wtime();
-		HLLC_STEP(hllc_cfg.tau, grid);
-
+		
+		if (myid == 0)
+		{
+			HLLC_STEP(hllc_cfg.tau, grid);
+		}
 
 #ifdef ILLUM
 #ifdef USE_MPI
-		MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Barrier(MPI_COMM_WORLD); //ждем газодинамического расчёта
 #endif // USE_MPI
 
 		CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
 
-		CalculateIllumParam(grid_direction, grid);
+#ifdef USE_MPI
+		MPI_Barrier(MPI_COMM_WORLD); //ждем газодинамического расчёта
+#endif // USE_MPI
 
-		SolveIllumAndHLLC(hllc_cfg.tau, grid.cells);
-
-		//energy.swap(prev_energy);
-		//stream.swap(prev_stream);
-#endif
-		t += hllc_cfg.tau;
-		cur_timer += hllc_cfg.tau;
-
-		GetTimeStep(hllc_cfg, grid); //формирование шага по времени
-
-		if (cur_timer >= hllc_cfg.print_timer)
+		if (myid == 0)
 		{
-			WriteFileSolution(adress_solve + std::to_string(res_count++), Illum, grid.cells);
+			CalculateIllumParam(grid_direction, grid);
 
-			//WRITE_LOG("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << '\n');
-			printf("\n t= %f,  tau= %lf,  res_step= %d\n", t, hllc_cfg.tau, res_count);
-			cur_timer = 0;
+			SolveIllumAndHLLC(hllc_cfg.tau, grid.cells);
+
+			//energy.swap(prev_energy);
+			//stream.swap(prev_stream);
+		}
+#endif
+
+		t += hllc_cfg.tau;
+		
+		if (myid == 0)
+		{
+			cur_timer += hllc_cfg.tau;
+
+			GetTimeStep(hllc_cfg, grid); //формирование шага по времени
+
+			if (cur_timer >= hllc_cfg.print_timer)
+			{
+
+				WriteFileSolution(adress_solve + std::to_string(res_count++), Illum, grid.cells);
+
+				//WRITE_LOG("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << '\n');
+				printf("\n t= %f,  tau= %lf,  res_step= %d\n", t, hllc_cfg.tau, res_count);
+				cur_timer = 0;
+			}
+
+			time_step += omp_get_wtime();
+			WRITE_LOG("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << " time= " << time_step << " c\n");
+
 		}
 
-		time_step += omp_get_wtime();
-		WRITE_LOG("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << " time= " << time_step << " c\n");
+#ifdef USE_MPI
+		MPI_Bcast(&hllc_cfg, 1, MPI_hllc_value_t, 0, MPI_COMM_WORLD);
+#endif
 
 	}// while(t < T)
 
 #elif defined ILLUM
+
+#ifdef USE_MPI
+	MPI_CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
+#else
 	CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
+#endif
+	
 
 	if (myid == 0)
 	{
