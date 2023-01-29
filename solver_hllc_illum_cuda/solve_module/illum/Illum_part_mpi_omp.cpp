@@ -1,6 +1,5 @@
-#if 0
 #include "../solve_config.h"
-//#if defined ILLUM && defined SOLVE && defined USE_MPI
+#if defined ILLUM && defined SOLVE && defined USE_MPI
 
 #include "../../file_module/reader_bin.h"
 #include "../../file_module/reader_txt.h"
@@ -23,7 +22,8 @@ static std::vector<int> send_count_scattering;
 static std::vector<int> disp_scattering;
 
 static std::vector<flux_t> phys_local; 
-static std::vector<Vector3> inter_coef; 
+//static std::vector<Vector3> inter_coef; 
+static std::vector<std::vector<Vector3>> inter_coef_all;
 static std::vector<Type> loc_illum; 	
 static std::vector<Type>int_scattering_local;
 
@@ -58,7 +58,16 @@ int InitSendDispIllumArray(const int myid, const int np, const int count_directi
 	const int local_size = send_count[myid];
 
 	phys_local.resize(count_cells);
-	inter_coef.resize(count_cells * base, Vector3::Zero());
+
+	inter_coef_all.resize(omp_get_max_threads());
+	for (int i = 0; i < inter_coef_all.size(); i++)
+	{
+		inter_coef_all[i].resize(count_cells * base);
+	}
+
+	WRITE_LOG("Omp threads in illum= " << inter_coef_all.size() << "\n");
+	//inter_coef.resize(count_cells * base, Vector3::Zero());
+
 	loc_illum.resize(count_cells * base * local_size, 0); //кроме id 0	
 	int_scattering_local.resize(count_cells * local_size, 0);
 
@@ -349,8 +358,7 @@ static Type ReCalcIllum(const int num_dir, const std::vector<Vector3>& inter_coe
 		const int size = inter_coef.size()/base;
 		const int shift_dir = num_dir * size;
 
-		int myid; MPI_Comm_rank(MPI_COMM_WORLD, &myid);
-		WRITE_LOG_MPI("size= " << size <<" dir= "<< num_dir << '\n', myid);
+		int myid; MPI_Comm_rank(MPI_COMM_WORLD, &myid);		
 
 //#pragma omp for
 		for (int num_cell = 0; num_cell < size; num_cell++)
@@ -453,72 +461,91 @@ int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vecto
 		norms.resize(np, -10);
 	}	
 	MPI_Bcast(phys_local.data(), count_cells , MPI_flux_t, 0, MPI_COMM_WORLD);
-
 		
 	do {
 		
 		Type _clock = -omp_get_wtime();
 		norm = -1;		
 		
-		/*---------------------------------- далее FOR по направлениям----------------------------------*/
-		for (register int num_direction = 0; num_direction < local_size; ++num_direction)
+#pragma omp parallel default(none) shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, int_scattering,Illum, norm, inter_coef_all,local_size)
 		{
-			//inter_coef.assign(inter_coef.size(), Vector3::Zero()); //была ситуация не инициализации границы. Лучше уж ноль, чем мусор
+			Type loc_norm = -1;
+			const int num = omp_get_thread_num();
+			std::vector<Vector3>* inter_coef = &inter_coef_all[num];
 
-			int posX0 = 0;
-			Vector3 I;			
-			/*---------------------------------- далее FOR по ячейкам----------------------------------*/
-			for (int h = 0; h < count_cells; ++h)
+			/*---------------------------------- далее FOR по направлениям----------------------------------*/
+#pragma omp for
+			for (register int num_direction = 0; num_direction < local_size; ++num_direction)
 			{
-				const int num_cell = sorted_id_cell[num_direction][h];
-				const int face_block_id = num_cell * base;
+				int posX0 = 0;
+				Vector3 I;
 
-				for (ShortId num_out_face = 0; num_out_face < base; ++num_out_face)
-				{					
-					const int out_id_face = pairs[face_block_id + num_out_face];
-					if (check_bit(face_states[num_direction][num_cell], (int)num_out_face))
+				/*---------------------------------- далее FOR по ячейкам----------------------------------*/
+				for (int h = 0; h < count_cells; ++h)
+				{
+
+					const int num_cell = sorted_id_cell[num_direction][h];
+					const int face_block_id = num_cell * base;
+
+					for (ShortId num_out_face = 0; num_out_face < base; ++num_out_face)
 					{
-						//формально обрабатываем мы только выходящие грани, т.к. входящие к этому моменту определены,
-						// но границу надо инициализировать. Не для расчета, но для конечного интегрирования
-						if (out_id_face < 0) 
-						{		
-							BoundaryConditions(out_id_face, inter_coef[face_block_id + num_out_face]);
+						const int out_id_face = pairs[face_block_id + num_out_face];
+						if (check_bit(face_states[num_direction][num_cell], (int)num_out_face))
+						{
+							//формально обрабатываем мы только выходящие грани, т.к. входящие к этому моменту определены,
+							// но границу надо инициализировать. Не для расчета, но для конечного интегрирования
+							if (out_id_face < 0)
+							{
+								BoundaryConditions(out_id_face, (*inter_coef)[face_block_id + num_out_face]);
+							}
+							continue;
 						}
-						continue;
-					}
 
-					//GetNodes
-					for (int num_node = 0; num_node < 3; ++num_node)
-					{
-						const Vector3 x = vec_x[num_cell].x[num_out_face][num_node];
+						//GetNodes
+						for (int num_node = 0; num_node < 3; ++num_node)
+						{
+							const Vector3 x = vec_x[num_cell].x[num_out_face][num_node];
 
-						const cell_local x0 = vec_x0[num_direction][posX0++];
+							const cell_local x0 = vec_x0[num_direction][posX0++];
 
-						const ShortId num_in_face = x0.in_face_id;
-						const Type s = x0.s;
-						const Vector2 X0 = x0.x0;
-						
-						const Type I_x0 = CalculateIllumeOnInnerFace(pairs[face_block_id + num_in_face], inter_coef[face_block_id + num_in_face]);
+							const ShortId num_in_face = x0.in_face_id;
+							const Type s = x0.s;
+							const Vector2 X0 = x0.x0;
 
-						I[num_node] = GetCurIllum(x, s, I_x0, int_scattering_local[num_direction * count_cells + num_cell], phys_local[num_cell]);
+							const Type I_x0 = CalculateIllumeOnInnerFace(pairs[face_block_id + num_in_face], (*inter_coef)[face_block_id + num_in_face]);
 
-					}//num_node
+							I[num_node] = GetCurIllum(x, s, I_x0, int_scattering_local[num_direction * count_cells + num_cell], phys_local[num_cell]);
 
-					inter_coef[face_block_id + num_out_face] = I;													
-					if (out_id_face >= 0)
-					{					
-						inter_coef[out_id_face] = I;
-					}
+						}//num_node
 
-				} //num_out_face	
+						(*inter_coef)[face_block_id + num_out_face] = I;
+						if (out_id_face >= 0)
+						{
+							(* inter_coef)[out_id_face] = I;
+						}
 
+					} //num_out_face	
+
+				}
+
+				/*---------------------------------- конец FOR по ячейкам----------------------------------*/
+				loc_norm = ReCalcIllum(num_direction, *inter_coef, loc_illum);
 			}
 
-			/*---------------------------------- конец FOR по ячейкам----------------------------------*/
-			norm = ReCalcIllum(num_direction, inter_coef, loc_illum);
-		}
-		/*---------------------------------- конец FOR по направлениям----------------------------------*/						
+			/*---------------------------------- конец FOR по направлениям----------------------------------*/
 			
+			if (loc_norm > norm)
+			{
+#pragma omp critical
+				{
+					if (loc_norm > norm)
+					{
+						norm = loc_norm;
+					}
+				}
+			}
+		} // end omp
+
 		MPI_Gatherv(loc_illum.data(), loc_illum.size(), MPI_DOUBLE, Illum.data(), send_count_illum.data(), disp_illum.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);				
 		MPI_Gather(&norm, 1, MPI_DOUBLE, norms.data(), 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 						
@@ -717,10 +744,28 @@ static int MakeDivImpuls(const grid_directions_t& grid_direction, grid_t& grid)
 
 int CalculateIllumParam(const grid_directions_t& grid_direction, grid_t& grid) 
 {
-	MakeEnergy(grid_direction, grid.cells);
-	MakeStream(grid_direction, grid);
-	MakeDivImpuls(grid_direction, grid);
 
+#ifdef USE_CUDA
+	std::vector<Type> energy(grid.size);
+	std::vector<Vector3> stream(grid.size);
+	std::vector<Matrix3> impuls(grid.size);
+	if (solve_mode.use_cuda)
+	{
+		CalculateEnergy(32, grid.size, grid_direction.size, energy);
+		CalculateStream(32, grid.size, grid_direction.size, stream);
+		CalculateImpuls(32, grid.size, grid_direction.size, impuls);
+
+		WriteSimpleFileBin(BASE_ADRESS + "cuda_energy.bin", energy);
+		WriteSimpleFileBin(BASE_ADRESS + "cuda_stream.bin", stream);
+		WriteSimpleFileBin(BASE_ADRESS + "cuda_impuls.bin", impuls);
+	}
+	else
+#endif
+	{
+		MakeEnergy(grid_direction, grid.cells);
+		MakeStream(grid_direction, grid);
+		MakeDivImpuls(grid_direction, grid);
+	}
 	return 0;
 }
 

@@ -16,68 +16,12 @@ static Type CalculateIllumeOnInnerFace(const int num_in_face, const std::vector<
 	const int neigh_id = faces[id_face_].geo.id_r;  // признак ГУ + связь с глобальной нумерацией
 	Type I_x0 = 0;
 
-	switch (neigh_id)
+	if (neigh_id < 0)
 	{
-	case eBound_OutSource: // дно конуса
-		inter_coef = Vector3(30, 30, 30);//cell->illum_val.coef_inter[num_in_face] = Vector3(30, 30, 30);
-		return 30;
-	case eBound_FreeBound:
-		//cell->illum_val.coef_inter[num_in_face] = Vector3(0, 0, 0);
-		inter_coef = Vector3(0, 0, 0);
-		/*Граничные условия*/
-		//I_x0 = BoundaryFunction(num_cell, x, direction, illum_old, directions, squares);
-		return I_x0;
-
-	case eBound_LockBound:
-		inter_coef = Vector3(0, 0, 0); //cell->illum_val.coef_inter[num_in_face] = Vector3(0, 0, 0);
-		/*Граничные условия*/
-		//I_x0 = BoundaryFunction(num_cell, x, direction, illum_old, directions, squares);
-		return I_x0;
-
-	case eBound_InnerSource:  // внутренняя граница	
-	{
-#if 0
-		id_try_pos++;
-		grid[num_cell].nodes_value[num_in_face] = Vector3(res_on_inner_bound, res_on_inner_bound, res_on_inner_bound);
-		return res_on_inner_bound;
-
-		Type data = res_inner_bound[ShiftRes + pos_in_res++]; // защита на выход из диапазона??
-		if (data >= 0) //данные от пересечения с диском или шаром
-		{
-			/*
-				 Проверить порядок. Данные в массиве должны лежать в соответствии с упорядоченным графом
-				 от направления к направлению
-			*/
-			return res_on_inner_bound; // I_x0;
-			return data;
-		}
-		else // определяющимм являются противолежаащие грани (возможен расчет с учетом s=(x-x0).norm())
-		{
-
-			// результат не вполне понятен. Пока лучше использовать константу или другие параметры области (шар == граница)
-
-			//+dist_try_surface			
-			int id = id_try_surface[ShiftTry + id_try_pos - 1];  // будет лежать id грани			
-			const int cell = id / 4;
-			const int face = id % 4;
-
-			Vector3 coef = grid[cell].nodes_value[face];
-			Vector2	x0_local = X0[ShiftX0 + posX0++];//grid[num_cell].x0_loc[num_in_face_dir];
-
-			I_x0 = x0_local[0] * coef[0] + x0_local[1] * coef[1] + coef[2];
-
-			//if (I_x0 < 0) I_x0 = 0;
-			return  res_on_inner_bound; // I_x0;
-
-		}
-#endif
-		inter_coef = Vector3(30, 30, 30);//cell->illum_val.coef_inter[num_in_face] = Vector3(30, 30, 30);
-		return 30;
+		I_x0 = BoundaryConditions(neigh_id, inter_coef);
 	}
-
-	default:
+	else		
 	{
-
 		//Vector3 coef = grid[num_cell].nodes_value[num_in_face];
 		Vector3 coef = inter_coef; // cell->illum_val.coef_inter[num_in_face];
 
@@ -91,11 +35,9 @@ static Type CalculateIllumeOnInnerFace(const int num_in_face, const std::vector<
 		if (I_x0 < 0)
 		{
 			return 0;
-		}
-
-		return I_x0;
+		}	
 	}
-	}
+	return I_x0;
 }
 
 static Type GetS(const int num_cell, const Vector3& direction, const std::vector<Type>& illum_old,
@@ -448,17 +390,6 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 			for (register int num_direction = 0; num_direction < count_directions; ++num_direction)
 			{
 				/*---------------------------------- далее FOR по ячейкам----------------------------------*/
-				{
-					std::vector<int> graph(sorted_id_cell[num_direction].begin(), sorted_id_cell[num_direction].end());
-					WriteSimpleFileTxt(BASE_ADRESS + "Debug\\" + "order_graph" + std::to_string(num_direction) + ".txt", graph);
-
-					std::vector<int> faces(face_states[num_direction].begin(), face_states[num_direction].end());
-					WriteSimpleFileTxt(BASE_ADRESS + "Debug\\" + "order_faces" + std::to_string(num_direction) + ".txt", faces);
-
-					std::vector<cell_local> vec(vec_x0[num_direction].begin(), vec_x0[num_direction].end());
-					WriteSimpleFileTxt(BASE_ADRESS + "Debug\\" + "order_vec_x0" + std::to_string(num_direction) + ".txt", vec);
-				}
-				ofstream log_file(BASE_ADRESS + "Debug\\log_full_order.txt");
 				int posX0 = 0;
 				Vector3 I;
 
@@ -469,15 +400,13 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 					elem_t* cell = &grid.cells[num_cell];
 
 					//sumI = 0;
-					log_file << num_cell << " - ";
 					for (ShortId num_out_face = 0; num_out_face < base; ++num_out_face)
-					{
-						log_file << face_states[num_direction][num_cell] << ',' << (int)num_out_face << " - ";
+					{						
 						if (check_bit(face_states[num_direction][num_cell], num_out_face))
 						{
-							if (pairs[face_block_id + num_out_face] < 0)
+							if (pairs[num_cell * base + num_out_face] < 0)
 							{
-								inter_coef[face_block_id + num_out_face] = Vector3(0, 0, 0);
+								BoundaryConditions(pairs[num_cell * base + num_out_face], (* inter_coef)[num_cell * base + num_out_face]);								
 							}
 							continue;
 						}
@@ -491,8 +420,7 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 
 							ShortId num_in_face = x0.in_face_id;
 							Type s = x0.s;
-							Vector2 X0 = x0.x0;
-							log_file << x0 << "  " << pairs[num_cell * base + num_in_face] << " - ";
+							Vector2 X0 = x0.x0;							
 							Type I_x0 = CalculateIllumeOnInnerFace(num_in_face, grid.faces, cell,  (*inter_coef)[num_cell * base + num_in_face]);
 
 							I[num_node] = GetCurIllum(x, s, I_x0, int_scattering[num_direction * count_cells + num_cell], *cell);
@@ -520,9 +448,7 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 						//cell->illum_val.coef_inter[num_out_face] = I;  //coef					
 						(*inter_coef)[num_cell * base + num_out_face] = I;
 						const int id_face = pairs[num_cell * base + num_out_face];
-
-						log_file << id_face << "  " << num_cell * base + num_out_face<<' '<< I << " - ";
-
+						
 						if (id_face >= 0)
 						{
 							//grid.cells[id_face / base].illum_val.coef_inter[id_face % base] = I;
@@ -534,10 +460,7 @@ int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< s
 				}
 
 				/*---------------------------------- конец FOR по ячейкам----------------------------------*/
-				loc_norm = ReCalcIllum(num_direction, grid.cells, *inter_coef, Illum);
-				WriteSimpleFileTxt(BASE_ADRESS + "Debug\\order_" + std::to_string(num_direction) + ".txt", *inter_coef);
-				log_file.close();
-				break;
+				loc_norm = ReCalcIllum(num_direction, grid.cells, *inter_coef, Illum);				
 			}
 			/*---------------------------------- конец FOR по направлениям----------------------------------*/
 

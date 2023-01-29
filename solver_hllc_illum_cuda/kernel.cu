@@ -75,8 +75,9 @@ Type* dev_impuls;
 //**********************************************
 
 
-int CheckError(cudaError_t cudaStatus, const char* my_text = "") {
-    if (cudaStatus != cudaSuccess) {
+static inline int CheckError(cudaError_t cudaStatus, const char* my_text = "") {
+    if (cudaStatus != cudaSuccess) 
+    {        
         printf("Error code: %d \n%s \n%s\n", cudaStatus, cudaGetErrorString(cudaStatus), my_text);
         return 1;
     }
@@ -222,17 +223,16 @@ __global__ void d_MakeImpuls(const int N, const int M, Type* illum, Type* d_impu
 //*********************Functions from host*******************************//
 //***********************************************************************//
 
-int CheckDevice() {
-    //проверка наличия карты 
-    if (CheckError(cudaSetDevice(0), "cudaSetDevice failed!Do you have a CUDA - capable GPU installed ?")) return 1;
-    return 0;
+int CheckDevice()     //проверка наличия карты 
+{
+    return CheckError(cudaSetDevice(0), "cudaSetDevice failed!Do you have a CUDA - capable GPU installed ?");
 }
 
 int InitDevice(const int num_dir, const int num_cell, const int mod) {
 
-    if (CheckError(cudaMalloc(&dev_directions, num_dir * 3 * sizeof(double)), "cudaMalloc failed!")) return 1;
+    if (CheckError(cudaMalloc(&dev_directions, num_dir * NUMBER_OF_MEASUREMENTS * sizeof(double)), "cudaMalloc failed!")) return 1;
     if (CheckError(cudaMalloc(&dev_squares, num_dir * sizeof(double)), "cudaMalloc failed!")) return 1;
-    if (CheckError(cudaMalloc(&dev_illum, 4 * num_dir * num_cell * sizeof(double)), "cudaMalloc failed!")) return 1;
+    if (CheckError(cudaMalloc(&dev_illum, base * num_dir * num_cell * sizeof(double)), "cudaMalloc failed!")) return 1;
     if (CheckError(cudaMalloc(&dev_int_scattering, num_dir * num_cell * sizeof(double)), "cudaMalloc failed!")) return 1;
 
     if (mod) //extended
@@ -265,9 +265,10 @@ int HostToDevice(const grid_directions_t& host_directions, std::vector<Type>& ho
             host_squares[i] = el.area;
             i++;
         }
+                
+        if (CheckError(cudaMemcpy(&dev_square_surface, &host_directions.full_area, 1 * sizeof(double), cudaMemcpyHostToDevice),
+            "cudaMemcpy failed square_surface!")) return 1;
 
-        dev_square_surface = host_directions.full_area;
-        
         if (CheckError(cudaMemcpy( dev_directions, dev_dir.data(), dev_dir.size() * sizeof(dev_Vector3), cudaMemcpyHostToDevice),
             "cudaMemcpy failed dir!")) return 1;
   
@@ -296,6 +297,7 @@ int CalculateIntScattering(const int b_size, const int N, const int M, std::vect
     
     return 0;
 }
+
 int CalculateEnergy(const int b_size, const int N, const int M, std::vector<Type>& host_energy) {
 
     dim3 threads(b_size);
