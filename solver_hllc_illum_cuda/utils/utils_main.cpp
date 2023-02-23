@@ -17,6 +17,23 @@ int RunUtilsModule(int argc, char* argv[], const std::string& settings)
 
 #ifdef USE_VTK
 
+	//delete files
+	{
+		int a = 0;
+		int b = 0;
+		int step = 4;
+		std::string file_solve;
+		std::string foo; int foo2;
+		ReadStartSettings(settings, foo2, foo, foo, foo, BASE_ADRESS, file_solve, foo2);
+
+		for (int i = a; i < b; i+=step)
+		{
+			//2,6,10
+			std::remove((file_solve + std::to_string(i) + ".vtk").c_str());
+		}
+		return 0;
+	}
+
  MakeHllcInitFromGrid(argc, argv, settings);
 
 	//rebuild_solve(argc, argv, settings);

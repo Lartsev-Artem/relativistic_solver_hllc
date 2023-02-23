@@ -42,7 +42,7 @@ static int SetRHllcValueDefault(std::vector<elem_t>& cells)
 	int i = 0;
 	for (auto& el : cells)
 	{
-#if defined Cylinder || defined Cone_JET
+#if defined Cylinder
 		Vector3 x = centers[i];
 		if (Vector2(x[1], x[2]).norm() < 0.03 && x[0] < 0.1)
 		{
@@ -71,16 +71,20 @@ static int SetRHllcValueDefault(std::vector<elem_t>& cells)
 			el.phys_val.v = Vector3(0, 0, 0);
 		}
 #elif defined Cone
-		const Type betta = 0.07;
+		const Type betta = 0.01;
 		const Type a = 1;
 		const Type b = 0.001;
 		Type x = centers[i][0];
-		el.phys_val.d = (1e-10 * exp(-x * x / betta) + 1e-18) / DENSITY;
-		el.phys_val.p = (100 * exp(-x * x / betta) + (1e-4)) / PRESSURE;
-		el.phys_val.v = (Vector3(1e7, 0, 0)) / VELOCITY;
+		el.phys_val.d = (3*1e-8 * exp(-x * x / betta) + 1e-12) / DENSITY;
+		el.phys_val.p = (100 * exp(-x * x / betta) + (1e-2)) / PRESSURE;
+		el.phys_val.v = (Vector3(1e4, 0, 0)) / VELOCITY;
+
+		/*el.phys_val.d = (1e-10 ) / DENSITY;
+		el.phys_val.p = (100 ) / PRESSURE;
+		el.phys_val.v = (Vector3(1e5, 0, 0)) / VELOCITY;*/
 #else
-		el.phys_val.d = 0.1;
-		el.phys_val.p = 0.01;
+		el.phys_val.d = 10;
+		el.phys_val.p = 0.1;
 		el.phys_val.v = Vector3(0, 0, 0);
 #endif // Cube
 
@@ -93,12 +97,12 @@ static int SetRHllcValueDefault(std::vector<elem_t>& cells)
 // ------------------
 static int SetHllcSettingDefault(hllc_value_t& hllc_set)
 {
-	hllc_set.h = 0.005; // default
+	hllc_set.h = 0.004; // default
 #ifdef ILLUM
-	hllc_set.h = 0.01;//hllc_set.h = 0.0012548169651948;
-	hllc_set.tau = 1e-5;
-	hllc_set.CFL = 0.7;
-	hllc_set.print_timer = 0.05;
+	///hllc_set.h = 0.0007166575761593; //jet
+	hllc_set.tau = 1e-7;
+	hllc_set.CFL = 0.001;
+	hllc_set.print_timer = 0.001;
 	hllc_set.T = 1;
 #else //ILUM
 

@@ -161,7 +161,23 @@ int RunSolveModule(const std::string& name_file_settings)
 			else
 			{
 				if (InitDevice(grid_direction.size, grid.size, solve_mode.cuda_mod)) CUDA_ERR("Cuda Error init\n");
-				if (HostToDevice(grid_direction, Illum, 1))  CUDA_ERR("Error cuda hostTodevice\n");
+				//if (HostToDevice(grid_direction, Illum, 1))  CUDA_ERR("Error cuda hostTodevice\n");
+								
+				const std::string name_file_normals = BASE_ADRESS + "normals.bin";				
+				const std::string name_file_squares = BASE_ADRESS + "squares.bin";
+				const std::string name_file_volume = BASE_ADRESS + "volume.bin";
+				
+				std::vector<Normals> normals;
+				std::vector<Type> squares_faces;
+				std::vector<Type> volume;				
+				
+				if (ReadNormalFile(name_file_normals, normals)) RETURN_ERR("Error reading file normals\n");
+				if (ReadSimpleFileBin(name_file_squares, squares_faces)) RETURN_ERR("Error reading file squares_faces\n");
+				if (ReadSimpleFileBin(name_file_volume, volume)) RETURN_ERR("Error reading file volume\n");
+
+				WRITE_LOG("Start Init device\n");
+
+				if (HostToDeviceInit(grid_direction, Illum, volume, squares_faces, normals))  CUDA_ERR("Error cuda hostTodevice\n");
 			}
 		}
 #endif	
@@ -210,7 +226,6 @@ int RunSolveModule(const std::string& name_file_settings)
 	MPI_Bcast(&hllc_cfg, 1, MPI_hllc_value_t, 0, MPI_COMM_WORLD);
 
 #endif // USE_MPI
-
 	while (t < hllc_cfg.T)
 	{
 		Type time_step = -omp_get_wtime();
@@ -218,29 +233,37 @@ int RunSolveModule(const std::string& name_file_settings)
 		if (myid == 0)
 		{
 			HLLC_STEP(hllc_cfg.tau, grid);
+
+			WRITE_LOG("\n hllc time= " << time_step + omp_get_wtime()<< " c\n");
 		}
 
 #ifdef ILLUM
-#ifdef USE_MPI
-		MPI_Barrier(MPI_COMM_WORLD); //ждем газодинамического расчёта
-#endif // USE_MPI
-
-		CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
-
-#ifdef USE_MPI
-		MPI_Barrier(MPI_COMM_WORLD); //ждем газодинамического расчёта
-#endif // USE_MPI
-
-		if (myid == 0)
 		{
-			CalculateIllumParam(grid_direction, grid);
-
-			SolveIllumAndHLLC(hllc_cfg.tau, grid.cells);
-
-			//energy.swap(prev_energy);
-			//stream.swap(prev_stream);
+#ifdef USE_MPI
+			MPI_Barrier(MPI_COMM_WORLD); //ждем газодинамического расчёта
+			MPI_CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
+			MPI_Barrier(MPI_COMM_WORLD); //ждем  расчёта излучения
+#else
+			CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
+#endif // USE_MPI
 		}
-#endif
+
+			if (myid == 0)
+			{
+				Type tt = -omp_get_wtime();
+				CalculateIllumParam(grid_direction, grid);
+				
+				if (SolveIllumAndHLLC(hllc_cfg.tau, grid.cells) == 1)
+				{
+					WRITE_LOG("bad illum solve\n");
+					//non phys conv value -> continue(надо учесть mpi)
+				}
+
+				WRITE_LOG("\n paramIllum time= " << tt + omp_get_wtime() << " c\n");
+				//energy.swap(prev_energy);
+				//stream.swap(prev_stream);
+			}		
+#endif //iLLUM
 
 		t += hllc_cfg.tau;
 		
@@ -252,6 +275,28 @@ int RunSolveModule(const std::string& name_file_settings)
 
 			if (cur_timer >= hllc_cfg.print_timer)
 			{
+#ifdef USE_CUDA								
+				if (solve_mode.use_cuda)
+				{
+					std::vector<Type> energy(grid.size);
+					CalculateEnergy(32, grid.size, grid_direction.size, energy);
+
+					std::vector<Vector3> stream(grid.size);
+					CalculateStream(32, grid.size, grid_direction.size, stream);
+
+					std::vector<Matrix3> impuls(grid.size);
+					CalculateImpuls(32, grid.size, grid_direction.size, impuls);
+
+					int i = 0;
+					for (auto& el : grid.cells)
+					{
+						el.illum_val.energy = energy[i];
+						el.illum_val.stream = stream[i];
+						el.illum_val.impuls = impuls[i];
+						i++;
+					}
+				}
+#endif
 
 				WriteFileSolution(adress_solve + std::to_string(res_count++), Illum, grid.cells);
 
@@ -262,7 +307,6 @@ int RunSolveModule(const std::string& name_file_settings)
 
 			time_step += omp_get_wtime();
 			WRITE_LOG("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << " time= " << time_step << " c\n");
-
 		}
 
 #ifdef USE_MPI

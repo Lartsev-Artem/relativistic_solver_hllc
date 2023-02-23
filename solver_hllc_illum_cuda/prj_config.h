@@ -27,7 +27,7 @@
 
 #define USE_CUDA  // подключение технологии cuda
 
-#define WRITE_GLOBAL_LOG	// писать лог файл
+//#define WRITE_GLOBAL_LOG	// писать лог файл
 
 #if defined BUILD || defined MAKE  //todo rename on BUILD_DATA_TO_ILLUM
 //#define ONLY_GEO_DATA
@@ -49,7 +49,7 @@
 
 #define Cone
 
-//#define Cone_JET
+#define Cone_JET
 
 //#define Sphere
 

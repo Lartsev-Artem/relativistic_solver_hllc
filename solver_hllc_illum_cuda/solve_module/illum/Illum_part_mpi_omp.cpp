@@ -159,7 +159,9 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 		Type betta = 1;
 		Type S = int_scattering;// 0;
 
-		if ((x - Vector3(1, 0, 0)).norm() > 0.09) { Q = 0; alpha = 0.5;  betta = 0.5; }
+		//if ((x - Vector3(1, 0, 0)).norm() > 0.09) { Q = 0; alpha = 0.5;  betta = 0.5; }
+
+		if ((x - Vector3(0.5, 0, 0)).norm() < 0.05) { Q = 0; alpha = 0.5;  betta = 0.5; }
 
 		Type k = alpha + betta;
 
@@ -303,18 +305,10 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 
 		Type S = int_scattering * RADIATION;
 
-		Type d = cell.d * DENSITY;
-		Type v = cell.v.norm() * VELOCITY;
+		Type d = cell.d * DENSITY;		
 		Type p = cell.p * PRESSURE;
 
-		Type T = p / (d * R_gas);
-
-		if (x[0] < 0.05)
-		{
-			//d = 0.1;
-			//p = 0.01;
-			//T = p / (d * R);
-		}
+		Type T = 1e-5 * p / (d * R_gas);
 
 		Type 	Ie = 2 * pow(k_boltzmann * PI * T, 4) / (15 * h_plank * h_plank * h_plank * c_light * c_light);
 		Type 	betta = sigma_thomson * d / m_hydrogen;
@@ -339,7 +333,13 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 			return 0;
 		}
 
-		return I / RADIATION;
+		/*static Type max = 0;
+		if (I / RADIATION > max) {
+			max = I / RADIATION;
+			printf("I=%lf\n", I / RADIATION);
+		}*/
+
+		return  I / RADIATION;
 	}
 
 
@@ -391,10 +391,10 @@ static Type ReCalcIllum(const int num_dir, const std::vector<Vector3>& inter_coe
 static Type ReCalcIllumGlobal(const int dir_size, std::vector<elem_t>& cells, const std::vector<Type>& Illum)
 {
 	
-#pragma omp parallel default(none) shared(dir_size, cells,Illum)
+//#pragma omp parallel default(none) shared(dir_size, cells,Illum)
 	{
 		const int size = cells.size();
-#pragma omp for
+//#pragma omp for
 		for (int num_dir = 0; num_dir < dir_size; num_dir++)
 		{
 			const int shift_dir = num_dir * size;
@@ -578,19 +578,20 @@ int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vecto
 		{
 			for (auto n : norms) if (n > norm) norm = n; 		
 						
-			WRITE_LOG("Error:= " << norm << '\n' << "End iter_count number: " << count << "time= " << _clock << '\n');
+			WRITE_LOG("Error:= " << norm << '\n' << "End iter_count number: " << count << " time= " << _clock << '\n');
 		}
 		MPI_Bcast(&norm, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 		count++;
 	} while (norm > solve_mode.accuracy && count < solve_mode.max_number_of_iter);
 	
-	
+#ifndef USE_CUDA
 	if (myid == 0) // это уйдет, когда все интегралы перейдут в cuda
 	{
 		ReCalcIllumGlobal(grid_direction.size, grid.cells, Illum);		
 		//WriteFileSolution(BASE_ADRESS + "Illum_result.txt", Illum);
-	}		
+	}	
+#endif
 		
 	return 0;
 }
@@ -756,20 +757,10 @@ static int MakeDivImpuls(const grid_directions_t& grid_direction, grid_t& grid)
 
 int CalculateIllumParam(const grid_directions_t& grid_direction, grid_t& grid) 
 {
-
-#if 0 //def USE_CUDA
-	std::vector<Type> energy(grid.size);
-	std::vector<Vector3> stream(grid.size);
-	std::vector<Matrix3> impuls(grid.size);
+#ifdef USE_CUDA
 	if (solve_mode.use_cuda)
 	{
-		CalculateEnergy(32, grid.size, grid_direction.size, energy);
-		CalculateStream(32, grid.size, grid_direction.size, stream);
-		CalculateImpuls(32, grid.size, grid_direction.size, impuls);
-
-		WriteSimpleFileBin(BASE_ADRESS + "Solve\\cuda_energy.bin", energy);
-		WriteSimpleFileBin(BASE_ADRESS + "Solve\\cuda_stream.bin", stream);
-		WriteSimpleFileBin(BASE_ADRESS + "Solve\\cuda_impuls.bin", impuls);
+		CalculateParamOnCuda(grid_direction.size, grid.size);
 	}
 	else
 #endif

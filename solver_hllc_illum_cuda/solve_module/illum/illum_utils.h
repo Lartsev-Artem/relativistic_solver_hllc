@@ -11,6 +11,10 @@ int GetDirectionIllumFromFace(const int size_grid, const int num_dir, const std:
 #endif
 
 #if defined ILLUM && defined SOLVE
+#ifdef USE_CUDA
+void CalculateParamOnCuda(const int grid_direction_size, const int grid_size);
+#endif
+
 int InitIllum(file_name main_dir, grid_t& grid);
 
 int CalculateIllum(const grid_directions_t& grid_direction, const std::vector< std::vector<int>>& face_states, const std::vector<int>& pairs,

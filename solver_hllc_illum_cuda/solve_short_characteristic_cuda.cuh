@@ -18,6 +18,10 @@ extern Type* dev_energy;
 extern Type* dev_stream;
 extern Type* dev_impuls;
 
+extern Type* dev_divimpuls;
+extern Type* dev_divstream;
+
+
 //**********************************************
 
 #define BS 32
@@ -28,11 +32,16 @@ int CheckDevice();
 
 int InitDevice(const int num_dir, const int num_cell, const int mod = 0);
 int HostToDevice(const grid_directions_t& host_directions, std::vector<Type>& host_illum, const int mod = 0);
+int HostToDeviceInit(const grid_directions_t& host_directions, std::vector<Type>& host_illum,
+    std::vector<Type>& host_volume, std::vector<Type>& host_areas, std::vector<Normals>& host_normals);
 
 int CalculateIntScattering(const int b_size, const int N, const int M, std::vector<Type>& host_illum, std::vector<Type>& host_int_scattering);
 int CalculateEnergy(const int b_size, const int N, const int M, std::vector<Type>& host_energy);
 int CalculateStream(const int b_size, const int N, const int M, std::vector<Vector3>& host_stream);
 int CalculateImpuls(const int b_size, const int N, const int M, std::vector<Matrix3>& host_impuls);
+
+int CalculateDivImpuls(const int b_size, const int N, const int M, std::vector<Vector3>& host_div_impuls);
+int CalculateDivStream(const int b_size, const int N, const int M, std::vector<Type>& host_divstream);
 
 int ClearDevice(const int mod = 0);
 

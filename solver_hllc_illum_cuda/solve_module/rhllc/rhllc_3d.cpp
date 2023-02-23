@@ -695,15 +695,18 @@ https://github.com/PrincetonUniversity/Athena-Cversion/blob/master/src/rsolvers/
 
 static int rhllc_get_phys_value_ost1098(const flux_t& U, flux_t& W)
 {		
+	int call_back_flag = 0;
 	Type Gamma0 = 1. / sqrt(1 - (W.v.dot(W.v)));
-	const Type h = 1 + gamma_g * W.p / W.d;
+	Type p = W.p;
+
+	const Type h = 1 + gamma_g * p / W.d;
 
 	Type W0 = W.d * h * Gamma0 * Gamma0; //U[0] * Gamma0 * h;
 
 	Vector3 m = U.v;
 	Type mm = m.dot(m);
 
-	Type p = W.p;
+	
 	Vector3 v = W.v;
 
 	Type D = U.d;
@@ -716,12 +719,13 @@ static int rhllc_get_phys_value_ost1098(const flux_t& U, flux_t& W)
 	{
 		err = W0;
 
+		//W.d * h * Gamma0 * Gamma0 - p - E;
 		Type fW = W0 - p - E;
 
 		Type dGdW = -(Gamma0 * Gamma0 * Gamma0) * mm / (2 * W0 * W0 * W0);
 		Type dFdW = 1 - ((Gamma0 * (1 + D * dGdW) - 2 * W0 * dGdW) / (Gamma0 * Gamma0 * Gamma0 * gamma_g));
 		W0 -= (fW / dFdW);
-
+		
 		Gamma0 = 1. / sqrt(1 - mm / (W0 * W0));
 
 		p = (W0 - D * Gamma0) / (Gamma0 * Gamma0 * gamma_g);
@@ -730,42 +734,86 @@ static int rhllc_get_phys_value_ost1098(const flux_t& U, flux_t& W)
 
 		err -= W0;
 		cc++;
+
+		if (p < 0 || U.d < 0 || std::isnan(p) || std::isnan(U.d))
+		{
+			p = max(sqrt(mm) - E, 1e-20);
+			if (std::isnan(p)) p = 1e-20;
+			v = m / (E + p);
+			if (v.norm() > 0.9999999995)
+			{
+				v /= 1.0005;
+			}
+			Gamma0 = 1. / sqrt(1 - v.dot(v));
+		//	printf("try resolve %.16lf\n", v.norm());
+			//printf("Error cell (p = %lf, d= %lf)", p, D / Gamma0);
+			//EXIT(1);
+			call_back_flag = 1;
+			break;
+		}
+
 	} while (fabs(err / W0) > 1e-14);
 
-	if (p < 0 || U.d < 0 || std::isnan(p) || std::isnan(U.d))
+	if (p < 0 || U.d < 0 || std::isnan(p) || std::isnan(U.d) || v.norm()>1)
 	{
-		printf("Error cell (p = %lf, d= %lf)", p, D / Gamma0);
-		EXIT(1);
+		printf("W= %lf,(%lf), %lf\n", W.d, W.v.norm(), W.p);
+		printf("Error cell (p = %lf, d= %lf, %lf)\n", p, D , Gamma0);
+		//EXIT(1);
+		call_back_flag = 2;
 	}
 
-	W.d = D / Gamma0;	
+	W.d = max(D / Gamma0, 1e-10);
+	if (std::isnan(Gamma0) || std::isinf(Gamma0)) W.d = 1e-10;
 	W.v = v;	
-	W.p = p;
+	W.p = max(p, 1e-20);
 	
-	return 0;
+	return call_back_flag;
 }
 
 int RHLLC_3d(const Type tau, grid_t& grid)
 {
-#ifdef ILLUM
-	// востановление физических переменных
-	for (auto& el : grid.cells)
+#pragma omp parallel default(none) shared(tau, grid)
 	{
-		rhllc_get_conv_value_ost1098(el.phys_val, el.conv_val);
-	}
-#endif
+		const int size_grid = grid.size;		
+#ifdef ILLUM
+		// востановление физических переменных
+#pragma omp for
+		for (int i = 0; i < size_grid; i++)
+		{
+			int back = rhllc_get_phys_value_ost1098(grid.cells[i].conv_val, grid.cells[i].phys_val);
+			if (back)
+			{
+				if (back == 2)
+				{
+					//printf("id err=%d\n", i);
+					EXIT(1);
+				}
+				else
+				{
+					//printf("try id= %d\n", i);
+				}
+				// если был пернсчёт
+				rhllc_get_conv_value_ost1098(grid.cells[i].phys_val, grid.cells[i].conv_val);
+			}			
+		}
 
-#pragma omp parallel default(none) shared(grid)
+		//#pragma omp barrier 
+
+#endif
+	}
+
+#pragma omp parallel default(none) shared(tau, grid)
 	{
 		flux_t bound_val;
 		flux_t phys_bound_val;
 		Matrix3 T;
 		Matrix3 TT;
-		elem_t* cell;
+		elem_t* cell;		
+		const int size_face = grid.faces.size();
 
 		// потоки
 #pragma omp for
-		for (int i = 0; i < grid.faces.size(); i++)
+		for (int i = 0; i < size_face; i++)
 		{
 			face_t& f = grid.faces[i];
 			cell = &grid.cells[f.geo.id_l];
@@ -779,29 +827,40 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 #ifdef Sphere
 				phys_bound_val.d = 0.1; phys_bound_val.v << 0, 0, 0; phys_bound_val.p = 0.1;
 				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
+#elif defined Cone_JET
+				phys_bound_val.d = (3 * 1e-8 + 1e-12) / DENSITY;
+				phys_bound_val.p = (100 + (1e-2)) / PRESSURE;
+				phys_bound_val.v = (Vector3(1e4, 0, 0)) / VELOCITY;
+				//phys_bound_val.d = 0.001;
+				//phys_bound_val.p = 0.1;
+				//phys_bound_val.v = (Vector3(0, 0, 0));
+				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #else
 				bound_val = cell->conv_val;
 				phys_bound_val = cell->phys_val;
 #endif
 				break;
 			case eBound_OutSource:
-#if defined Cylinder || defined Cone_JET	
+#if defined Cylinder 
 				phys_bound_val.d = 0.1;
 				phys_bound_val.v << 0.99, 0, 0;
 				phys_bound_val.p = 0.01;
 				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #elif defined Cone
-				phys_bound_val.d = (1e-10  + 1e-18) / DENSITY;
-				phys_bound_val.p = (100  + (1e-4)) / PRESSURE;
-				phys_bound_val.v = (Vector3(1e7, 0, 0)) / VELOCITY;				
-				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);				
+				phys_bound_val.d = (3 * 1e-8  + 1e-12) / DENSITY;
+				phys_bound_val.p = (100 + (1e-2)) / PRESSURE;
+				phys_bound_val.v = (Vector3(1e4, 0, 0)) / VELOCITY;
+				//phys_bound_val.d = 0.001;
+				//phys_bound_val.p = 0.1;
+				//phys_bound_val.v = (Vector3(0, 0, 0));
+				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #else
 				bound_val = cell->conv_val;
 				phys_bound_val = cell->phys_val;
 #endif	
 				break;
 			case eBound_LockBound:
-
+#if 1
 				bound_val = cell->conv_val;
 				phys_bound_val = cell->phys_val;
 				MakeRotationMatrix(f.geo.n, T);
@@ -816,7 +875,10 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 
 				bound_val.v = TT * bound_val.v;
 				phys_bound_val.v = TT * phys_bound_val.v;
-
+#else
+				bound_val = cell->conv_val;
+				phys_bound_val = cell->phys_val;
+#endif
 				break;
 
 			default:
@@ -835,13 +897,14 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 				grid.cells[f.geo.id_l].phys_val, phys_bound_val, f);
 		}
 
-	}//omp
+		//#pragma omp barrier 
+	}
 
-	// ячейки	
 #pragma omp parallel default(none) shared(tau, grid)
 	{
+		const int size_grid = grid.size;		
 #pragma omp for
-		for (int i = 0; i < grid.cells.size(); i++)
+		for (int i = 0; i < size_grid; i++)
 		{
 			elem_t& el = grid.cells[i];
 			flux_t sumF;
@@ -860,7 +923,8 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 
 			rhllc_get_phys_value_ost1098(el.conv_val, el.phys_val); // востановление физических переменных
 		}
-	}
+
+	} //omp
 
 	return 0;
 
