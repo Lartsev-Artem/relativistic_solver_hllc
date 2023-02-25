@@ -21,9 +21,9 @@
 
 #endif //3d
 
-#ifdef USE_CUDA
-#include "../solve_short_characteristic_cuda.cuh"
-#endif
+//#ifdef USE_CUDA
+//#include "../solve_short_characteristic_cuda.cuh"
+//#endif
 
 #ifdef USE_MPI
 
@@ -46,6 +46,8 @@
 #ifndef CLASTER
 //#define RUN_TEST
 #endif
+
+#define ON_FULL_ILLUM_ARRAYS
 
 #endif //SOLVE
 #endif //SOLVE_CONFIG_H

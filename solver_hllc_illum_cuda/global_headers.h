@@ -57,7 +57,8 @@
 #include <vtk-9.0\vtkUnstructuredGrid.h>
 #endif // USE_VTK
 
-#include <eigen3/Eigen/Dense>
+//#include <eigen3/Eigen/Dense>
+#include "C:/DEV/vcpkg-master/installed/x64-windows/include/eigen3/Eigen/Dense"
 #else
 
 #include </nethome/student/FS18/FS2-x1/Lartsev/Eigen/Dense>

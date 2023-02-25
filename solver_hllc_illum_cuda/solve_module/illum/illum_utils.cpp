@@ -8,9 +8,11 @@ num_dir - номер направления
 illum_on_face - излучение на гранях по всем направлениям
 */
 
-int GetDirectionIllumFromFace(const int size_grid, const int num_dir, const std::vector<Type>& illum_on_face, std::vector<Type>& illum_in_cell)
+int GetDirectionIllumFromFace(const int size_grid, const int num_dir, const Type* illum_on_face, 
+	std::vector<Type>& illum_in_cell)
 {	
-	if (illum_on_face.size() < size_grid* base +size_grid * num_dir * base) RETURN_ERR("illum_on_face hasn't enough data\n");
+	//if (illum_on_face.size() < size_grid* base +size_grid * num_dir * base) RETURN_ERR("illum_on_face hasn't enough data\n");
+	if (illum_on_face == nullptr) RETURN_ERR("illum_on_face hasn't enough data\n");
 
 	illum_in_cell.resize(size_grid, 0);	
 	for (size_t j = 0; j < size_grid; j++)
@@ -27,23 +29,19 @@ int GetDirectionIllumFromFace(const int size_grid, const int num_dir, const std:
 #endif
 #if defined ILLUM && defined SOLVE
 
-static std::vector<Type> divstream;
-static std::vector<Vector3> divimpuls;
-
 #ifdef USE_CUDA
-void CalculateParamOnCuda(const int grid_direction_size, const int grid_size)
+#include "../../cuda/cuda_solve.h"
+void CalculateParamOnCuda(const grid_directions_t& grid_dir, grid_t& grid)
 {
 	/* //это для нестационарного излучения (todo: не считать stream и impuls отдельно
 	CalculateEnergy(32, grid.size, grid_direction.size, energy);
 	CalculateStream(32, grid.size, grid_direction.size, stream);
 	CalculateImpuls(32, grid.size, grid_direction.size, impuls);
 	*/
-
-	divstream.resize(grid_size);
-	divimpuls.resize(grid_size);
-
-	CalculateDivStream(32, grid_size, grid_direction_size, divstream);
-	CalculateDivImpuls(32, grid_size, grid_direction_size, divimpuls);
+									
+	CalculateEnergy(grid_dir, grid);
+	CalculateDivStream(grid_dir, grid);
+	CalculateDivImpuls(grid_dir, grid);
 
 	return;
 }
@@ -263,7 +261,7 @@ int rhllc_get_conv_value(const flux_t& W, flux_t& U)
 	return 0;
 }
 
-int SolveIllumAndHLLC(const Type tau, std::vector<elem_t>& cells)
+int SolveIllumAndHLLC(const Type tau, grid_t& grid)
 {
 #if 0
 	Type min = 1;
@@ -311,24 +309,24 @@ int SolveIllumAndHLLC(const Type tau, std::vector<elem_t>& cells)
 #endif
 	Type min = 1;	
 	int ret_flag = 0;
-#pragma omp parallel  default(none) shared(ret_flag, cells, divstream, divimpuls, solve_mode) 
+
+#pragma omp parallel  default(none) shared(ret_flag, grid, solve_mode) 
 	{
-		const int n = cells.size();
+		const int n = grid.size;
 #pragma omp for
 		for (int i = 0; i < n; i++)
 		{
-			elem_t &el = cells[i];
+			elem_t &el = grid.cells[i];
 
 #ifdef USE_CUDA
-			if (solve_mode.use_cuda)
-			{
-				el.illum_val.div_impuls = divimpuls[i];
-				el.illum_val.div_stream = divstream[i];
-			}
-#endif
+			el.conv_val.v += tau * (-grid.divimpuls[i] * 1);  //- tau*(stream[i][0] - prev_stream[i][0]) / tau / c / c);  // +F_g //vx
+			el.conv_val.p += tau * (-grid.divstream[i]); //  tau*(-(energy[i] - prev_energy[i]) / tau / c)  //+F_g.dot(vel)  //e			
+
+#else
 			el.conv_val.v += tau * (-el.illum_val.div_impuls * 1);  //- tau*(stream[i][0] - prev_stream[i][0]) / tau / c / c);  // +F_g //vx
 			el.conv_val.p += tau * (-el.illum_val.div_stream); //  tau*(-(energy[i] - prev_energy[i]) / tau / c)  //+F_g.dot(vel)  //e			
-
+#endif
+			
 			if (el.conv_val.p - sqrt(el.conv_val.d * el.conv_val.d + el.conv_val.v.dot(el.conv_val.v)) < 0)
 			{
 				ret_flag = 1;// return 1;

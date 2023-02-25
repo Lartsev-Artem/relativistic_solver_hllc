@@ -4,9 +4,10 @@
 #include "prj_config.h"
 #include "global_headers.h"
 
+#define CONVERT_TO_STRING(s, ...) #s #__VA_ARGS__
 
 #ifdef USE_CUDA
-#define CUDA_ERR(str){ WRITE_LOG(str); printf(str); solve_mode.use_cuda = false;}
+#define CUDA_ERR(str){ WRITE_LOG(str); solve_mode.use_cuda = false;}
 #else
 #define CUDA_ERR(str){}
 #endif //USE_CUDA
@@ -134,7 +135,7 @@ ofile.close(); }
 
 #endif  //WRITE_LOG_ON_SCREAN
 #else
-#define WRITE_LOG(ofile, str) {}
+#define WRITE_LOG(str) {CONVERT_TO_STRING(str)}
 #endif //WRITE_GLOBAL_LOG
 
 #ifdef _MSC_VER
@@ -146,7 +147,7 @@ ofile.close(); }
 #define clear_bit(word, idx) (word & (~(1 << (idx)))) // выключение i-го бита
 #define set_bit(word, idx) (word | (1 << (idx)))      // установка i-го бита
 
-#define WRITE_FILE(name_file, data, value) \
+#define WRITE_FILE_VECTOR(name_file, data, value) \
 { \
 FILE* f;\
 int n = data.size(); \
@@ -157,6 +158,16 @@ for (auto& el : data) \
 {	\
 	fwrite(&el.value, sizeof(el.value), 1, f);	\
 }	\
+fclose(f);\
+}
+
+#define WRITE_FILE(name_file, data, n) \
+{ \
+FILE* f;\
+f = fopen(name_file, "wb"); \
+if(!f) RETURN_ERRS("file %s not open\n",name_file); \
+fwrite(&n, sizeof(int), 1, f); \
+fwrite(data, sizeof(data[0]), n, f);\
 fclose(f);\
 }
 

@@ -105,6 +105,7 @@ struct illum_value_t
 	Type absorp_coef;
 	Type rad_en_loose_rate;
 
+#if !defined USE_CUDA
 	std::vector<Type> illum; //num_dir*base
 
 	//std::vector<Type> int_scattering; // (count_cells* count_directions, 0);	
@@ -117,22 +118,16 @@ struct illum_value_t
 	Matrix3 impuls;
 	Type div_stream;
 	Vector3 div_impuls;
-
-	// сейчас эти переменные лежат отдельно(они нужны дл€ статического расчЄта излучени€)
-
-	//Vector3 coef_inter[base]; // коэффициенты интерпол€ции 
-
+#endif
+	
 	illum_value_t(const int num_dir = 0);
 };
 struct elem_t
 {
 	flux_t  phys_val;
-
-//#if defined HLLC || defined RHLLC
 	flux_t  conv_val;	
-//#endif
 
-#ifdef ILLUM	
+#if defined ILLUM
 	illum_value_t illum_val;	
 #endif
 
@@ -148,7 +143,65 @@ struct grid_t
 	std::vector<elem_t> cells;
 	std::vector<face_t> faces;
 
+#if defined ILLUM
+	Type* Illum;
+	Type* scattering;
+
+#ifdef  USE_CUDA
+	Type* divstream;
+	Vector3* divimpuls;
+
+#ifdef ON_FULL_ILLUM_ARRAYS
+	Type* energy;
+	Vector3* stream;
+	Matrix3* impuls;
+#endif
+#endif //  USE_CUDA
+
+	void InitMemory(const int M)
+	{
+		Illum = new Type[M * size * base];
+		scattering = new Type[M * size];
+
+#ifdef USE_CUDA
+		divstream = new Type[size];
+		divimpuls = new Vector3[size];
+#ifdef ON_FULL_ILLUM_ARRAYS
+		energy = new Type[size];
+		stream = new Vector3[size];
+		impuls = new Matrix3[size];
+#endif
+#else
+		for (int i = 0; i < size; i++)
+		{
+			cells[i].illum_val.illum.resize(M*base, 0);
+		}
+#endif
+	}
+	
+	grid_t()
+	{
+		size = 0;
+		Illum = nullptr;
+		scattering = nullptr;
+
+#ifdef USE_CUDA
+		divstream = nullptr;
+		divimpuls = nullptr;
+#ifdef ON_FULL_ILLUM_ARRAYS
+		energy = nullptr;
+		stream = nullptr;
+		impuls = nullptr;
+#endif
+#endif
+
+	}
+	~grid_t();	
+
+ //  ILLUM
+#else
 	grid_t() { size = 0; }
+#endif
 };
 
 extern solve_mode_t solve_mode;

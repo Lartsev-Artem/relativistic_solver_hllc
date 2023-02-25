@@ -12,6 +12,8 @@
 #include "../../global_def.h"
 #include "../solve_utils.h"
 
+#include "../../cuda/cuda_solve.h"
+
 static std::vector<int> send_count;
 static std::vector<int> disp;
 
@@ -99,7 +101,7 @@ static Type CalculateIllumeOnInnerFace(const int neigh_id, Vector3& inter_coef)
 	return I_x0;
 }
 
-static Type GetS(const int num_cell, const Vector3& direction, const std::vector<Type>& illum_old,
+static Type GetS(const int num_cell, const Vector3& direction, const grid_t&grid,
 	const grid_directions_t& grid_direction) {
 	//num_cell equals x
 	auto Gamma{ [](const Vector3& direction, const Vector3& direction2) {
@@ -107,18 +109,16 @@ static Type GetS(const int num_cell, const Vector3& direction, const std::vector
 	return (3. * (1 + dot* dot)) / 4;
 	} };
 
-
-	Vector3 cur_direction;
 	Type S = 0;
 	const int N_dir = grid_direction.size;
-	const int N_cell = illum_old.size() / N_dir;
+	const int N_cell = grid.size * base; // / N_dir;
 
 	for (int num_direction = 0; num_direction < N_dir; num_direction++)
 	{
 		Type I = 0;
 		for (int i = 0; i < base; i++)
 		{
-			I+=illum_old[num_direction * N_cell + num_cell + i];
+			I+= grid.Illum[num_direction * N_cell + num_cell + i];
 		}
 		I /= base;
 		
@@ -127,11 +127,10 @@ static Type GetS(const int num_cell, const Vector3& direction, const std::vector
 	return S / grid_direction.full_area;     // было *4PI, но из-за нормировки Gamma разделили на 4PI
 }
 
-static int CalculateIntCPU(const int num_cells, const std::vector<Type>& illum, const grid_directions_t& grid_direction,
-	vector<Type>& int_scattering)
+static int CalculateIntCPU(const int num_cells, const grid_directions_t& grid_direction, grid_t& grid)
 {
 
-#pragma omp parallel default(none) shared(num_cells, illum, grid_direction, int_scattering)
+#pragma omp parallel default(none) shared(num_cells, grid_direction, grid)
 	{
 		Vector3 direction;
 		const int num_directions = grid_direction.size;
@@ -140,7 +139,7 @@ static int CalculateIntCPU(const int num_cells, const std::vector<Type>& illum, 
 			direction = grid_direction.directions[num_direction].dir;
 			for (int cell = 0; cell < num_cells; cell++)
 			{
-				int_scattering[num_direction * num_cells + cell] = GetS(base * cell, direction, illum, grid_direction);
+				grid.scattering[num_direction * num_cells + cell] = GetS(base * cell, direction, grid, grid_direction);
 			}
 		}
 	}
@@ -388,12 +387,13 @@ static Type ReCalcIllum(const int num_dir, const std::vector<Vector3>& inter_coe
 	return norm;
 }
 
-static Type ReCalcIllumGlobal(const int dir_size, std::vector<elem_t>& cells, const std::vector<Type>& Illum)
+#ifndef USE_CUDA
+static Type ReCalcIllumGlobal(const int dir_size, grid_t& grid)
 {
 	
 //#pragma omp parallel default(none) shared(dir_size, cells,Illum)
 	{
-		const int size = cells.size();
+		const int size = grid.size;
 //#pragma omp for
 		for (int num_dir = 0; num_dir < dir_size; num_dir++)
 		{
@@ -403,31 +403,37 @@ static Type ReCalcIllumGlobal(const int dir_size, std::vector<elem_t>& cells, co
 				for (int i = 0; i < base; i++)
 				{
 					const int id = base * (shift_dir + num_cell) + i;
-					cells[num_cell].illum_val.illum[num_dir * base + i] = Illum[id]; //на каждой грани по направлениям
+					grid.cells[num_cell].illum_val.illum[num_dir * base + i] = grid.Illum[id]; //на каждой грани по направлениям
 				}
 			}
 		}
 	}
 	return 0;
 }
-static int GetIntScattering(const int count_cells, const grid_directions_t& grid_direction,  std::vector<Type>& Illum, std::vector<Type>& int_scattering)
+#endif
+
+//#include "../../file_module/writer_bin.h"
+static int GetIntScattering(const int count_cells, const grid_directions_t& grid_direction, grid_t& grid)
 {
-#ifdef USE_CUDA
-	if (solve_mode.use_cuda)
+	if (solve_mode.max_number_of_iter > 1)  // пропуск первой итерации
 	{
-		if (CalculateIntScattering(32, count_cells, grid_direction.size, Illum, int_scattering))  // если была ошибка пересчитать на CPU 
+#ifdef USE_CUDA		
+		if (CalculateIntScattering(grid_direction, grid))  // если была ошибка пересчитать на CPU 
 		{
-			CalculateIntCPU(count_cells, Illum, grid_direction, int_scattering);
-			ClearDevice(solve_mode.cuda_mod);
-			solve_mode.use_cuda = false;
+			ClearDevice();
+			EXIT_ERR("");
 		}
+#else
+		CalculateIntCPU(count_cells, grid_direction, grid);
+#endif
 	}
 	else
-#endif
 	{
-		CalculateIntCPU(count_cells, Illum, grid_direction, int_scattering);
+#ifdef USE_CUDA
+		CopyIllumOnDevice(count_cells * base * grid_direction.size, grid.Illum);
+#endif
 	}
-
+		
 	return 0;
 }
 
@@ -435,7 +441,7 @@ int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vecto
 	const std::vector < std::vector<cell_local>>& vec_x0, std::vector<BasePointTetra>& vec_x,
 	const std::vector < std::vector<int>>& sorted_id_cell,
 	//const std::vector<Type>& res_inner_bound, 
-	grid_t& grid, std::vector<Type>& Illum, std::vector<Type>& int_scattering)
+	grid_t& grid)
 {	
 	const int count_directions = grid_direction.size;	
 	const int count_cells = grid.size;
@@ -470,8 +476,8 @@ int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vecto
 		Type _clock = -omp_get_wtime();
 		norm = -1;		
 		
-#pragma omp parallel default(none) shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, int_scattering,Illum, \
-		norm, inter_coef_all,local_size, int_scattering_local, phys_local, loc_illum)
+#pragma omp parallel default(none) shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, \
+		norm, inter_coef_all,local_size, int_scattering_local, phys_local, loc_illum, disp, myid, np)
 		{
 			Type loc_norm = -1;
 			const int num = omp_get_thread_num();
@@ -528,12 +534,37 @@ int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vecto
 							(*inter_coef)[out_id_face] = I;
 						}
 
+						//сюда сразу в loc_illum. сходимость ез нормы задать числом итераций
+
 					} //num_out_face	
 
 				}
 
 				/*---------------------------------- конец FOR по ячейкам----------------------------------*/
 				loc_norm = ReCalcIllum(num_direction, *inter_coef, loc_illum);
+#if 0
+				MPI_Request rq;
+				const int n = count_cells * base;
+
+				if (myid != 0)
+				{
+					MPI_Isend(loc_illum.data() + num_direction * n, n, MPI_DOUBLE, 0, myid, MPI_COMM_WORLD, &rq);
+				}
+				else
+				{				
+					for (size_t i = 1; i < np; i++)
+					{
+						int pos = (disp[i] + num_direction) * n;
+
+						MPI_Irecv(grid.Illum + pos, n, MPI_DOUBLE, i, i, MPI_COMM_WORLD, &rq);
+					}
+
+					for (size_t i = 0; i < n; i++)
+					{
+						grid.Illum[num_direction * n + i] = loc_illum[num_direction * n + i];
+					}
+				}	
+#endif
 			}
 
 			/*---------------------------------- конец FOR по направлениям----------------------------------*/
@@ -550,25 +581,26 @@ int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vecto
 			}
 		} // end omp
 
+		//MPI_Waitall();
+		MPI_Barrier(MPI_COMM_WORLD);
+
 		//WRITE_LOG_MPI("iter time without send = " << _clock + omp_get_wtime() << '\n', myid);
 
-		MPI_Gatherv(loc_illum.data(), loc_illum.size(), MPI_DOUBLE, Illum.data(), send_count_illum.data(), disp_illum.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);				
+		MPI_Gatherv(loc_illum.data(), loc_illum.size(), MPI_DOUBLE, grid.Illum, send_count_illum.data(), disp_illum.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);				
 		MPI_Gather(&norm, 1, MPI_DOUBLE, norms.data(), 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 		
 		//WRITE_LOG_MPI("time after MPI_Gatherv = " << _clock + omp_get_wtime() << '\n', myid);
 
 		if (myid == 0)		
 		{			
-			Type int_time = -omp_get_wtime();
-			if (solve_mode.max_number_of_iter > 1)  // пропуск первой итерации
-			{
-				GetIntScattering(count_cells, grid_direction, Illum, int_scattering);
-			}			
+			Type int_time = -omp_get_wtime();			
+			GetIntScattering(count_cells, grid_direction, grid);
+				
 		//	WRITE_LOG_MPI("time int= " << int_time + omp_get_wtime() << '\n', myid);
 		}
 
 		MPI_Barrier(MPI_COMM_WORLD); // ждем расчёт интеграла рассеяния		
-		MPI_Scatterv(int_scattering.data(), send_count_scattering.data(), disp_scattering.data(), MPI_DOUBLE,
+		MPI_Scatterv(grid.scattering, send_count_scattering.data(), disp_scattering.data(), MPI_DOUBLE,
 					 int_scattering_local.data(), int_scattering_local.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 		
 		//WRITE_LOG_MPI("time after MPI_Scatterv = " << _clock + omp_get_wtime() << '\n', myid);
@@ -587,8 +619,8 @@ int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vecto
 	
 #ifndef USE_CUDA
 	if (myid == 0) // это уйдет, когда все интегралы перейдут в cuda
-	{
-		ReCalcIllumGlobal(grid_direction.size, grid.cells, Illum);		
+	{		
+		ReCalcIllumGlobal(grid_direction.size, grid);		
 		//WriteFileSolution(BASE_ADRESS + "Illum_result.txt", Illum);
 	}	
 #endif
@@ -597,7 +629,7 @@ int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vecto
 }
 
 //-----------------------------------------------------//
-
+#ifndef USE_CUDA
 
 #define GET_FACE_TO_CELL(val, data, init){ \
 val = init; \
@@ -755,23 +787,6 @@ static int MakeDivImpuls(const grid_directions_t& grid_direction, grid_t& grid)
 	return 0;
 }
 
-int CalculateIllumParam(const grid_directions_t& grid_direction, grid_t& grid) 
-{
-#ifdef USE_CUDA
-	if (solve_mode.use_cuda)
-	{
-		CalculateParamOnCuda(grid_direction.size, grid.size);
-	}
-	else
-#endif
-	{
-		MakeEnergy(grid_direction, grid.cells);
-		MakeStream(grid_direction, grid);
-		MakeDivImpuls(grid_direction, grid);
-	}
-	return 0;
-}
-
 int TestDivStream(const std::vector<Vector3>& centers_face, grid_t& grid)
 {	
 #pragma omp parallel  default(none) shared(centers_face, grid) 
@@ -807,6 +822,21 @@ int TestDivStream(const std::vector<Vector3>& centers_face, grid_t& grid)
 			el.illum_val.div_stream /= el.geo.V;
 		}
 	}
+	return 0;
+}
+#endif //!CUDA
+
+int CalculateIllumParam(const grid_directions_t& grid_direction, grid_t& grid)
+{
+#ifdef USE_CUDA
+	CalculateParamOnCuda(grid_direction, grid);
+#else
+	{
+		MakeEnergy(grid_direction, grid.cells);
+		MakeStream(grid_direction, grid);
+		MakeDivImpuls(grid_direction, grid);
+	}
+#endif
 	return 0;
 }
 

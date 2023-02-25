@@ -102,6 +102,7 @@ geo_cell_t::geo_cell_t()
 
 illum_value_t::illum_value_t(const int num_dir)
 {
+#ifndef USE_CUDA
 	illum.resize(num_dir * base, 0);
 	energy = 0;
 	stream = Vector3::Zero();
@@ -112,6 +113,7 @@ illum_value_t::illum_value_t(const int num_dir)
 	impuls = Matrix3::Zero();
 	div_stream = 0;
 	div_impuls= Vector3::Zero();
+#endif
 	
 	absorp_coef = 0;
 	rad_en_loose_rate = 0;
@@ -128,6 +130,16 @@ std::ostream& operator<< (std::ostream& out, const cell_local& p)
 	return out;
 }
 
+#include "../cuda/cuda_solve.h"
+grid_t::~grid_t()
+{
+#ifdef USE_CUDA
+	ClearHost(*this);
+#else		
+	delete[] Illum;
+	delete[] scattering;
+#endif
+}
 
 #ifdef  USE_MPI
 MPI_Datatype MPI_flux_t;

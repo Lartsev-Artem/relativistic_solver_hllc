@@ -17,6 +17,8 @@
 #include"illum/illum_utils.h"
 #include "hllc/hllc_utils.h"  //сделать общий для rhllc и hllc
 
+#include "../cuda/cuda_solve.h"
+
 solve_mode_t solve_mode;
 
 /*
@@ -72,9 +74,9 @@ int RunSolveModule(const std::string& name_file_settings)
 	const std::string name_file_hllc_set = BASE_ADRESS + "hllc_settings.txt";
 
 	//--------------------------Файлы расчётных данных(отдельные файлы по направлениям)-----------------------------------//
-	const std::string name_file_state_face = BASE_ADRESS + "state_face";
-	const std::string name_file_x0_loc = BASE_ADRESS + "LocX0";
-	const std::string name_file_x = BASE_ADRESS + "X.bin";
+	const std::string name_file_state_face = BASE_ADRESS + "illum_geo/state_face";
+	const std::string name_file_x0_loc = BASE_ADRESS + "illum_geo/LocX0";
+	const std::string name_file_x = BASE_ADRESS + "illum_geo/X.bin";
 
 	//--------------------------Файлы трассировки сквозь внутреннюю границу----------------------------------------//
 	const std::string name_file_dist_try = BASE_ADRESS + "dist_defining_faces";
@@ -115,8 +117,8 @@ int RunSolveModule(const std::string& name_file_settings)
 	double _clock;
 
 	//------------------------------ Illume section-----------------------------
-	std::vector<Type> Illum; // отдельно от сетки из-за расчета на cuda
-	std::vector<Type> int_scattering; // отдельно от сетки из-за расчета на cuda
+	//std::vector<Type> Illum; // отдельно от сетки из-за расчета на cuda
+	//std::vector<Type> int_scattering; // отдельно от сетки из-за расчета на cuda
 
 #ifdef ILLUM
 	grid_directions_t grid_direction;
@@ -147,47 +149,18 @@ int RunSolveModule(const std::string& name_file_settings)
 
 	if (myid == 0)
 	{
+		/*grid.Illum;
+
 		Illum.resize(base * grid.size * grid_direction.size, 0);
-		int_scattering.resize(grid.size * grid_direction.size, 0);
+		int_scattering.resize(grid.size * grid_direction.size, 0);*/
 
-
-#ifdef USE_CUDA //пока только на основном узле
-		if (solve_mode.use_cuda)
-		{
-			if (CheckDevice())
-			{
-				CUDA_ERR("Cuda wasn't found\n");
-			}
-			else
-			{
-				if (InitDevice(grid_direction.size, grid.size, solve_mode.cuda_mod)) CUDA_ERR("Cuda Error init\n");
-				//if (HostToDevice(grid_direction, Illum, 1))  CUDA_ERR("Error cuda hostTodevice\n");
-								
-				const std::string name_file_normals = BASE_ADRESS + "normals.bin";				
-				const std::string name_file_squares = BASE_ADRESS + "squares.bin";
-				const std::string name_file_volume = BASE_ADRESS + "volume.bin";
-				
-				std::vector<Normals> normals;
-				std::vector<Type> squares_faces;
-				std::vector<Type> volume;				
-				
-				if (ReadNormalFile(name_file_normals, normals)) RETURN_ERR("Error reading file normals\n");
-				if (ReadSimpleFileBin(name_file_squares, squares_faces)) RETURN_ERR("Error reading file squares_faces\n");
-				if (ReadSimpleFileBin(name_file_volume, volume)) RETURN_ERR("Error reading file volume\n");
-
-				WRITE_LOG("Start Init device\n");
-
-				if (HostToDeviceInit(grid_direction, Illum, volume, squares_faces, normals))  CUDA_ERR("Error cuda hostTodevice\n");
-			}
-		}
-#endif	
-
-		for (auto& el : grid.cells)
-		{
-			el.illum_val.illum.resize(grid_direction.size * base);
-		}
+#ifdef USE_CUDA //пока только на основном узле		
+		SetDevice(0);
+		InitDevice(grid_direction, grid);
+#else
+		grid.InitMemory(grid_direction.size);				
+#endif			
 		InitIllum(BASE_ADRESS, grid);
-
 	} //myid==0
 
 #ifdef USE_MPI
@@ -209,7 +182,7 @@ int RunSolveModule(const std::string& name_file_settings)
 	{
 		if (HLLC_INIT(name_file_hllc_set, hllc_cfg, name_file_value_init, grid.cells)) RETURN_ERR("Bad init hllc\n");  //Начальные данные для HLLC
 
-		WriteFileSolution(adress_solve + std::to_string(res_count++), Illum, grid.cells); //печать начальной сетки
+		WriteFileSolution(adress_solve + std::to_string(res_count++), grid); //печать начальной сетки
 
 		WRITE_LOG("Start main task\n");
 	}
@@ -241,7 +214,7 @@ int RunSolveModule(const std::string& name_file_settings)
 		{
 #ifdef USE_MPI
 			MPI_Barrier(MPI_COMM_WORLD); //ждем газодинамического расчёта
-			MPI_CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
+			MPI_CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid);
 			MPI_Barrier(MPI_COMM_WORLD); //ждем  расчёта излучения
 #else
 			CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
@@ -251,9 +224,10 @@ int RunSolveModule(const std::string& name_file_settings)
 			if (myid == 0)
 			{
 				Type tt = -omp_get_wtime();
+
 				CalculateIllumParam(grid_direction, grid);
 				
-				if (SolveIllumAndHLLC(hllc_cfg.tau, grid.cells) == 1)
+				if (SolveIllumAndHLLC(hllc_cfg.tau, grid) == 1)
 				{
 					WRITE_LOG("bad illum solve\n");
 					//non phys conv value -> continue(надо учесть mpi)
@@ -275,32 +249,9 @@ int RunSolveModule(const std::string& name_file_settings)
 
 			if (cur_timer >= hllc_cfg.print_timer)
 			{
-#ifdef USE_CUDA								
-				if (solve_mode.use_cuda)
-				{
-					std::vector<Type> energy(grid.size);
-					CalculateEnergy(32, grid.size, grid_direction.size, energy);
-
-					std::vector<Vector3> stream(grid.size);
-					CalculateStream(32, grid.size, grid_direction.size, stream);
-
-					std::vector<Matrix3> impuls(grid.size);
-					CalculateImpuls(32, grid.size, grid_direction.size, impuls);
-
-					int i = 0;
-					for (auto& el : grid.cells)
-					{
-						el.illum_val.energy = energy[i];
-						el.illum_val.stream = stream[i];
-						el.illum_val.impuls = impuls[i];
-						i++;
-					}
-				}
-#endif
-
-				WriteFileSolution(adress_solve + std::to_string(res_count++), Illum, grid.cells);
-
-				//WRITE_LOG("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << '\n');
+				//calculate full array
+				WriteFileSolution(adress_solve + std::to_string(res_count++), grid);
+				
 				printf("\n t= %f,  tau= %lf,  res_step= %d\n", t, hllc_cfg.tau, res_count);
 				cur_timer = 0;
 			}
@@ -312,7 +263,7 @@ int RunSolveModule(const std::string& name_file_settings)
 #ifdef USE_MPI
 		MPI_Bcast(&hllc_cfg, 1, MPI_hllc_value_t, 0, MPI_COMM_WORLD);
 #endif
-
+		
 	}// while(t < T)
 
 #elif defined ILLUM
@@ -337,14 +288,11 @@ int RunSolveModule(const std::string& name_file_settings)
 		full_time += omp_get_wtime();
 		printf("Time while(): %f\n", full_time);
 
-#ifdef USE_CUDA // только на главном узле
-		if (solve_mode.use_cuda)
-		{
-			ClearDevice(solve_mode.cuda_mod);
-		}
+#ifdef USE_CUDA // только на главном узле		
+		ClearDevice();		
 #endif
 
-		WriteFileSolution(adress_solve + std::to_string(res_count), Illum, grid.cells);
+		WriteFileSolution(adress_solve + std::to_string(res_count), grid);
 
 		WRITE_LOG("End solve module\n");
 

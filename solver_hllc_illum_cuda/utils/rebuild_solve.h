@@ -15,6 +15,8 @@ int GetPhysScale();
 int MakeHllcInitFile(file_name BASE_ADRESS);
 
 int MakeHllcInitFromGrid(int argc, char* argv[], file_name name_file_settings);
+
+int CompareFiles(int argc, char* argv[]);
 #endif
 
 #endif //REBUILD_SOLVE_H

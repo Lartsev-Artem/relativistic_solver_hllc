@@ -409,7 +409,7 @@ int MakeHllcInitFile(file_name BASE_ADRESS)
 		i++;
 	} //for
 
-	WRITE_FILE((BASE_ADRESS + "hllc_init_value_illum_jet.bin").c_str(), cells, phys_val);
+	WRITE_FILE_VECTOR((BASE_ADRESS + "hllc_init_value_illum_jet.bin").c_str(), cells, phys_val);
 
 	return 0;
 }
@@ -484,4 +484,106 @@ int MakeHllcInitFromGrid(int argc, char* argv[], file_name name_file_settings)
 }
 
 #endif // USE_VTK
+
+
+enum type_t
+{
+	eTypeDefault = -1,
+	eTypeInt = 0,
+	eTypeDouble = 1,
+	eTypeVector3 = 2,
+	eTypeMatrix9 = 3,
+};
+
+#define FIND_EIGEN(val1, val2) \
+for (size_t i = 0; i < val1.size(); i++) \
+{\
+	sum += (val1[i] - val2[i]).norm();\
+	if (max < (val1[i] - val2[i]).norm())\
+	{\
+		max = (val1[i] - val2[i]).norm();\
+		id = i;\
+	}\
+}
+
+#define FIND_VALUE(val1, val2) \
+for (size_t i = 0; i < val1.size(); i++) \
+{\
+	sum += fabs(val1[i] - val2[i]);\
+	if (max < fabs(val1[i] - val2[i]))\
+	{\
+		max = fabs(val1[i] - val2[i]);\
+		id = i;\
+	}\
+}
+
+int CompareFiles(int argc, char* argv[])
+{
+	std::string type = "";
+	std::string file1 = "";
+	std::string file2 = "";
+
+	switch (argc)
+	{
+	case 4:
+		file1 = argv[1];
+		file2 = argv[2];
+		type = argv[3];
+		break;
+	default:
+		printf("Error input data!\n");
+		printf("Input: path\\input_file1.bin, path\\input_file2.bin, type {int, double, Vector3, Matrix3}\n");
+		RETURN_ERR("");		
+		break;
+	}
+
+	int t = eTypeDefault;
+	Type sum = 0;
+	Type max = -1;
+	int id = -1;
+
+	if (type == "int")  t = eTypeInt;
+	if (type == "double")  t = eTypeDouble;
+	if (type == "Vector3")  t = eTypeVector3;
+	if (type == "Matrix3")  t = eTypeMatrix9;
+
+	std::vector<int> en_int, en_int2;
+	std::vector<double> en_double, en_double2;
+	std::vector<Vector3> en_Vector3, en_Vector32;
+	std::vector<Matrix3> en_Matrix3, en_Matrix32;
+
+	switch (t)
+	{
+	case eTypeInt:
+		if (ReadSimpleFileBin(file1, en_int)) RETURN_ERR("");
+		if (ReadSimpleFileBin(file2, en_int2)) RETURN_ERR("");
+		FIND_VALUE(en_int, en_int2);
+		break;
+
+	case eTypeDouble:
+		if (ReadSimpleFileBin(file1, en_double)) RETURN_ERR("");
+		if (ReadSimpleFileBin(file2, en_double2))RETURN_ERR("");
+		FIND_VALUE(en_double, en_double2);
+		break;
+
+	case eTypeVector3:
+		if (ReadSimpleFileBin(file1, en_Vector3)) RETURN_ERR("");
+		if (ReadSimpleFileBin(file2, en_Vector32))RETURN_ERR("");
+		FIND_EIGEN(en_Vector3, en_Vector32);
+		break;
+
+	case eTypeMatrix9:
+		if (ReadSimpleFileBin(file1, en_Matrix3)) RETURN_ERR("");
+		if (ReadSimpleFileBin(file2, en_Matrix32)) RETURN_ERR("");
+		FIND_EIGEN(en_Matrix3, en_Matrix32);
+		break;
+
+	case eTypeDefault:		
+		RETURN_ERR(("unknow type: %s\n", type.c_str()));
+	}
+
+	printf("max[%d]= %.16lf,  sum_err= %.16lf\n", id, max, sum);
+	return 0;
+
+}
 #endif //UTILS

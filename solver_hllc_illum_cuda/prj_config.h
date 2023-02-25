@@ -5,7 +5,9 @@
 
 #ifndef CLASTER
 
+#if !__NVCC__
 #define USE_VTK	  // использование vtk для вывода результатов в виде сетки
+#endif
 
 //#define UTILS
 
@@ -27,7 +29,7 @@
 
 #define USE_CUDA  // подключение технологии cuda
 
-//#define WRITE_GLOBAL_LOG	// писать лог файл
+#define WRITE_GLOBAL_LOG	// писать лог файл
 
 #if defined BUILD || defined MAKE  //todo rename on BUILD_DATA_TO_ILLUM
 //#define ONLY_GEO_DATA

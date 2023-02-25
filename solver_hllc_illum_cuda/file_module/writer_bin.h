@@ -26,7 +26,7 @@ size_t WriteSimpleFileBin(const Str_Type name_file, const std::vector<T>& data_a
 	return 0;
 }
 
-size_t WriteFileSolution(const std::string& main_dir, const std::vector<Type>& vector_illum, const std::vector<elem_t>& cells);
+size_t WriteFileSolution(const std::string& main_dir, const grid_t& grid);
 int WriteGeometryGrid(const std::string& file_cells, const std::string& file_faces, grid_t& grid);
 
 #endif // !WRITER_BIN
