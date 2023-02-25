@@ -248,13 +248,14 @@ void GetDisp(const int np, const int n, std::vector<int>& disp)
 {
 	// вычисление сдвигов  на узел
 	disp.resize(np, 0);
+	int a = n % np;
 	for (int i = 1; i < np; i++)
-		disp[i] = i * (n / np);
+		disp[i] = i * (n / np) + a;
 
 	if (n % np)  // если число процессов не кратно размерности задачи 
 	{
-		for (int i = 1; i < np; i++) // смещения для процессов за ними увеличивается начиная со второго
-			++disp[i];
+		for (int i = 1; i < a; i++) // смещения для процессов за ними увеличивается начиная со второго
+			disp[a - i] -= i;
 	}
 }
 

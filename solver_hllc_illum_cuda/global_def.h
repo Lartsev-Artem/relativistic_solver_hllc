@@ -111,8 +111,12 @@ struct cell_local // для каждой ячейки и каждого направления
 file.open(namefile); \
 if (!file.is_open()) RETURN_ERRS("Error : file %s is not open\n", namefile);
 
-
+#ifdef CLASTER
 #define Files_log "File_Logs.txt"
+#else
+#define Files_log std::string(BASE_ADRESS + "File_Logs.txt").c_str()
+#endif
+
 #ifdef WRITE_GLOBAL_LOG	
 
 #ifdef WRITE_LOG_ON_SCREAN
@@ -122,13 +126,13 @@ if (!file.is_open()) RETURN_ERRS("Error : file %s is not open\n", namefile);
 
 #define WRITE_LOG(str){  \
 std::ofstream ofile; \
-ofile.open(BASE_ADRESS + Files_log, std::ios::app); \
+ofile.open(Files_log, std::ios::app); \
 ofile << str; \
 ofile.close(); }
 
 #define WRITE_LOG_MPI(str, id){  \
 std::ofstream ofile; \
-ofile.open(BASE_ADRESS + "File_MPI_LOG" + std::to_string(id)+".txt", std::ios::app); \
+ofile.open(Files_log + std::to_string(id)+".txt", std::ios::app); \
 ofile << str; \
 ofile.close(); }
 
@@ -198,7 +202,6 @@ fclose(f); \
 #endif //USE_MPI
 
 #define SIGN(a) (a < 0.0 ? -1.0 : 1.0) 
-
 
 #ifdef  USE_MPI
 extern MPI_Datatype MPI_flux_t;

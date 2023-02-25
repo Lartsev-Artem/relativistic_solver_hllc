@@ -27,7 +27,7 @@
 #define USE_MPI  // подключение технологии mpi
 #endif
 
-#define USE_CUDA  // подключение технологии cuda
+//#define USE_CUDA  // подключение технологии cuda
 
 #define WRITE_GLOBAL_LOG	// писать лог файл
 

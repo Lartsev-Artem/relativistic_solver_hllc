@@ -214,7 +214,7 @@ int RunSolveModule(const std::string& name_file_settings)
 		{
 #ifdef USE_MPI
 			MPI_Barrier(MPI_COMM_WORLD); //ждем газодинамического расчёта
-			MPI_CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid);
+			MPI_CalculateIllumAsync(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid);
 			MPI_Barrier(MPI_COMM_WORLD); //ждем  расчёта излучения
 #else
 			CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
@@ -263,6 +263,8 @@ int RunSolveModule(const std::string& name_file_settings)
 #ifdef USE_MPI
 		MPI_Bcast(&hllc_cfg, 1, MPI_hllc_value_t, 0, MPI_COMM_WORLD);
 #endif
+
+		EXIT_ERR("debug exit\n");
 		
 	}// while(t < T)
 

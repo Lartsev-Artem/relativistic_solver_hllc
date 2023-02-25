@@ -11,15 +11,40 @@
 #define CUDA_BLOCKS_1D(val, cells) dim3 val((cells + BS - 1) / BS);
 #define CUDA_TREADS_1D(val)              dim3 threads(BS);
 
-
+void CudaWait()
+{
+    CUDA_CALL_FUNC(cudaDeviceSynchronize);
+}
 void SetDevice(const int num_dev)
 {
     CUDA_CALL_FUNC(cudaSetDevice, num_dev);        
 }
 
+void CudaSendIllumAsync(const int size,const int shift ,const Type* Illum_host)
+{
+    CUDA_MEMCPY_TO_DEVICE_ASYNC(device_host_ptr.illum + shift, Illum_host + shift, size);
+}
+
 void CopyIllumOnDevice(const int size, const Type* Illum_host)
 {
     CUDA_MEMCPY_TO_DEVICE(device_host_ptr.illum, Illum_host, size * sizeof(Illum_host[0]));
+}
+
+int CalculateIntScatteringAsync(const grid_directions_t& grid_dir, grid_t& grid)
+{
+    const int M = grid_dir.size;
+    const int N = grid.size;
+    
+    CUDA_TREADS_2D(threads);
+    CUDA_BLOCKS_2D(blocks, N, M);
+
+    CUDA_CALL_KERNEL(d_GetS, blocks, threads, grid_dir_device_ptr, grid_cell_device_ptr);
+
+    CUDA_CALL_FUNC(cudaGetLastError);
+
+    CUDA_MEMCPY_TO_HOST_ASYNC(grid.scattering, device_host_ptr.int_scattering, N * M * sizeof(grid.scattering[0]));
+
+    return 0;
 }
 
 int CalculateIntScattering(const grid_directions_t& grid_dir, grid_t& grid)

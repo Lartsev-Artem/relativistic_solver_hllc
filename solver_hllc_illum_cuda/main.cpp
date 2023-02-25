@@ -21,6 +21,8 @@ int main(int argc, char* argv[])
 	else
 		name_file_settings = argv[1];
 
+	std::remove(Files_log);
+
 #if defined BUILD
 	RunBuildModule(name_file_settings);
 #endif //BUILD

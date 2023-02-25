@@ -5,9 +5,11 @@
 #ifdef USE_CUDA
 #include "../solve_module/solve_global_struct.h"
 
+void CudaSendIllumAsync(const int size, const int shift, const Type* Illum_host);
 void CopyIllumOnDevice(const int size, const Type* Illum_host);
 
 int CalculateIntScattering(const grid_directions_t& grid_dir, grid_t& grid);
+int CalculateIntScatteringAsync(const grid_directions_t& grid_dir, grid_t& grid);
 
 int CalculateEnergy(const grid_directions_t& grid_dir, grid_t& grid);
 
@@ -24,6 +26,7 @@ void InitDevice(const grid_directions_t& grid_dir_host, grid_t& grid_host);
 void ClearDevice();
 
 void ClearHost(grid_t& grid_host);
+void CudaWait();
 
 #endif //CUDA_SOLVE_H
 #endif
