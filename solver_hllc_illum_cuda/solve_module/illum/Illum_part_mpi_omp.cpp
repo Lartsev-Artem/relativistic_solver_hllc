@@ -680,6 +680,8 @@ int MPI_CalculateIllumAsync(const grid_directions_t& grid_direction, const std::
 					//WRITE_LOG("id= " << myid << "recv_teg= " << tag << " src= " << src << "\n");
 				}
 			}
+
+			flags_send_to_gpu.assign(flags_send_to_gpu.size(), 0);			
 		}
 		
 #pragma omp parallel default(none) shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, \
@@ -782,12 +784,7 @@ requests, status,flags_send_to_gpu, BASE_ADRESS)
 #ifdef USE_CUDA
 						CudaSendIllumAsync(n, (num_direction * n), loc_illum.data());
 #endif
-					}
-
-					for (size_t i = 0; i < n; i++)
-					{
-						grid.Illum[num_direction * n + i] = loc_illum[num_direction * n + i];
-					}
+					}				
 				}
 			}
 
@@ -811,14 +808,20 @@ requests, status,flags_send_to_gpu, BASE_ADRESS)
 		{
 #ifdef USE_CUDA
 			CalculateIntScatteringAsync(grid_direction, grid);
-#else
-			CalculateIntCPU(count_cells, grid_direction, grid);
-#endif
 
 			for (int i = 0; i < loc_illum.size(); i++)
 			{
 				grid.Illum[i] = loc_illum[i];
 			}
+#else
+			for (int i = 0; i < loc_illum.size(); i++)
+			{
+				grid.Illum[i] = loc_illum[i];
+			}
+			CalculateIntCPU(count_cells, grid_direction, grid);
+#endif
+
+
 		}
 
 		MPI_Gather(&norm, 1, MPI_DOUBLE, norms.data(), 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -847,6 +850,14 @@ requests, status,flags_send_to_gpu, BASE_ADRESS)
 		count++;
 	} while (norm > solve_mode.accuracy && count < solve_mode.max_number_of_iter);
 
+
+#ifndef USE_CUDA
+	if (myid == 0) // это уйдет, когда все интегралы перейдут в cuda
+	{
+		ReCalcIllumGlobal(grid_direction.size, grid);
+		//WriteFileSolution(BASE_ADRESS + "Illum_result.txt", Illum);
+	}
+#endif
 
 	return 0;
 }

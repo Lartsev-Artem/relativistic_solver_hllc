@@ -22,7 +22,8 @@ void SetDevice(const int num_dev)
 
 void CudaSendIllumAsync(const int size,const int shift ,const Type* Illum_host)
 {
-    CUDA_MEMCPY_TO_DEVICE_ASYNC(device_host_ptr.illum + shift, Illum_host + shift, size);
+    //CUDA_MEMCPY_TO_DEVICE_ASYNC(device_host_ptr.illum + shift, Illum_host + shift, size*sizeof(Illum_host[0]));
+    CUDA_MEMCPY_TO_DEVICE(device_host_ptr.illum + shift, Illum_host + shift, size * sizeof(Illum_host[0]));
 }
 
 void CopyIllumOnDevice(const int size, const Type* Illum_host)
@@ -42,7 +43,7 @@ int CalculateIntScatteringAsync(const grid_directions_t& grid_dir, grid_t& grid)
 
     CUDA_CALL_FUNC(cudaGetLastError);
 
-    CUDA_MEMCPY_TO_HOST_ASYNC(grid.scattering, device_host_ptr.int_scattering, N * M * sizeof(grid.scattering[0]));
+    CUDA_MEMCPY_TO_DEVICE(grid.scattering, device_host_ptr.int_scattering, N * M * sizeof(grid.scattering[0]));
 
     return 0;
 }
