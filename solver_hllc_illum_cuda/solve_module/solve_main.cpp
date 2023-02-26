@@ -63,7 +63,7 @@ int RunSolveModule(const std::string& name_file_settings)
 	{
 		RETURN_ERR("Error reading solve settings\n");
 	}
-	WRITE_LOG("start solve module\n");
+	WRITE_LOG_ERR("start solve module " << myid << "\n");
 
 #if defined HLLC || defined RHLLC
 	StartLowDimensionTask(BASE_ADRESS);
@@ -232,11 +232,11 @@ int RunSolveModule(const std::string& name_file_settings)
 				
 				if (SolveIllumAndHLLC(hllc_cfg.tau, grid) == 1)
 				{
-					WRITE_LOG("bad illum solve\n");
+					WRITE_LOG_ERR("bad illum solve\n");
 					//non phys conv value -> continue(надо учесть mpi)
 				}
 
-				WRITE_LOG("\n paramIllum time= " << tt + omp_get_wtime() << " c\n");
+				//WRITE_LOG("\n paramIllum time= " << tt + omp_get_wtime() << " c\n");
 				//energy.swap(prev_energy);
 				//stream.swap(prev_stream);
 			}		
@@ -255,6 +255,7 @@ int RunSolveModule(const std::string& name_file_settings)
 				//calculate full array
 				WriteFileSolution(adress_solve + std::to_string(res_count++), grid);
 				
+				WRITE_LOG_ERR("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << " time_step= " << time_step << " c, time" << full_time << " c\n");
 				printf("\n t= %f,  tau= %lf,  res_step= %d\n", t, hllc_cfg.tau, res_count);
 				cur_timer = 0;
 			}
@@ -267,7 +268,7 @@ int RunSolveModule(const std::string& name_file_settings)
 		MPI_Bcast(&hllc_cfg, 1, MPI_hllc_value_t, 0, MPI_COMM_WORLD);
 #endif
 
-		EXIT_ERR("debug exit\n");
+	//	EXIT_ERR("debug exit\n");
 		
 	}// while(t < T)
 
@@ -300,7 +301,7 @@ int RunSolveModule(const std::string& name_file_settings)
 
 		WriteFileSolution(adress_solve + std::to_string(res_count), grid);
 
-		WRITE_LOG("End solve module\n");
+		WRITE_LOG_ERR("End solve module\n");
 
 	}
 

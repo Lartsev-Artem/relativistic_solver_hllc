@@ -7,7 +7,7 @@
 #define CONVERT_TO_STRING(s, ...) #s #__VA_ARGS__
 
 #ifdef USE_CUDA
-#define CUDA_ERR(str){ WRITE_LOG(str); solve_mode.use_cuda = false;}
+#define CUDA_ERR(str){ WRITE_LOG_ERR(str); solve_mode.use_cuda = false;}
 #else
 #define CUDA_ERR(str){}
 #endif //USE_CUDA
@@ -15,8 +15,8 @@
 #define EXIT_ERR(str){printf(str); EXIT(1);}
 #define EXIT_ERRS(str,val){printf(str,val); EXIT(1);}
 
-#define RETURN_ERRS(str, val) { printf(str,val); return 1; }
-#define RETURN_ERR(str) { printf(str); return 1; }
+#define RETURN_ERRS(str, val) { printf(str,val); printf("\nCalls from: %s\n", __FUNCTION__); return 1; }
+#define RETURN_ERR(str) { printf(str); printf("\nCalls from: %s \n", __FUNCTION__); return 1; }
 
 #define base (NUMBER_OF_MEASUREMENTS + 1)
 
@@ -117,18 +117,21 @@ if (!file.is_open()) RETURN_ERRS("Error : file %s is not open\n", namefile);
 #define Files_log std::string(BASE_ADRESS + "File_Logs.txt").c_str()
 #endif
 
+
+
+#define WRITE_LOG_ERR(str){  \
+std::ofstream ofile; \
+ofile.open(Files_log, std::ios::app); \
+ofile << str; \
+ofile.close(); }
+
 #ifdef WRITE_GLOBAL_LOG	
 
 #ifdef WRITE_LOG_ON_SCREAN
 #define WRITE_LOG(str){std::cout<<str;}
 #else
 
-
-#define WRITE_LOG(str){  \
-std::ofstream ofile; \
-ofile.open(Files_log, std::ios::app); \
-ofile << str; \
-ofile.close(); }
+#define WRITE_LOG(str) WRITE_LOG_ERR(str)
 
 #define WRITE_LOG_MPI(str, id){  \
 std::ofstream ofile; \
@@ -139,7 +142,7 @@ ofile.close(); }
 
 #endif  //WRITE_LOG_ON_SCREAN
 #else
-#define WRITE_LOG(str) {CONVERT_TO_STRING(str)}
+#define WRITE_LOG(str) {CONVERT_TO_STRING(str);}
 #endif //WRITE_GLOBAL_LOG
 
 #ifdef _MSC_VER
@@ -194,7 +197,7 @@ fclose(f); \
 #ifdef USE_MPI
 #define MPI_START(argc, argv) MPI_Init(&argc, &argv);
 #define MPI_END MPI_Finalize();
-#define EXIT(a) { MPI_END exit(a); }
+#define EXIT(a) {WRITE_LOG_ERR("Err calls from"<<__FUNCTION__<<'\n'); printf("Calls from: %s", __FUNCTION__); MPI_END exit(a); }
 #else
 #define MPI_START(argc, argv) {std::remove((BASE_ADRESS + Files_log).c_str());}
 #define MPI_END {}

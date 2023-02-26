@@ -101,8 +101,8 @@ static int SetHllcSettingDefault(hllc_value_t& hllc_set)
 #ifdef ILLUM
 	///hllc_set.h = 0.0007166575761593; //jet
 	hllc_set.tau = 1e-7;
-	hllc_set.CFL = 0.001;
-	hllc_set.print_timer = 0.00000001;
+	hllc_set.CFL = 0.01;
+	hllc_set.print_timer = 0.05;
 	hllc_set.T = 1;
 #else //ILUM
 

@@ -2,6 +2,7 @@
 #define SOVLE_GLOBAL_STRUCT_H
 
 #include "solve_config.h"
+#include "../global_def.h"
 
 struct hllc_value_t
 {		
