@@ -52,10 +52,12 @@ int RunSolveModule(const std::string& name_file_settings)
 	std::string name_file_vtk;
 	std::string name_file_sphere_direction;
 	std::string adress_graph_file;
+	std::string adress_illum_geo_file;
 	std::string adress_solve;
 	std::string name_file_value_init = BASE_ADRESS + "hllc_init_value.bin";
 
-	if (ReadStartSettings(name_file_settings, solve_mode.class_vtk, name_file_vtk, name_file_sphere_direction, adress_graph_file, BASE_ADRESS, adress_solve, solve_mode.max_number_of_iter,
+	if (ReadStartSettings(name_file_settings, solve_mode.class_vtk, name_file_vtk, name_file_sphere_direction, adress_graph_file,
+		adress_illum_geo_file, BASE_ADRESS, adress_solve, solve_mode.max_number_of_iter,
 		name_file_value_init))
 	{
 		RETURN_ERR("Error reading solve settings\n");
@@ -74,14 +76,14 @@ int RunSolveModule(const std::string& name_file_settings)
 	const std::string name_file_hllc_set = BASE_ADRESS + "hllc_settings.txt";
 
 	//--------------------------Файлы расчётных данных(отдельные файлы по направлениям)-----------------------------------//
-	const std::string name_file_state_face = BASE_ADRESS + "illum_geo/state_face";
-	const std::string name_file_x0_loc = BASE_ADRESS + "illum_geo/LocX0";
-	const std::string name_file_x = BASE_ADRESS + "illum_geo/X.bin";
+	const std::string name_file_state_face = adress_illum_geo_file + "state_face";
+	const std::string name_file_x0_loc = adress_illum_geo_file + "LocX0";
+	const std::string name_file_x = adress_illum_geo_file + "X.bin";
 
 	//--------------------------Файлы трассировки сквозь внутреннюю границу----------------------------------------//
 	const std::string name_file_dist_try = BASE_ADRESS + "dist_defining_faces";
 	const std::string name_file_id_try = BASE_ADRESS + "id_defining_faces";
-	const std::string name_file_res = BASE_ADRESS + "ResBound";
+	const std::string name_file_res = adress_illum_geo_file + "ResBound";
 	const std::string name_file_neib = BASE_ADRESS + "pairs.bin";
 
 #if 0
@@ -271,7 +273,8 @@ int RunSolveModule(const std::string& name_file_settings)
 #elif defined ILLUM
 
 #ifdef USE_MPI
-	MPI_CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
+	MPI_CalculateIllumAsync(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid);
+	//MPI_CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid);
 #else
 	CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
 #endif

@@ -458,6 +458,17 @@ int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vecto
 	Type norm = -1;
 	std::vector<Type> norms;
 	
+	if (myid == 0)
+	{
+		int i = 0;
+		for (auto& el : grid.cells)
+		{
+			phys_local[i++] = el.phys_val;
+			// сюда же absorp_coef, если понадобиться
+		}
+
+		norms.resize(np, -10);
+	}
 	MPI_Bcast(phys_local.data(), count_cells , MPI_flux_t, 0, MPI_COMM_WORLD);
 		
 	do {
@@ -465,19 +476,6 @@ int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vecto
 		Type _clock = -omp_get_wtime();
 		norm = -1;		
 
-		// инициализируем весь прием сразу
-		if (myid == 0)
-		{
-			int NN = grid.size * base;
-			int src = 1;
-			MPI_Request rq;
-			for (size_t i = send_count[0]; i < grid_direction.size; i++)
-			{
-				if (send_count[0] + disp[src] < i)src++;				
-
-				MPI_Irecv(grid.Illum + NN * i, NN, MPI_DOUBLE, src, i, MPI_COMM_WORLD, &rq);
-			}
-		}
 
 #pragma omp parallel default(none) shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, \
 		norm, inter_coef_all,local_size, int_scattering_local, phys_local, loc_illum, disp, myid, np)

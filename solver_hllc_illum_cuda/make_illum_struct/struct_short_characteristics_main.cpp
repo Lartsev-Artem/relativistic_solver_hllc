@@ -16,10 +16,11 @@ int RunMakeModule(std::string name_file_settings, int a, int b)
 	std::string name_file_vtk;
 	std::string name_file_sphere_direction;
 	std::string name_file_graph;
+	std::string name_file_Illum_geo;
 	std::string out_file_grid_vtk;
 	std::string str; int class_vtk; int iter;
 
-	if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, name_file_sphere_direction, name_file_graph, BASE_ADRESS, str, iter))
+	if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, name_file_sphere_direction, name_file_graph, name_file_Illum_geo, BASE_ADRESS, str, iter))
 	{
 		RETURN_ERR("Error reading the start settings\n");
 	}
@@ -34,10 +35,10 @@ int RunMakeModule(std::string name_file_settings, int a, int b)
 	const std::string name_file_x_defining_faces = BASE_ADRESS + "x_defining_faces.bin";
 	const std::string name_file_size = BASE_ADRESS + "Size.txt";  // на ƒќ«јѕ»—№
 	//--------------------------------создающиес€ файлы----------------------------------------
-	const std::string name_file_state_face = BASE_ADRESS + "state_face";
-	const std::string name_file_x = BASE_ADRESS + "X.bin";
-	const std::string name_file_x0_loc = BASE_ADRESS + "LocX0";
-	const std::string name_file_res_bound = BASE_ADRESS + "ResBound";
+	const std::string name_file_state_face = name_file_Illum_geo + "state_face";
+	const std::string name_file_x = name_file_Illum_geo + "X.bin";
+	const std::string name_file_x0_loc = name_file_Illum_geo + "LocX0";
+	const std::string name_file_res_bound = name_file_Illum_geo + "ResBound";
 	
 #ifdef USE_VTK
 

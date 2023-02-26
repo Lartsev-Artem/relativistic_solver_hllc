@@ -49,7 +49,7 @@ int RunBuildModule(const std::string& name_file_settings)
 	std::string str;
 	int iter;
 
-	if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, name_file_sphere_direction, name_file_graph, BASE_ADRESS, str, iter))
+	if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, name_file_sphere_direction, name_file_graph, str, BASE_ADRESS, str, iter))
 	{
 		RETURN_ERR("Error reading build settings\n");
 	}

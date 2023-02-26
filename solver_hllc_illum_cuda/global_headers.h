@@ -86,7 +86,7 @@
 
 template<typename Str>
 int ReadStartSettings(const std::string& name_file_settings, int& class_file_vtk, Str& name_file_vtk, Str& name_file_sphere_direction, 
-	Str& graph_adress, Str& base_adress, Str& solve_adress, int& number_of_iter)
+	Str& graph_adress, Str& illum_geo_adress, Str& base_adress, Str& solve_adress, int& number_of_iter)
 {
 	std::ifstream ifile(name_file_settings);
 	if (!ifile.is_open()) 
@@ -103,6 +103,7 @@ int ReadStartSettings(const std::string& name_file_settings, int& class_file_vtk
 	std::getline(ifile, name_file_vtk);
 	std::getline(ifile, name_file_sphere_direction);
 	std::getline(ifile, graph_adress);
+	std::getline(ifile, illum_geo_adress);
 	std::getline(ifile, base_adress);
 	std::getline(ifile, solve_adress);
 	ifile >> number_of_iter;
@@ -115,7 +116,7 @@ int ReadStartSettings(const std::string& name_file_settings, int& class_file_vtk
 
 template<typename Str>
 int ReadStartSettings(const std::string& name_file_settings, int& class_file_vtk, Str& name_file_vtk, Str& name_file_sphere_direction,
-	Str& graph_adress, Str& base_adress, Str& solve_adress, int& number_of_iter, Str& hllc_init_value)
+	Str& graph_adress, Str& illum_geo_adress, Str& base_adress, Str& solve_adress, int& number_of_iter, Str& hllc_init_value)
 {
 	std::ifstream ifile(name_file_settings);
 	if (!ifile.is_open())
@@ -132,6 +133,7 @@ int ReadStartSettings(const std::string& name_file_settings, int& class_file_vtk
 	std::getline(ifile, name_file_vtk);
 	std::getline(ifile, name_file_sphere_direction);
 	std::getline(ifile, graph_adress);
+	std::getline(ifile, illum_geo_adress);
 	std::getline(ifile, base_adress);
 	std::getline(ifile, solve_adress);	
 	ifile >> number_of_iter; std::getline(ifile, str);

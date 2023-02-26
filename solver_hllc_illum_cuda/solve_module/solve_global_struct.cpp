@@ -130,6 +130,7 @@ std::ostream& operator<< (std::ostream& out, const cell_local& p)
 	return out;
 }
 
+#if defined ILLUM
 #include "../cuda/cuda_solve.h"
 grid_t::~grid_t()
 {
@@ -140,6 +141,7 @@ grid_t::~grid_t()
 	delete[] scattering;
 #endif
 }
+#endif
 
 #ifdef  USE_MPI
 MPI_Datatype MPI_flux_t;

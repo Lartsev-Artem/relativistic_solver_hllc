@@ -118,20 +118,20 @@ int rebuild_solve(int argc, char* argv[], file_name name_file_settings)
 	switch (argc)
 	{
 	case 2:
-		if (ReadStartSettings(argv[1], class_vtk, name_file_vtk, foo, foo, foo, adress_solve, max_number_of_iter))
+		if (ReadStartSettings(argv[1], class_vtk, name_file_vtk, foo, foo, foo, foo, adress_solve, max_number_of_iter))
 		{
 			RETURN_ERR("Error reading settings\n");
 		}
 		break;
 	case 3:
-		if (ReadStartSettings(argv[1], class_vtk, name_file_vtk, foo, foo, foo, adress_solve, max_number_of_iter))
+		if (ReadStartSettings(argv[1], class_vtk, name_file_vtk, foo, foo, foo, foo, adress_solve, max_number_of_iter))
 		{
 			RETURN_ERR("Error reading settings\n");
 		}
 		max_number_of_iter = std::stoi(argv[2]);
 		break;
 	default:
-		if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, foo, foo, foo, adress_solve, max_number_of_iter))
+		if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, foo, foo, foo, foo, adress_solve, max_number_of_iter))
 		{
 			RETURN_ERR("Error default reading settings\n");
 		}
@@ -166,12 +166,12 @@ int rewrite_vtk_array(int argc, char* argv[], file_name name_file_settings)
 	switch (argc)
 	{
 	case 2:
-		if (ReadStartSettings(argv[1], class_vtk, name_file_vtk, foo, foo, base_adress, foo, max_number_of_iter))
+		if (ReadStartSettings(argv[1], class_vtk, name_file_vtk, foo, foo, foo, base_adress, foo, max_number_of_iter))
 		{
 			RETURN_ERR("Error reading  settings\n");
 		}
 	default:
-		if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, foo, foo, base_adress, foo, max_number_of_iter))
+		if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, foo, foo, foo, base_adress, foo, max_number_of_iter))
 		{
 			RETURN_ERR("Error reading default settings\n");
 		}
@@ -449,12 +449,12 @@ int MakeHllcInitFromGrid(int argc, char* argv[], file_name name_file_settings)
 	switch (argc)
 	{
 	case 2:
-		if (ReadStartSettings(argv[1], a, name_file_vtk, foo, foo, base_adress, foo, a, file_init))
+		if (ReadStartSettings(argv[1], a, name_file_vtk, foo, foo, foo, base_adress, foo, a, file_init))
 		{
 			RETURN_ERR("Error reading  settings\n");
 		}
 	default:
-		if (ReadStartSettings(name_file_settings, a, name_file_vtk, foo, foo, base_adress, foo, a, file_init))
+		if (ReadStartSettings(name_file_settings, a, name_file_vtk, foo, foo, foo, base_adress, foo, a, file_init))
 		{
 			RETURN_ERR("Error reading default settings\n");
 		}
