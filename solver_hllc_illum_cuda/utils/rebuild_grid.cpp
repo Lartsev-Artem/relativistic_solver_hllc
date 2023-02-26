@@ -1,6 +1,5 @@
-#include "rebuild_grid.h"
-
 #if defined UTILS
+#include "rebuild_grid.h"
 
 #include "../file_module/reader_bin.h"
 #include "../file_module/reader_vtk.h"

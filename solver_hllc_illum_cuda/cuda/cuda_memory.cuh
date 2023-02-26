@@ -1,9 +1,5 @@
-#ifndef CUDA_MEMORY_H
+#if !defined CUDA_MEMORY_H && defined USE_CUDA
 #define CUDA_MEMORY_H
-
-#include "../prj_config.h"
-#ifdef USE_CUDA
-
 #include "cuda_def.cuh"
 
 #define CUDA_MEMCPY_TO_DEVICE(dist, src, size) CUDA_CALL_FUNC(cudaMemcpy, dist, src, size, cudaMemcpyHostToDevice);
@@ -21,4 +17,3 @@
 #define CUDA_FREE_HOST_MEMORY(val)  CUDA_CALL_FUNC(cudaFreeHost, val)
 
 #endif //CUDA_MEMORY_H
-#endif

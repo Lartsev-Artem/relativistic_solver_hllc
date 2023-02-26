@@ -1,5 +1,5 @@
-#include "struct_short_characteristics_global_structure.h"
 #ifdef MAKE
+#include "struct_short_characteristics_global_structure.h"
 #include "struct_short_characteristics_calculations.h"
 #include "struct_short_characteristics_logic_function.h"
 

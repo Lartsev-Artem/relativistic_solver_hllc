@@ -1,8 +1,6 @@
-#ifndef SOLVE_UTILS_H
+#if !defined SOLVE_UTILS_H && defined SOLVE
 #define SOLVE_UTILS_H
 #include "solve_config.h"
-
-#ifdef SOLVE
 
 #include "solve_global_struct.h"
 
@@ -26,8 +24,6 @@ int StartLowDimensionTask(file_name main_dir);
 
 int TestDivStream(const std::vector<Vector3>& centers_face, grid_t& grid);
 int TestDivStream(file_name BASE_ADRESS);
-
-#endif //SOLVE
 
 #ifdef USE_MPI
 void GetSend(const int np, const int n, std::vector<int>& send_count);

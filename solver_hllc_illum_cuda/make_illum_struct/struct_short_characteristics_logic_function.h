@@ -1,4 +1,4 @@
-#ifndef SHORT_CHARACTERISTICS_LOGIC_H
+#if !defined SHORT_CHARACTERISTICS_LOGIC_H && defined MAKE
 #define SHORT_CHARACTERISTICS_LOGIC_H
 
 #include "../global_headers.h"

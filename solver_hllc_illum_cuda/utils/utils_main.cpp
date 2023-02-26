@@ -1,5 +1,5 @@
-#include "../prj_config.h"
 #ifdef UTILS
+#include "../prj_config.h"
 #include "rebuild_solve.h"
 #include "rebuild_grid.h"
 #include "grid_geometry/get_grid_data.h"

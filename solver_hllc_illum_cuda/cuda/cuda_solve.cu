@@ -1,5 +1,4 @@
-﻿#include "../prj_config.h"
-#ifdef USE_CUDA
+﻿#ifdef USE_CUDA
 #include "../solve_module/solve_global_struct.h"
 
 #include "cuda_kernel.cuh"

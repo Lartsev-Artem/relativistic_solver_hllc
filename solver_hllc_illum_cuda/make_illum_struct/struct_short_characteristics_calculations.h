@@ -1,8 +1,6 @@
-#ifndef SHORT_CHARACTERISTICS_CALCULATIONS_H
+#if !defined SHORT_CHARACTERISTICS_CALCULATIONS_H && defined MAKE
 #define SHORT_CHARACTERISTICS_CALCULATIONS_H
 #include "struct_short_characteristics_global_structure.h"
-
-#ifdef MAKE
 
 #ifdef  USE_VTK
 int WriteCellFaces(const std::string name_file_cells, const vtkSmartPointer<vtkUnstructuredGrid>& unstructured_grid);
@@ -20,5 +18,4 @@ int FromPlaneToTetra(const Eigen::Matrix3d& inverse_transform_matrix, const Eige
 inline Vector3 GetInterpolationCoef(const Eigen::Matrix3d& interpolation_nodes, const Eigen::Vector3d& function_value);
 inline Vector3 GetInterpolationCoefInverse(const Eigen::Matrix3d& interpolation_nodes, const Eigen::Vector3d& function_value);
 
-#endif
 #endif //MAKE

@@ -1,8 +1,5 @@
-#ifndef CUDA_DEF_H
+#if !defined CUDA_DEF_H && defined USE_CUDA
 #define CUDA_DEF_H
-
-#include "../prj_config.h"
-#ifdef USE_CUDA
 
 #include <string>
 #include "../global_def.h"
@@ -41,5 +38,4 @@ int CheckError(Err_t cudaStatus, const std::string my_text = "")
     return 0;
 }
 
-#endif //USE_CUDA
 #endif //CUDA_DEF_H

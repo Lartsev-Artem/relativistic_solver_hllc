@@ -1,4 +1,4 @@
-#ifndef BUILD_GRAPH_PRJ_CONFIG
+#if !defined BUILD_GRAPH_PRJ_CONFIG && defined BUILD
 #define BUILD_GRAPH_PRJ_CONFIG
 
 #include "../prj_config.h"

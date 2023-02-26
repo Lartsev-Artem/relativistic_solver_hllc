@@ -1,6 +1,6 @@
+#ifdef BUILD
 #include "build_graph_prj_config.h"
 
-#ifdef BUILD
 #include "../global_value.h"
 
 #ifdef WriteFiles

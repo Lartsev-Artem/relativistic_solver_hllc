@@ -1,6 +1,7 @@
+#ifdef UTILS
 #include "rebuild_solve.h"
 
-#ifdef UTILS
+
 #include "../file_module/reader_bin.h"
 #include "../file_module/writer_bin.h"
 

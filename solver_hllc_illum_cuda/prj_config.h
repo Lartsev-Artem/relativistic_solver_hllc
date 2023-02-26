@@ -21,13 +21,15 @@
 
 //#define MAKE   // запуск модуля подготовительных расчётов для излучения
 
-#define SOLVE  // запуск модуля решения
+//#define SOLVE  // запуск модуля решения
+
+//#define USE_CUDA  // подключение технологии cuda
+
 
 #if !__NVCC__
 #define USE_MPI  // подключение технологии mpi
 #endif
 
-//#define USE_CUDA  // подключение технологии cuda
 
 #define WRITE_GLOBAL_LOG	// писать лог файл
 
@@ -49,11 +51,11 @@
 
 //#define Step
 
-//#define Cone
+#define Cone
 
-//#define Cone_JET
+#define Cone_JET
 
-#define Sphere
+//#define Sphere
 
 //#define Cylinder
 

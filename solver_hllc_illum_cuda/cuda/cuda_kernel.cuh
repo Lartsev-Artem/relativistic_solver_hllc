@@ -1,9 +1,5 @@
-#ifndef CUDA_KERNEL_H
+#if !defined CUDA_KERNEL_H && USE_CUDA
 #define CUDA_KERNEL_H
-
-#include "../prj_config.h"
-#ifdef USE_CUDA
-
 #include "cuda_struct.cuh"
 
 __global__ void d_GetS(const grid_directions_device_t* dir, grid_device_t* grid);
@@ -18,5 +14,4 @@ __global__ void d_MakeDivStream(const grid_directions_device_t* dir, grid_device
 
 __global__ void d_MakeDivImpuls(const grid_directions_device_t* dir, grid_device_t* grid);
 
-#endif //CUSE_CUDA
 #endif //CUDA_KERNEL_H

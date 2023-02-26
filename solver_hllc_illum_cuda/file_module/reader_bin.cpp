@@ -1,7 +1,6 @@
 #include "../prj_config.h"
 
 #include "reader_bin.h"
-//#if defined BUILD
 
 #include "../global_headers.h"
 #include "../global_def.h"

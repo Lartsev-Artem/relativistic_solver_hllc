@@ -1,9 +1,8 @@
+#ifdef MAKE
 #include "../file_module/writer_bin.h"
 #include "../utils/grid_geometry/geometry_data.h"
 
 #include "../global_value.h"
-
-#ifdef MAKE
 
 #ifdef USE_VTK
 

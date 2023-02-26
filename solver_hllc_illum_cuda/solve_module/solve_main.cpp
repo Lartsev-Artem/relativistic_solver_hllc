@@ -1,7 +1,8 @@
+#ifdef SOLVE
 #include "solve_global_struct.h"
 #include "../global_def.h"
 
-#ifdef SOLVE
+
 #include "../global_headers.h"
 #include "../global_value.h"
 

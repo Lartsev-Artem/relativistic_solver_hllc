@@ -1,5 +1,5 @@
-#include "build_graph_calculation.h"
 #ifdef BUILD
+#include "build_graph_calculation.h"
 #include "../utils/grid_geometry/geometry_data.h"
 #include "../utils/grid_geometry/geometry_solve.h"
 

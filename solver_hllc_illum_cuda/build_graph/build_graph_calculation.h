@@ -1,10 +1,7 @@
-#ifndef BUILD_GRAPH_CALCULATION
+#if !defined BUILD_GRAPH_CALCULATION && BUILD
 #define BUILD_GRAPH_CALCULATION
 
 #include "build_graph_prj_config.h"
-
-#ifdef BUILD
-
 #include "build_graph_structures.h"
 
 #include <map>
@@ -61,8 +58,6 @@ int NewStep(const std::vector<IntId>& all_pairs_id, const std::vector<IntId>& co
 	std::set<IntId>& next_step_el);
 
 #endif //USE_OMP
-
-#endif //BUILD
 
 #endif
 

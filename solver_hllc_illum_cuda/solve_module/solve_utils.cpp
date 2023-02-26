@@ -1,5 +1,6 @@
-#include "solve_utils.h"
 #ifdef SOLVE
+#include "solve_utils.h"
+
 
 #if NUMBER_OF_MEASUREMENTS == 3 
 void ReBuildNeighStruct(

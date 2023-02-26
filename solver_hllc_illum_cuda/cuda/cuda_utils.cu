@@ -1,10 +1,8 @@
-﻿//***********************************************************************//
+﻿#ifdef USE_CUDA
+//***********************************************************************//
 //*********************Functions from device*****************************//
 //***********************************************************************//
-
-#include "../prj_config.h"
-#ifdef USE_CUDA
-#include "cuda_utils.cuh"
+#include "cuda_struct.cuh"
 
 __device__ Type Gamma(const cuda_vector_t<Type, 3>& direction, const cuda_vector_t<Type, 3>& direction2)
 {    

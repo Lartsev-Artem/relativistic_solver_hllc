@@ -1,8 +1,6 @@
-#ifndef CUDA_STRUCT_H
+#if !defined CUDA_STRUCT_H && defined USE_CUDA
 #define CUDA_STRUCT_H
 
-#include "../prj_config.h"
-#ifdef USE_CUDA
 #include <cuda_runtime.h>
 #include "device_launch_parameters.h"
 
@@ -102,4 +100,3 @@ extern grid_directions_device_t* grid_dir_device_ptr;
 extern grid_device_t* grid_cell_device_ptr;
 
 #endif //CUDA_STRUCT_H
-#endif

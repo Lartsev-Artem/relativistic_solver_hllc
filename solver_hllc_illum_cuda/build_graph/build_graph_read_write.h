@@ -1,8 +1,6 @@
-#ifndef BUILD_GRAPH_READ_WRITE
+#if !defined BUILD_GRAPH_READ_WRITE && defined BUILD
 #define BUILD_GRAPH_READ_WRITE
 #include "../global_def.h"
-
-#ifdef BUILD
 
 #include "build_graph_prj_config.h"
 #include "build_graph_structures.h"
@@ -36,5 +34,5 @@ int ReadInnerCellOfSphereAndId(const std::string name_file_face_and_id, std::map
 #endif
 
 #endif
-#endif //BUILD
+
 #endif //BUILD_GRAPH_READ_WRITE

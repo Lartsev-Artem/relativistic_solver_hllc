@@ -1,6 +1,6 @@
+#ifdef UTILS
 #include "get_grid_data.h"
 
-#ifdef UTILS
 #if defined USE_VTK
 #include "../../file_module/reader_vtk.h"
 

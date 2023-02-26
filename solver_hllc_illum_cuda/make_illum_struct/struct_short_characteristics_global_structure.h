@@ -1,8 +1,6 @@
-#ifndef SHORT_CHARACTERISTICS_GLOBAL_H
+#if !defined SHORT_CHARACTERISTICS_GLOBAL_H && defined MAKE
 #define SHORT_CHARACTERISTICS_GLOBAL_H
 
-#include "../prj_config.h"
-#ifdef MAKE
 
 #include "../global_def.h"
 #include "../global_headers.h"
@@ -33,7 +31,5 @@ const Type R2disk = 0.09;
 
 extern std::vector<Vector3> x_try_surface;
 extern std::vector<int> id_try_surface;
-
-#endif //MAKE
 
 #endif

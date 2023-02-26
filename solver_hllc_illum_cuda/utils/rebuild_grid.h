@@ -1,8 +1,7 @@
-#ifndef REBUILD_GRID_H
+#if !defined REBUILD_GRID_H && defined UTILS
 #define REBUILD_GRID_H
-#include "../prj_config.h"
-#ifdef UTILS
 
+#include "../prj_config.h"
 #include "../global_headers.h"
 
 int ReBuildNetgenToVTK2d(int argc, char* argv[]);
@@ -13,5 +12,4 @@ int ReBuildNetgenToMetis(int argc, char* argv[]);
 int SetScalarDataVtkFromFile(int argc, char* argv[]);
 #endif //USE_VTK
 
-#endif // UTILS
 #endif //REBUILD_GRID_H

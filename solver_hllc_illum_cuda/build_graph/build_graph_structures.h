@@ -1,8 +1,6 @@
-#ifndef BUILD_GRAPH_STRUCT
+#if !defined BUILD_GRAPH_STRUCT && defined BUILD
 #define BUILD_GRAPH_STRUCT
 #include "../global_def.h"
-
-#ifdef BUILD
 
 extern std::vector<int> id_try_surface;		 // id граней, определяющих внутренюю границу
 extern std::vector<double> dist_try_surface; // расстояния между точками (через полость внутри) 
@@ -26,5 +24,5 @@ struct TrySolve {
 	Vector3 x3;
 };
 extern TrySolve buf_try;
-#endif //BUILD
+
 #endif 

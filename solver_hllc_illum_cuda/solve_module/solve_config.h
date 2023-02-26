@@ -1,4 +1,4 @@
-#ifndef SOLVE_CONFIG_H
+#if !defined SOLVE_CONFIG_H && defined SOLVE
 #define SOLVE_CONFIG_H
 
 #include "../prj_config.h"
@@ -9,7 +9,7 @@
 
 //#define HLLC
 
-//#define RHLLC
+#define RHLLC
 
 #if NUMBER_OF_MEASUREMENTS == 3 // излучение доступно только для 3d
 
@@ -20,10 +20,6 @@
 #endif
 
 #endif //3d
-
-//#ifdef USE_CUDA
-//#include "../solve_short_characteristic_cuda.cuh"
-//#endif
 
 #ifdef USE_MPI
 

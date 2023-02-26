@@ -1,5 +1,3 @@
-#include "../prj_config.h"
-
 #if defined BUILD
 
 #include "../global_headers.h"

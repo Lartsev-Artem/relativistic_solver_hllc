@@ -1,11 +1,11 @@
-#ifndef REBUILD_SOLVE_H
+#if !defined REBUILD_SOLVE_H && defined UTILS
 #define REBUILD_SOLVE_H
 
 #include "../prj_config.h"
 #include "../global_headers.h"
 #include "../global_def.h"
 
-#if defined USE_VTK && defined UTILS
+#if defined USE_VTK
 int rebuild_solve(int argc, char* argv[], file_name name_file_settings);
 int rewrite_vtk_array(int argc, char* argv[], file_name name_file_settings);
 int  RunMake1d(int argc, char* argv[]);

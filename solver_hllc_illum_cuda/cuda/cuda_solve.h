@@ -1,8 +1,5 @@
-#ifndef CUDA_SOLVE_H
+#if !defined CUDA_SOLVE_H && defined USE_CUDA
 #define CUDA_SOLVE_H
-
-#include "../prj_config.h"
-#ifdef USE_CUDA
 #include "../solve_module/solve_global_struct.h"
 
 void CudaSendIllumAsync(const int size, const int shift, const Type* Illum_host);
@@ -29,4 +26,3 @@ void ClearHost(grid_t& grid_host);
 void CudaWait();
 
 #endif //CUDA_SOLVE_H
-#endif
