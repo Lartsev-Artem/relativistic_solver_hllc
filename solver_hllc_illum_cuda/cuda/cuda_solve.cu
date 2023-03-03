@@ -7,8 +7,8 @@
 #define CUDA_BLOCKS_2D(val, cells, dirs) dim3 val((cells + BS - 1) / BS, (dirs + BS - 1) / BS);
 #define CUDA_TREADS_2D(val)              dim3 threads(BS, BS);
 
-#define CUDA_BLOCKS_1D(val, cells) dim3 val((cells + BS - 1) / BS);
-#define CUDA_TREADS_1D(val)              dim3 threads(BS);
+#define CUDA_BLOCKS_1D(val, cells, bs) dim3 val((cells + bs - 1) / bs);
+#define CUDA_TREADS_1D(val, bs)              dim3 threads(bs);
 
 void CudaWait()
 {
@@ -35,12 +35,16 @@ int CalculateIntScatteringAsync(const grid_directions_t& grid_dir, grid_t& grid)
     const int M = grid_dir.size;
     const int N = grid.size;
     
-    CUDA_TREADS_2D(threads);
-    CUDA_BLOCKS_2D(blocks, N, M);
+  //  CUDA_TREADS_2D(threads);
+  //  CUDA_BLOCKS_2D(blocks, N, M);
+
+    dim3 threads(32, 16);
+    dim3 blocks((N + 32 - 1) / 32, (M + 16 - 1) / 16);
+    
 
     CUDA_CALL_KERNEL(d_GetS, blocks, threads, grid_dir_device_ptr, grid_cell_device_ptr);
 
-    CUDA_CALL_FUNC(cudaGetLastError);
+   // CUDA_CALL_FUNC(cudaGetLastError);
 
     CUDA_MEMCPY_TO_HOST_ASYNC(grid.scattering, device_host_ptr.int_scattering, N * M * sizeof(grid.scattering[0]));
 
@@ -73,8 +77,8 @@ int CalculateEnergy(const grid_directions_t& grid_dir, grid_t& grid)
 
     CUDA_MEMCPY_TO_DEVICE(device_host_ptr.energy, grid.energy, N * sizeof(grid.energy[0]));
 
-    CUDA_TREADS_1D(threads);
-    CUDA_BLOCKS_1D(blocks, N);
+    CUDA_TREADS_1D(threads, 512);
+    CUDA_BLOCKS_1D(blocks, N, 512);
 
     CUDA_CALL_KERNEL(d_MakeEnergy, blocks, threads, grid_dir_device_ptr, grid_cell_device_ptr);
 
@@ -92,8 +96,8 @@ int CalculateStream(const grid_directions_t& grid_dir, grid_t& grid)
 
     CUDA_MEMCPY_TO_DEVICE(device_host_ptr.stream, grid.stream, N * sizeof(grid.stream[0]));
 
-    CUDA_TREADS_1D(threads);
-    CUDA_BLOCKS_1D(blocks, N);
+    CUDA_TREADS_1D(threads, 512);
+    CUDA_BLOCKS_1D(blocks, N, 512);
     CUDA_CALL_KERNEL(d_MakeStream, blocks, threads, grid_dir_device_ptr, grid_cell_device_ptr);
 
     CUDA_CALL_FUNC(cudaGetLastError);
@@ -110,8 +114,8 @@ int CalculateImpuls(const grid_directions_t& grid_dir, grid_t& grid)
 
     CUDA_MEMCPY_TO_DEVICE(device_host_ptr.impuls, grid.impuls, N * sizeof(grid.impuls[0]));
 
-    CUDA_TREADS_1D(threads);
-    CUDA_BLOCKS_1D(blocks, N);
+    CUDA_TREADS_1D(threads, 512);
+    CUDA_BLOCKS_1D(blocks, N, 512);
     CUDA_CALL_KERNEL(d_MakeImpuls, blocks, threads, grid_dir_device_ptr, grid_cell_device_ptr);
 
     CUDA_CALL_FUNC(cudaGetLastError);
@@ -128,8 +132,8 @@ int CalculateDivImpuls(const grid_directions_t& grid_dir, grid_t& grid)
 
     CUDA_MEMCPY_TO_DEVICE(device_host_ptr.divimpuls, grid.divimpuls, N * sizeof(grid.divimpuls[0]));
 
-    CUDA_TREADS_1D(threads);
-    CUDA_BLOCKS_1D(blocks, N);
+    CUDA_TREADS_1D(threads, 512);
+    CUDA_BLOCKS_1D(blocks, N, 512);
     CUDA_CALL_KERNEL(d_MakeDivImpuls, blocks, threads, grid_dir_device_ptr, grid_cell_device_ptr);
 
     CUDA_CALL_FUNC(cudaGetLastError);
@@ -150,8 +154,8 @@ int CalculateDivStream(const grid_directions_t& grid_dir, grid_t& grid)
     
     CUDA_MEMCPY_TO_DEVICE(device_host_ptr.divstream, grid.divstream, N * sizeof(grid.divstream[0]));
 
-    CUDA_TREADS_1D(threads);
-    CUDA_BLOCKS_1D(blocks, N);
+    CUDA_TREADS_1D(threads, 512);
+    CUDA_BLOCKS_1D(blocks, N, 512);
     
     CUDA_CALL_KERNEL(d_MakeDivStream, blocks, threads, grid_dir_device_ptr, grid_cell_device_ptr);
 

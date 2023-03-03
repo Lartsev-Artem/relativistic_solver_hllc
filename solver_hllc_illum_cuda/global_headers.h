@@ -33,6 +33,9 @@
 
 #if !defined CLASTER
 
+#include <sys/stat.h>
+#include <direct.h>
+
 #ifdef USE_VTK
 #include <vtk-9.0\vtkCellArray.h>
 #include <vtk-9.0\vtkCellData.h>

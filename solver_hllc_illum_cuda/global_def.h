@@ -6,6 +6,8 @@
 
 #define CONVERT_TO_STRING(s, ...) #s #__VA_ARGS__
 
+#define PRINT_POS  printf("Calls from: %s: %s, %d c.\n",__FILE__, __FUNCTION__,__LINE__);
+
 #ifdef USE_CUDA
 #define CUDA_ERR(str){ WRITE_LOG_ERR(str); solve_mode.use_cuda = false;}
 #else
@@ -15,8 +17,8 @@
 #define EXIT_ERR(str){printf(str); EXIT(1);}
 #define EXIT_ERRS(str,val){printf(str,val); EXIT(1);}
 
-#define RETURN_ERRS(str, val) { printf(str,val); printf("\nCalls from: %s\n", __FUNCTION__); return 1; }
-#define RETURN_ERR(str) { printf(str); printf("\nCalls from: %s \n", __FUNCTION__); return 1; }
+#define RETURN_ERRS(str, val) { printf(str,val); PRINT_POS return 1; }
+#define RETURN_ERR(str) { printf(str); PRINT_POS return 1; }
 
 #define base (NUMBER_OF_MEASUREMENTS + 1)
 
@@ -70,10 +72,8 @@ struct Face {
 struct FaceCell {
 	int face_id;
 	Face face;
-	FaceCell(const int id = 0, const Face& face_init = Face()) {
-		face_id = id;
-		face = face_init;
-	}
+	FaceCell(const int id = 0, const Face& face_init = Face()) 
+	: face_id(id), face(face_init) {}
 };
 
 struct direction_s
@@ -117,13 +117,43 @@ if (!file.is_open()) RETURN_ERRS("Error : file %s is not open\n", namefile);
 #define Files_log std::string(BASE_ADRESS + "File_Logs.txt").c_str()
 #endif
 
-
-
 #define WRITE_LOG_ERR(str){  \
 std::ofstream ofile; \
 ofile.open(Files_log, std::ios::app); \
 ofile << str; \
 ofile.close(); }
+
+
+#define D_LD \
+__pragma("omp critical") \
+{\
+std::ofstream out(Files_log, std::ios::app); \
+out << "DIE: " << __FILE__ << " " << __FUNCTION__ << ", " <<__LINE__<<"c.\n"; \
+out.close(); \
+MPI_END \
+exit(1); \
+}
+
+#define DIE_IF(_cond) if(_cond) D_LD;
+
+#ifndef CLASTER
+#define CREATE_DIR(dir) \
+struct stat st; \
+if (stat(std::string(dir).c_str(), &st)) \
+{ \
+	if(mkdir(std::string(dir).c_str())) D_LD; \
+}
+#else
+#define CREATE_DIR(dir){}
+#endif
+
+#ifdef USE_MPI
+#define MPI_GET_INF(_number_of_nodes, _num_cur_id){ \
+MPI_Comm_size(MPI_COMM_WORLD, &_number_of_nodes); \
+MPI_Comm_rank(MPI_COMM_WORLD, &_num_cur_id);}
+#else
+#define MPI_GET_INF(_number_of_nodes, _num_cur_id){_number_of_nodes = 1; _num_cur_id =0;}
+#endif
 
 #ifdef WRITE_GLOBAL_LOG	
 
@@ -197,11 +227,11 @@ fclose(f); \
 #ifdef USE_MPI
 #define MPI_START(argc, argv) MPI_Init(&argc, &argv);
 #define MPI_END MPI_Finalize();
-#define EXIT(a) {WRITE_LOG_ERR("Err calls from"<<__FUNCTION__<<'\n'); printf("Calls from: %s", __FUNCTION__); MPI_END exit(a); }
+#define EXIT(a) {WRITE_LOG_ERR("Err calls from"<<__FILE__<<": " <<__FUNCTION__<<", "<<__LINE__<<" c.\n"); PRINT_POS MPI_END exit(a); }
 #else
-#define MPI_START(argc, argv) {std::remove((BASE_ADRESS + Files_log).c_str());}
+#define MPI_START(argc, argv) {}
 #define MPI_END {}
-#define EXIT(a) { exit(a);}
+#define EXIT(a) {PRINT_POS exit(a);}
 #endif //USE_MPI
 
 #define SIGN(a) (a < 0.0 ? -1.0 : 1.0) 

@@ -23,11 +23,43 @@ static std::vector<int> disp_illum;
 static std::vector<int> send_count_scattering;
 static std::vector<int> disp_scattering;
 
-static std::vector<flux_t> phys_local; 
+std::vector<flux_t> phys_local; 
 //static std::vector<Vector3> inter_coef; 
 static std::vector<std::vector<Vector3>> inter_coef_all;
 static std::vector<Type> loc_illum; 	
 static std::vector<Type>int_scattering_local;
+
+static std::vector<MPI_Request> requests; //все запросы сообщений отпраки и принятия	
+static std::vector<MPI_Status> status; //статусы всех обменов
+static std::vector<int> flags_send_to_gpu;  //флаги указывающие на отправку пакета на gpu
+
+
+static std::vector<MPI_Request> requests_hllc; //все запросы сообщений отпраки и принятия	
+static std::vector<MPI_Status> status_hllc; //статусы всех обменов
+std::vector<int> send_hllc;
+std::vector<int> disp_hllc;
+
+int InitPhysOmpMpi(const int count_cells)
+{
+	const int nthr = 4; //разделим сиходный массив на 4 равных куска
+	
+	GetSend(nthr, count_cells, send_hllc);
+	GetDisp(nthr, count_cells, disp_hllc);
+		
+	requests_hllc.resize(nthr);
+	status_hllc.resize(nthr);
+
+}
+void SendPhysValue(flux_t* phys, const int size, const int msg_id)
+{	
+	MPI_Barrier(MPI_COMM_WORLD);
+
+	int id, np;
+	MPI_GET_INF(np, id);
+	WRITE_LOG_MPI("size= "<<size <<", msg_id=" << msg_id << '\n',id);
+
+	MPI_Ibcast(phys, size, MPI_flux_t, 0, MPI_COMM_WORLD, &requests_hllc[msg_id]);	
+}
 
 int InitSendDispIllumArray(const int myid, const int np, const int count_directions, const int count_cells)
 {
@@ -72,8 +104,45 @@ int InitSendDispIllumArray(const int myid, const int np, const int count_directi
 
 	loc_illum.resize(count_cells * base * local_size, 0); //кроме id 0	
 	int_scattering_local.resize(count_cells * local_size, 0);
-
+	
 	return 0;
+}
+void MPI_INIT(const int myid, const int np, const int count_directions, const grid_t& grid)
+{
+	//======================MPI_INIT=========================
+	const int local_size = send_count[myid];
+	if (myid == 0)
+	{		
+		const int N = count_directions - local_size;
+		requests.resize(N);
+		status.resize(N);
+		flags_send_to_gpu.resize(N, 0);
+
+		int size_msg = grid.size * base;
+		int src = 1;
+		for (size_t src = 1; src < np; src++)
+		{
+			for (size_t j = 0; j < send_count[src]; j++)
+			{
+				int tag = disp[src] + j;
+				MPI_Recv_init(grid.Illum + size_msg * tag, size_msg, MPI_DOUBLE, src, tag, MPI_COMM_WORLD, &requests[tag - local_size]);				
+			}
+		}		
+	}
+	else
+	{
+		requests.resize(local_size);
+		status.resize(local_size);
+
+		const int n = grid.size * base;
+		for (size_t num_direction = 0; num_direction < local_size; num_direction++)
+		{
+			const int tag = disp[myid] + num_direction;  //teg соответствует номеру направления
+			MPI_Send_init(loc_illum.data() + num_direction * n, n, MPI_DOUBLE, 0, tag, MPI_COMM_WORLD, &requests[num_direction]);
+		}
+	}
+
+	return;
 }
 
 static Type CalculateIllumeOnInnerFace(const int neigh_id, Vector3& inter_coef)
@@ -94,6 +163,8 @@ static Type CalculateIllumeOnInnerFace(const int neigh_id, Vector3& inter_coef)
 		if (I_x0 < 0)
 		{
 			WRITE_LOG("Error illum value\n");
+			WRITE_LOG_ERR("I_x0= " << I_x0 << '\n');
+			D_LD;
 			return 0;
 		}			
 	}
@@ -391,10 +462,10 @@ static Type ReCalcIllum(const int num_dir, const std::vector<Vector3>& inter_coe
 static Type ReCalcIllumGlobal(const int dir_size, grid_t& grid)
 {
 	
-//#pragma omp parallel default(none) shared(dir_size, cells,Illum)
+#pragma omp parallel default(none) shared(dir_size, grid)
 	{
 		const int size = grid.size;
-//#pragma omp for
+#pragma omp for
 		for (int num_dir = 0; num_dir < dir_size; num_dir++)
 		{
 			const int shift_dir = num_dir * size;
@@ -616,10 +687,8 @@ int MPI_CalculateIllumAsync(const grid_directions_t& grid_direction, const std::
 	const int count_directions = grid_direction.size;
 	const int count_cells = grid.size;
 
-	int np = 1, myid = 0;
-
-	MPI_Comm_size(MPI_COMM_WORLD, &np);
-	MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+	int np, myid;
+	MPI_GET_INF(np, myid);
 
 	const int local_size = send_count[myid];
 	const int local_disp = disp[myid];
@@ -628,60 +697,71 @@ int MPI_CalculateIllumAsync(const grid_directions_t& grid_direction, const std::
 	Type norm = -1;
 	std::vector<Type> norms;
 
+	struct {
+		Type phys_time;
+		Type rcv_init_time;
+		Type dir_time;
+		Type wait_all_time;
+		Type cuda_time;
+		Type cuda_wait_time;
+		Type scat_time;
+	}timer;
+
+	timer.phys_time = -omp_get_wtime();
 	if (myid == 0)
 	{
-		int i = 0;
-		for (auto& el : grid.cells)
-		{
-			phys_local[i++] = el.phys_val;
-			// сюда же absorp_coef, если понадобиться
-		}
+		//int i = 0;
+		//for (auto& el : grid.cells)
+		//{
+		//	phys_local[i++] = el.phys_val;
+		//	// сюда же absorp_coef, если понадобиться
+		//}
 
 		norms.resize(np, -10);
 	}
-	MPI_Bcast(phys_local.data(), count_cells, MPI_flux_t, 0, MPI_COMM_WORLD);
 
-	std::vector<MPI_Request> requests; //все запросы сообщений отпраки и принятия	
-	std::vector<MPI_Status> status; //статусы всех обменов
-	std::vector<int> flags_send_to_gpu;  //флаги указывающие на отправку пакета на gpu
-	if (myid == 0)
-	{
-		const int N = count_directions - local_size;
-		requests.resize(N);
-		status.resize(N);
-		flags_send_to_gpu.resize(N, 0);
-	}
-	else
-	{
-		requests.resize(local_size);
-		status.resize(local_size);
-	}
+	//MPI_Bcast(phys_local.data(), count_cells, MPI_flux_t, 0, MPI_COMM_WORLD);
+	timer.phys_time += omp_get_wtime();
+
+	//MPIWAITPHYS
+
+	MPI_Request rq_scat;
+	MPI_Status st_scat;
 
 	do {
 
 		Type _clock = -omp_get_wtime();
 		norm = -1;
-	
+
+		timer.rcv_init_time = -omp_get_wtime();
+
 		// инициализируем весь прием сразу (от первого процесса ничего не принимаем)
-		if (myid == 0)
+		if (myid == 0 && np > 1)
 		{
-			int size_msg = grid.size * base;
-			int src = 1;
-			for (size_t src = 1; src < np; src++)
-			{
-				for (size_t j = 0; j < send_count[src]; j++)
-				{
-					int tag = disp[src] + j;					
-
-					MPI_Irecv(grid.Illum + size_msg * tag, size_msg, MPI_DOUBLE, src, tag, MPI_COMM_WORLD, &requests[tag - local_size]);
-
-					//WRITE_LOG("id= " << myid << "recv_teg= " << tag << " src= " << src << "\n");
-				}
-			}
-
-			flags_send_to_gpu.assign(flags_send_to_gpu.size(), 0);			
+			MPI_Startall(requests.size(), requests.data());
+			flags_send_to_gpu.assign(flags_send_to_gpu.size(), 0);
 		}
-		
+		timer.rcv_init_time += omp_get_wtime();
+
+		timer.dir_time = -omp_get_wtime();
+
+		if (count == 0)
+		{
+			WRITE_LOG_MPI("\nbefore wait  requests_hllc\n", myid);
+			MPI_Barrier(MPI_COMM_WORLD);
+			MPI_Waitall(requests_hllc.size(), requests_hllc.data(), status_hllc.data()); //ждём сообщнения с газовым расчётом
+		}
+		else
+		{
+			// здесь может быть проблема, если успеем сделать полный виток и зайти сюда снова. Надо и на первой проверять, но тольео при условии, 
+			// что отправка была. т.е. в самый первый заход нельзя!
+			WRITE_LOG_MPI("\nbefore wait  scat\n", myid);
+			//MPI_Wait(&rq_scat, &st_scat);
+		}
+
+		WRITE_LOG_MPI("\nbefore direct\n", myid);
+		/*---------------------------------- далее FOR по направлениям----------------------------------*/
+
 #pragma omp parallel default(none) shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, \
 		norm, inter_coef_all,local_size, int_scattering_local, phys_local, loc_illum, disp, myid, np, \
 requests, status,flags_send_to_gpu, BASE_ADRESS)
@@ -690,9 +770,8 @@ requests, status,flags_send_to_gpu, BASE_ADRESS)
 			const int num = omp_get_thread_num();
 			std::vector<Vector3>* inter_coef = &inter_coef_all[num];
 
-			/*---------------------------------- далее FOR по направлениям----------------------------------*/
 #pragma omp for
-			for (register int num_direction = 0; num_direction < local_size; ++num_direction)
+			for (register int num_direction = 0; num_direction < local_size; num_direction++)
 			{
 				int posX0 = 0;
 				Vector3 I;
@@ -753,10 +832,7 @@ requests, status,flags_send_to_gpu, BASE_ADRESS)
 				{
 #pragma omp critical
 					{
-						const int teg = disp[myid] + num_direction;  //teg соответствует номеру направления
-						MPI_Isend(loc_illum.data() + num_direction * n, n, MPI_DOUBLE, 0, teg, MPI_COMM_WORLD, &requests[num_direction]);
-
-						//WRITE_LOG_MPI("id= " << myid <<"send_teg= " << teg<< "\n", myid);
+						MPI_Start(requests.data() + num_direction);
 					}
 				}
 				else
@@ -766,7 +842,7 @@ requests, status,flags_send_to_gpu, BASE_ADRESS)
 						for (int i = 0; i < requests.size(); i++)
 						{
 							if (!flags_send_to_gpu[i])
-							{								
+							{
 								MPI_Request_get_status(requests[i], &flags_send_to_gpu[i], &status[i]); //проверяем все запросы принятия сообщения
 								if (flags_send_to_gpu[i]) // если обмен завершён, но отправки не было
 								{
@@ -782,10 +858,9 @@ requests, status,flags_send_to_gpu, BASE_ADRESS)
 #ifdef USE_CUDA
 						CudaSendIllumAsync(n, (num_direction * n), loc_illum.data());
 #endif
-					}				
+					}
 				}
 			}
-
 			/*---------------------------------- конец FOR по направлениям----------------------------------*/
 
 			if (loc_norm > norm)
@@ -798,10 +873,25 @@ requests, status,flags_send_to_gpu, BASE_ADRESS)
 					}
 				}
 			}
-		} // end omp	
-		
-		MPI_Waitall(requests.size(), requests.data(), status.data());		
 
+		} // end task	
+
+		WRITE_LOG_MPI("before MPI_Igather norms\n", myid);
+		MPI_Request rq_norm;
+		//MPI_Igather(&norm, 1, MPI_DOUBLE, norms.data(), 1, MPI_DOUBLE, 0, MPI_COMM_WORLD, &rq_norm);
+		MPI_Gather(&norm, 1, MPI_DOUBLE, norms.data(), 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+		WRITE_LOG_MPI("after MPI_Igather norms\n", myid);
+
+		timer.dir_time += omp_get_wtime();
+		timer.wait_all_time = -omp_get_wtime();
+		MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Waitall(requests.size(), requests.data(), status.data());
+		timer.wait_all_time += omp_get_wtime();
+
+		WRITE_LOG_MPI("after wai requests \n", myid);
+
+		timer.cuda_time = -omp_get_wtime();
 		if ((myid == 0) && (solve_mode.max_number_of_iter > 1))
 		{
 #ifdef USE_CUDA
@@ -818,46 +908,76 @@ requests, status,flags_send_to_gpu, BASE_ADRESS)
 			}
 			CalculateIntCPU(count_cells, grid_direction, grid);
 #endif
-
-
 		}
 
+		timer.cuda_time += omp_get_wtime();
+		WRITE_LOG_MPI("\wait st_norm\n", myid);
 		MPI_Gather(&norm, 1, MPI_DOUBLE, norms.data(), 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+		MPI_Status st_norm;
+
+		//MPI_Barrier(MPI_COMM_WORLD);
+		//MPI_Wait(&rq_norm, &st_norm);
+
 		if (myid == 0)
 		{
 			for (auto n : norms) if (n > norm) norm = n;
 		}
+		//MPI_Ibcast(&norm, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD, &rq_norm);
 		MPI_Bcast(&norm, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
+		WRITE_LOG_MPI("\after MPI_Ibcast st_norm\n", myid);
+
+		timer.cuda_wait_time = -omp_get_wtime();
 #ifdef USE_CUDA
 		if (myid == 0)
 		{
 			CudaWait();
 		}
 #endif
+		timer.cuda_wait_time += omp_get_wtime();
 
+		timer.scat_time = -omp_get_wtime();
 		// в теории эту отправку тоже можно разбить на выбранные направления
+		
+		WRITE_LOG_MPI("before scat\n", myid);
+
+		/*MPI_Iscatterv(grid.scattering, send_count_scattering.data(), disp_scattering.data(), MPI_DOUBLE,
+			int_scattering_local.data(), int_scattering_local.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD, &rq_scat);*/
 		MPI_Scatterv(grid.scattering, send_count_scattering.data(), disp_scattering.data(), MPI_DOUBLE,
 			int_scattering_local.data(), int_scattering_local.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
+		timer.scat_time += omp_get_wtime();
 		_clock += omp_get_wtime();
 		if (myid == 0)
 		{
 			WRITE_LOG("Error:= " << norm << '\n' << "End iter_count number: " << count << " time= " << _clock << '\n');
 		}
-		count++;
-	} while (norm > solve_mode.accuracy && count < solve_mode.max_number_of_iter);
 
+		//MPI_Barrier(MPI_COMM_WORLD);
+		//MPI_Wait(&rq_norm, &st_norm);
+
+		WRITE_LOG_MPI(count << ": phys= " << timer.phys_time << ", rcv " << timer.rcv_init_time
+			<< ", dir " << timer.dir_time
+			<< ", wait_all " << timer.wait_all_time
+			<< ", cuda " << timer.cuda_time
+			<< ", cuda_wait " << timer.cuda_wait_time
+			<< ", scater " << timer.scat_time
+			<< ", all_step " << _clock << "\n\n", myid);
+
+		count++;
+
+		MPI_Barrier(MPI_COMM_WORLD);
+		} while (norm > solve_mode.accuracy && count < solve_mode.max_number_of_iter);
 
 #ifndef USE_CUDA
-	if (myid == 0) // это уйдет, когда все интегралы перейдут в cuda
-	{
-		ReCalcIllumGlobal(grid_direction.size, grid);
-		//WriteFileSolution(BASE_ADRESS + "Illum_result.txt", Illum);
-	}
+		if (myid == 0) // это уйдет, когда все интегралы перейдут в cuda
+		{
+			ReCalcIllumGlobal(grid_direction.size, grid);
+			//WriteFileSolution(BASE_ADRESS + "Illum_result.txt", Illum);
+		}
 #endif
 
-	return 0;
+		return 0;
 }
 
 #ifndef USE_CUDA
@@ -1073,3 +1193,277 @@ int CalculateIllumParam(const grid_directions_t& grid_direction, grid_t& grid)
 
 
 #endif //ILLUM
+
+#if 0
+int MPI_CalculateIllumAsyncTask(const grid_directions_t& grid_direction, const std::vector< std::vector<int>>& face_states, const std::vector<int>& pairs,
+	const std::vector < std::vector<cell_local>>& vec_x0, std::vector<BasePointTetra>& vec_x,
+	const std::vector < std::vector<int>>& sorted_id_cell, grid_t& grid)
+{
+	const int count_directions = grid_direction.size;
+	const int count_cells = grid.size;
+
+	int np, myid;
+	MPI_GET_INF(np, myid);
+
+	const int local_size = send_count[myid];
+	const int local_disp = disp[myid];
+
+	int count = 0;
+	Type norm = -1;
+	std::vector<Type> norms;
+
+	struct {
+		Type phys_time;
+		Type rcv_init_time;
+		Type dir_time;
+		Type wait_all_time;
+		Type cuda_time;
+		Type cuda_wait_time;
+		Type scat_time;
+	}timer;
+
+	timer.phys_time = -omp_get_wtime();
+	if (myid == 0)
+	{
+		//int i = 0;
+		//for (auto& el : grid.cells)
+		//{
+		//	phys_local[i++] = el.phys_val;
+		//	// сюда же absorp_coef, если понадобиться
+		//}
+
+		norms.resize(np, -10);
+	}
+
+	//MPI_Bcast(phys_local.data(), count_cells, MPI_flux_t, 0, MPI_COMM_WORLD);
+	timer.phys_time += omp_get_wtime();
+
+	//MPIWAITPHYS
+#pragma omp parallel default(none) shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, \
+		norm, inter_coef_all,local_size, int_scattering_local, phys_local, loc_illum, disp, myid, np, \
+requests, status,flags_send_to_gpu, BASE_ADRESS, count,timer,grid_direction,status_hllc,requests_hllc, \
+send_count_scattering,disp_scattering, norms, solve_mode)
+	{
+#pragma omp single
+		{
+			do {
+
+				Type _clock = -omp_get_wtime();
+				norm = -1;
+
+				timer.rcv_init_time = -omp_get_wtime();
+
+				// инициализируем весь прием сразу (от первого процесса ничего не принимаем)
+				if (myid == 0)
+				{
+					MPI_Startall(requests.size(), requests.data());
+					flags_send_to_gpu.assign(flags_send_to_gpu.size(), 0);
+				}
+				timer.rcv_init_time += omp_get_wtime();
+
+				timer.dir_time = -omp_get_wtime();
+
+				if (count == 0)
+				{
+					MPI_Waitall(requests_hllc.size(), requests_hllc.data(), status_hllc.data()); //ждём сообщнения с газовым расчётом
+				}
+
+				/*---------------------------------- далее FOR по направлениям----------------------------------*/
+
+				const int NN = omp_get_num_threads();
+				for (int id_thread = 0; id_thread < NN; id_thread++)
+				{
+#pragma omp task //firstprivate(id_thread)
+					{
+						Type loc_norm = -1;
+						const int num = id_thread; // omp_get_thread_num();
+						std::vector<Vector3>* inter_coef = &inter_coef_all[num];
+
+						//#pragma omp for
+						for (register int num_direction = id_thread; num_direction < local_size; num_direction += NN)
+						{
+							int posX0 = 0;
+							Vector3 I;
+
+							/*---------------------------------- далее FOR по ячейкам----------------------------------*/
+							for (int h = 0; h < count_cells; ++h)
+							{
+								const int num_cell = sorted_id_cell[num_direction][h];
+								const int face_block_id = num_cell * base;
+
+								for (ShortId num_out_face = 0; num_out_face < base; ++num_out_face)
+								{
+									const int out_id_face = pairs[face_block_id + num_out_face];
+									if (check_bit(face_states[num_direction][num_cell], (int)num_out_face))
+									{
+										//формально обрабатываем мы только выходящие грани, т.к. входящие к этому моменту определены,
+										// но границу надо инициализировать. Не для расчета, но для конечного интегрирования
+										if (out_id_face < 0)
+										{
+											BoundaryConditions(out_id_face, (*inter_coef)[face_block_id + num_out_face]);
+										}
+										continue;
+									}
+
+									//GetNodes
+									for (int num_node = 0; num_node < 3; ++num_node)
+									{
+										const Vector3 x = vec_x[num_cell].x[num_out_face][num_node];
+
+										const cell_local x0 = vec_x0[num_direction][posX0++];
+
+										const ShortId num_in_face = x0.in_face_id;
+										const Type s = x0.s;
+										const Vector2 X0 = x0.x0;
+
+										const Type I_x0 = CalculateIllumeOnInnerFace(pairs[face_block_id + num_in_face], (*inter_coef)[face_block_id + num_in_face]);
+
+										I[num_node] = GetCurIllum(x, s, I_x0, int_scattering_local[num_direction * count_cells + num_cell], phys_local[num_cell]);
+
+									}//num_node
+
+									(*inter_coef)[face_block_id + num_out_face] = I;
+									if (out_id_face >= 0)
+									{
+										(*inter_coef)[out_id_face] = I;
+									}
+
+									//сюда сразу в loc_illum. сходимость ез нормы задать числом итераций
+
+								} //num_out_face	
+							}
+
+							/*---------------------------------- конец FOR по ячейкам----------------------------------*/
+							loc_norm = ReCalcIllum(num_direction, *inter_coef, loc_illum);
+
+							const int n = count_cells * base;
+							if (myid != 0)
+							{
+#pragma omp critical
+								{
+									MPI_Start(requests.data() + num_direction);
+								}
+							}
+							else
+							{
+#pragma omp critical//master
+								{
+									for (int i = 0; i < requests.size(); i++)
+									{
+										if (!flags_send_to_gpu[i])
+										{
+											MPI_Request_get_status(requests[i], &flags_send_to_gpu[i], &status[i]); //проверяем все запросы принятия сообщения
+											if (flags_send_to_gpu[i]) // если обмен завершён, но отправки не было
+											{
+#ifdef USE_CUDA
+												CudaSendIllumAsync(n, n * (i + local_size), grid.Illum);  //переслать данные на gpu									
+#endif
+											}
+										}
+									}
+								}
+#pragma omp critical
+								{
+#ifdef USE_CUDA
+									CudaSendIllumAsync(n, (num_direction * n), loc_illum.data());
+#endif
+								}
+							}
+						}
+
+						/*---------------------------------- конец FOR по направлениям----------------------------------*/
+
+						if (loc_norm > norm)
+						{
+#pragma omp critical
+							{
+								if (loc_norm > norm)
+								{
+									norm = loc_norm;
+								}
+							}
+						}
+
+					} // end task	
+				} //end threads
+
+				timer.dir_time += omp_get_wtime();
+				timer.wait_all_time = -omp_get_wtime();
+				MPI_Waitall(requests.size(), requests.data(), status.data());
+				timer.wait_all_time += omp_get_wtime();
+
+				timer.cuda_time = -omp_get_wtime();
+				if ((myid == 0) && (solve_mode.max_number_of_iter > 1))
+				{
+#ifdef USE_CUDA
+					CalculateIntScatteringAsync(grid_direction, grid);
+
+					for (int i = 0; i < loc_illum.size(); i++)
+					{
+						grid.Illum[i] = loc_illum[i];
+					}
+#else
+					for (int i = 0; i < loc_illum.size(); i++)
+					{
+						grid.Illum[i] = loc_illum[i];
+					}
+					CalculateIntCPU(count_cells, grid_direction, grid);
+#endif
+				}
+
+				timer.cuda_time += omp_get_wtime();
+
+				MPI_Gather(&norm, 1, MPI_DOUBLE, norms.data(), 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+				if (myid == 0)
+				{
+					for (auto n : norms) if (n > norm) norm = n;
+				}
+				MPI_Bcast(&norm, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+				timer.cuda_wait_time = -omp_get_wtime();
+#ifdef USE_CUDA
+				if (myid == 0)
+				{
+					CudaWait();
+				}
+#endif
+				timer.cuda_wait_time += omp_get_wtime();
+
+				timer.scat_time = -omp_get_wtime();
+				// в теории эту отправку тоже можно разбить на выбранные направления
+
+				MPI_Scatterv(grid.scattering, send_count_scattering.data(), disp_scattering.data(), MPI_DOUBLE,
+					int_scattering_local.data(), int_scattering_local.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+				timer.scat_time += omp_get_wtime();
+				_clock += omp_get_wtime();
+				if (myid == 0)
+				{
+					WRITE_LOG("Error:= " << norm << '\n' << "End iter_count number: " << count << " time= " << _clock << '\n');
+				}
+
+				WRITE_LOG_MPI(count << ": phys= " << timer.phys_time << ", rcv " << timer.rcv_init_time
+					<< ", dir " << timer.dir_time
+					<< ", wait_all " << timer.wait_all_time
+					<< ", cuda " << timer.cuda_time
+					<< ", cuda_wait " << timer.cuda_wait_time
+					<< ", scater " << timer.scat_time
+					<< ", all_step " << _clock << "\n\n", myid);
+
+				count++;
+			} while (norm > solve_mode.accuracy && count < solve_mode.max_number_of_iter);
+
+		} //single
+	}//parallel
+
+#ifndef USE_CUDA
+	if (myid == 0) // это уйдет, когда все интегралы перейдут в cuda
+	{
+		ReCalcIllumGlobal(grid_direction.size, grid);
+		//WriteFileSolution(BASE_ADRESS + "Illum_result.txt", Illum);
+	}
+#endif
+
+	return 0;
+}
+#endif

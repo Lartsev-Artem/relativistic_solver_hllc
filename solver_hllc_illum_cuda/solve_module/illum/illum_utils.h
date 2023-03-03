@@ -29,6 +29,9 @@ Type BoundaryConditions(const int type_bound, Vector3& inter_coef);
 
 #ifdef USE_MPI
 int InitSendDispIllumArray(const int myid, const int np, const int count_directions, const int count_cells);
+void MPI_INIT(const int myid, const int np, const int count_directions, const grid_t& grid);
+int InitPhysOmpMpi(const int count_cells);
+
 int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vector< std::vector<int>>& face_states, const std::vector<int>& pairs,
 	const std::vector < std::vector<cell_local>>& vec_x0, std::vector<BasePointTetra>& vec_x, const std::vector < std::vector<int>>& sorted_id_cell,
 	//const std::vector<Type>& res_inner_bound, 

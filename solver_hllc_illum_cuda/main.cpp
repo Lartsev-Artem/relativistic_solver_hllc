@@ -20,8 +20,12 @@ int main(int argc, char* argv[])
 	}
 	else
 		name_file_settings = argv[1];
-
-	std::remove(Files_log);
+	
+	int id, np;
+	MPI_GET_INF(np, id);
+	if(id == 0) std::remove(Files_log);
+		
+	std::remove((Files_log + std::to_string(id) + ".txt").c_str());
 
 #if defined BUILD
 	RunBuildModule(name_file_settings);

@@ -26,6 +26,10 @@ int TestDivStream(const std::vector<Vector3>& centers_face, grid_t& grid);
 int TestDivStream(file_name BASE_ADRESS);
 
 #ifdef USE_MPI
+
+void SendPhysValue(flux_t* phys, const int size, const int msg_id);
+int MPI_RHLLC_3d(const int myid, const Type tau, grid_t& grid);
+
 void GetSend(const int np, const int n, std::vector<int>& send_count);
 void GetDisp(const int np, const int n, std::vector<int>& disp);
 #endif //USE_MPI
