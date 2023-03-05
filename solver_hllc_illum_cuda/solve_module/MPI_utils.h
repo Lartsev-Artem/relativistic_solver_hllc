@@ -1,4 +1,4 @@
-#if !defined SOLVE_UTILS_H && defined SOLVE
+#if 0 //!defined SOLVE_UTILS_H && defined SOLVE
 #define SOLVE_UTILS_H
 #include "solve_config.h"
 

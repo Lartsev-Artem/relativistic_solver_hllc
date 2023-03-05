@@ -46,43 +46,47 @@ static int grid_directions_clear_device(grid_directions_device_t*& grid_device)
 
 //**********************************************
 
-static int grid_init_device(grid_device_t*& grid_device, const int num_cell, const int num_dir)
+static int grid_init_device(grid_device_t*& grid_device, const int num_cell, const int num_dir, const int start, const int end)
 {    
     CUDA_MALLOC((void**)&grid_device, sizeof(grid_device_t));
     
     CUDA_MEMCPY_TO_DEVICE(&grid_device->size, &num_cell, sizeof(num_cell));
+
+    const int loc_size = end - start;
+    CUDA_MEMCPY_TO_DEVICE(&grid_device->local_scattering_size, &loc_size, sizeof(loc_size));
+    CUDA_MEMCPY_TO_DEVICE(&grid_device->local_scattering_disp, &start, sizeof(start));
         
     CUDA_INIT_GRID_PTR_DEVICE(grid_device->illum, device_host_ptr.illum, (base * num_dir * num_cell * sizeof(Type)) );
 
-    CUDA_INIT_GRID_PTR_DEVICE(grid_device->int_scattering, device_host_ptr.int_scattering, num_dir * num_cell * sizeof(Type));
+    CUDA_INIT_GRID_PTR_DEVICE(grid_device->int_scattering, device_host_ptr.int_scattering, loc_size * num_cell * sizeof(Type));
 
-    CUDA_INIT_GRID_PTR_DEVICE(grid_device->energy, device_host_ptr.energy, num_cell * sizeof(Type));
+    if (start == 0) //только на первом узле нужны
+    {
+        CUDA_INIT_GRID_PTR_DEVICE(grid_device->energy, device_host_ptr.energy, num_cell * sizeof(Type));
 
-    CUDA_INIT_GRID_PTR_DEVICE(grid_device->divstream, device_host_ptr.divstream, num_cell * sizeof(Type));
-    CUDA_INIT_GRID_PTR_DEVICE(grid_device->divimpuls, device_host_ptr.divimpuls, num_cell * sizeof(cuda_vector_t<Type, 3>));
+        CUDA_INIT_GRID_PTR_DEVICE(grid_device->divstream, device_host_ptr.divstream, num_cell * sizeof(Type));
+        CUDA_INIT_GRID_PTR_DEVICE(grid_device->divimpuls, device_host_ptr.divimpuls, num_cell * sizeof(cuda_vector_t<Type, 3>));
 
-    CUDA_INIT_GRID_PTR_DEVICE(grid_device->volume, device_host_ptr.volume, num_cell * sizeof(Type));
-    CUDA_INIT_GRID_PTR_DEVICE(grid_device->areas, device_host_ptr.areas, base * num_cell * sizeof(Type));
-    CUDA_INIT_GRID_PTR_DEVICE(grid_device->normals, device_host_ptr.normals, base * num_cell * sizeof(cuda_vector_t<Type, 3>));
+        CUDA_INIT_GRID_PTR_DEVICE(grid_device->volume, device_host_ptr.volume, num_cell * sizeof(Type));
+        CUDA_INIT_GRID_PTR_DEVICE(grid_device->areas, device_host_ptr.areas, base * num_cell * sizeof(Type));
+        CUDA_INIT_GRID_PTR_DEVICE(grid_device->normals, device_host_ptr.normals, base * num_cell * sizeof(cuda_vector_t<Type, 3>));
 
 #ifdef CUDA_FULL_ARRAYS
-    CUDA_INIT_GRID_PTR_DEVICE(grid_device->energy, device_host_ptr.energy, num_cell * sizeof(Type));
-    CUDA_INIT_GRID_PTR_DEVICE(grid_device->stream, device_host_ptr.stream, num_cell * sizeof(cuda_vector_t<Type, 3>));
-    CUDA_INIT_GRID_PTR_DEVICE(grid_device->impuls, device_host_ptr.impuls, num_cell * sizeof(cuda_vector_t<Type, 9>));
+        CUDA_INIT_GRID_PTR_DEVICE(grid_device->energy, device_host_ptr.energy, num_cell * sizeof(Type));
+        CUDA_INIT_GRID_PTR_DEVICE(grid_device->stream, device_host_ptr.stream, num_cell * sizeof(cuda_vector_t<Type, 3>));
+        CUDA_INIT_GRID_PTR_DEVICE(grid_device->impuls, device_host_ptr.impuls, num_cell * sizeof(cuda_vector_t<Type, 9>));
 #endif
-
+    }
     return 0;
 }
 
 
 #include "../file_module/reader_bin.h"
 
-static int grid_init_copy_host_to_device(const int num_dir, const std::vector<Type>& host_volume, const std::vector<Type>& host_areas, const std::vector<Normals>& host_normals,
+static int grid_init_copy_host_to_device(const std::vector<Type>& host_volume, const std::vector<Type>& host_areas, const std::vector<Normals>& host_normals,
     const grid_t& grid)
 {       
-    const int N = grid.size;
-    
-   // CUDA_MEMCPY_TO_DEVICE(device_host_ptr.illum, grid.Illum, (base * num_dir * N * sizeof(Type)));
+    const int N = grid.size;      
    
     std::vector<cuda_vector_t<Type,3>> dev_norm(host_normals.size() * base);
     for (size_t i = 0; i < host_normals.size(); i++)
@@ -128,8 +132,8 @@ static int grid_clear_device(grid_device_t*& grid_device)
 
 
 static int InitDevice(grid_directions_device_t*& grid_dir_device, grid_device_t*& grid_device, 
-    const grid_directions_t& grid_dir_host, grid_t& grid_host)
-{
+    const grid_directions_t& grid_dir_host, grid_t& grid_host, const int start, const int end)
+{    
     const std::string name_file_normals = BASE_ADRESS + "normals.bin";
     const std::string name_file_squares = BASE_ADRESS + "squares.bin";
     const std::string name_file_volume = BASE_ADRESS + "volume.bin";
@@ -145,21 +149,30 @@ static int InitDevice(grid_directions_device_t*& grid_dir_device, grid_device_t*
 
     grid_directions_init_copy_host_to_device(grid_dir_device, grid_dir_host);
 
-    grid_init_device(grid_device, grid_host.size, grid_dir_host.size);
+    grid_init_device(grid_device, grid_host.size, grid_dir_host.size, start, end);
 
     CUDA_MALLOC_HOST(&grid_host.Illum, (base * grid_dir_host.size * grid_host.size * sizeof(Type)));
-    CUDA_MALLOC_HOST(&grid_host.scattering, (grid_dir_host.size * grid_host.size * sizeof(Type)));
 
-    CUDA_MALLOC_HOST(&grid_host.divstream, (grid_host.size * sizeof(Type)));
-    CUDA_MALLOC_HOST(&grid_host.divimpuls, (grid_host.size * sizeof(Vector3)));  
+    CUDA_MALLOC_HOST(&grid_host.scattering, ((end-start) * grid_host.size * sizeof(Type)));
+
+    if (start == 0)
+    {
+        CUDA_MALLOC_HOST(&grid_host.divstream, (grid_host.size * sizeof(Type)));
+        CUDA_MALLOC_HOST(&grid_host.divimpuls, (grid_host.size * sizeof(Vector3)));
 
 #ifdef ON_FULL_ILLUM_ARRAYS
-    grid_host.energy = new Type[grid_host.size];
-    grid_host.stream = new Vector3[grid_host.size];
-    grid_host.impuls = new Matrix3[grid_host.size];
+        CUDA_MALLOC_HOST(&grid_host.energy, (grid_host.size * sizeof(Type)));
+        CUDA_MALLOC_HOST(&grid_host.stream, (grid_host.size * sizeof(Vector3)));
+        CUDA_MALLOC_HOST(&grid_host.impuls, (grid_host.size * sizeof(Matrix3)));
+
+        //grid_host.energy = new Type[grid_host.size];
+        //grid_host.stream = new Vector3[grid_host.size];
+        //grid_host.impuls = new Matrix3[grid_host.size];
 #endif
 
-    grid_init_copy_host_to_device(grid_dir_host.size, volume, squares_faces, normals, grid_host);
+
+        grid_init_copy_host_to_device(volume, squares_faces, normals, grid_host);
+    }
 
     return 0;
 }
@@ -171,9 +184,9 @@ static int ClearDevice(grid_directions_device_t*& grid_dir_device, grid_device_t
     return 0;
 }
 
-void InitDevice(const grid_directions_t& grid_dir_host, grid_t& grid_host)
+void InitDevice(const grid_directions_t& grid_dir_host, grid_t& grid_host, const int start, const int end)
 {
-    InitDevice(grid_dir_device_ptr, grid_cell_device_ptr, grid_dir_host, grid_host);
+    InitDevice(grid_dir_device_ptr, grid_cell_device_ptr, grid_dir_host, grid_host, start, end);
 }
 void ClearDevice()
 {
@@ -189,9 +202,13 @@ void ClearHost(grid_t& grid_host)
     CUDA_FREE_HOST_MEMORY(grid_host.divstream);
     CUDA_FREE_HOST_MEMORY(grid_host.divimpuls);
 
-    delete[] grid_host.energy;
-    delete[] grid_host.stream;
-    delete[] grid_host.impuls;
+    CUDA_FREE_HOST_MEMORY(grid_host.energy);
+    CUDA_FREE_HOST_MEMORY(grid_host.stream);
+    CUDA_FREE_HOST_MEMORY(grid_host.impuls);
+
+    //delete[] grid_host.energy;
+    //delete[] grid_host.stream;
+    //delete[] grid_host.impuls;
 
     WRITE_LOG("Free host arrays\n");
 }

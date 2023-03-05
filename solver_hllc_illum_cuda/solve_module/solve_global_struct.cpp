@@ -3,6 +3,8 @@
 #include "solve_global_struct.h"
 #include "solve_config.h"
 
+extern std::string BASE_ADRESS;
+
 flux_t::flux_t()
 {
 	d = 0;

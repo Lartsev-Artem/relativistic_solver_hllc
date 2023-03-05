@@ -310,10 +310,10 @@ int SolveIllumAndHLLC(const Type tau, grid_t& grid)
 	Type min = 1;	
 	int ret_flag = 0;
 
-#pragma omp parallel  default(none) shared(ret_flag, grid, solve_mode) 
+#pragma omp parallel  default(none) firstprivate(tau) shared(ret_flag, grid) 
 	{
 		const int n = grid.size;
-#pragma omp for
+#pragma omp for //schedule(static, 1) //почему это хуже??
 		for (int i = 0; i < n; i++)
 		{
 			elem_t &el = grid.cells[i];

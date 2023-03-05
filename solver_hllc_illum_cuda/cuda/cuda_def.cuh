@@ -19,8 +19,9 @@
 if (CheckError(_func(__VA_ARGS__))){ \
 CUDA_EXIT_ERR(Error in function: _func \nargs:  __VA_ARGS__ ); }
 
-#define CUDA_CALL_KERNEL(_func, _blocks, _threads, ...) _func << <_blocks, _threads >> > (__VA_ARGS__) //\
-CUDA_CALL_FUNC(cudaGetLastError)
+#define CUDA_CALL_KERNEL(_func, _blocks, _threads, ...) _func << <_blocks, _threads >> > (__VA_ARGS__) 
+
+#define CUDA_CALL_KERNEL_STREAM(_func, _blocks, _threads,_st, ...) _func << <_blocks, _threads, 0, _st>> > (__VA_ARGS__) //\
 
 
 #ifdef ON_FULL_ILLUM_ARRAYS

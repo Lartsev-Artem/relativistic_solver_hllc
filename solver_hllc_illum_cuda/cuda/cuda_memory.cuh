@@ -8,6 +8,7 @@
 
 #define CUDA_MEMCPY_TO_DEVICE_ASYNC(dist, src, size) CUDA_CALL_FUNC(cudaMemcpyAsync, dist, src, size, cudaMemcpyHostToDevice);
 #define CUDA_MEMCPY_TO_HOST_ASYNC(dist, src, size) CUDA_CALL_FUNC(cudaMemcpyAsync, dist, src, size, cudaMemcpyDeviceToHost);
+#define CUDA_MEMCPY_TO_HOST_ASYNC_STREAM(dist, src, size, st) CUDA_CALL_FUNC(cudaMemcpyAsync, dist, src, size, cudaMemcpyDeviceToHost, st);
 
 #define CUDA_MALLOC(src, size) CUDA_CALL_FUNC(cudaMalloc, (void**)src, size);
 #define CUDA_MALLOC_HOST(src, size) CUDA_CALL_FUNC(cudaMallocHost, (void**)src, size);

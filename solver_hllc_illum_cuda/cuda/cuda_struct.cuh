@@ -50,6 +50,8 @@ struct grid_directions_device_t
 struct grid_device_t
 {
     int size;
+    int local_scattering_size;
+    int local_scattering_disp;
     Type* illum;
     Type* int_scattering;
 

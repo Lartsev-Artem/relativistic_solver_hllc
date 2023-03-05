@@ -19,6 +19,7 @@ for (int k = 0; k < size; k++) \
     CUDA_CONVERT_FATE_TO_CELL(val, size, src) {}
 #endif
 
+
 __global__ void d_GetS(const grid_directions_device_t* dir, grid_device_t* grid)
 {
     const int M = dir->size;
@@ -48,7 +49,68 @@ __global__ void d_GetS(const grid_directions_device_t* dir, grid_device_t* grid)
     grid->int_scattering[k * N + i] /= dir->full_area;
 }
 
-__global__ void d_MakeEnergy(const grid_directions_device_t* dir, grid_device_t* grid)
+__global__ void d_GetS_MPI(const grid_directions_device_t* dir, grid_device_t* grid)
+{
+    const int M = dir->size;
+    const int N = grid->size;
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int k = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i >= N) return;
+    //if (k >= M) return;    
+    if (k >= grid->local_scattering_size) return;
+
+    grid->int_scattering[k * N + i] = 0;
+
+
+    for (int num_direction = 0; num_direction < M; num_direction++)
+    {
+        Type I = (
+            grid->illum[4 * num_direction * N + 4 * i] +
+            grid->illum[4 * num_direction * N + 4 * i + 1] +
+            grid->illum[4 * num_direction * N + 4 * i + 2] +
+            grid->illum[4 * num_direction * N + 4 * i + 3]) / 4;
+
+        grid->int_scattering[k * N + i] += Gamma(dir->directions[num_direction].dir, dir->directions[grid->local_scattering_disp + k].dir) *
+            I * dir->directions[num_direction].area;
+    }
+
+    grid->int_scattering[k * N + i] /= dir->full_area;
+}
+
+__global__ void d_GetS_MPI_Stream(const grid_directions_device_t* dir, grid_device_t* grid, const int start, const int end)
+{
+    const int M = dir->size;
+    const int N = grid->size;
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int k = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i >= N) return;
+    //if (k >= M) return;    
+    if (k >= end/*grid->local_scattering_size*/) return;
+    if (k < start) return;
+
+    grid->int_scattering[k * N + i] = 0;
+
+
+    for (int num_direction = 0; num_direction < M; num_direction++)
+    {
+        Type I = (
+            grid->illum[4 * num_direction * N + 4 * i] +
+            grid->illum[4 * num_direction * N + 4 * i + 1] +
+            grid->illum[4 * num_direction * N + 4 * i + 2] +
+            grid->illum[4 * num_direction * N + 4 * i + 3]) / 4;
+
+        grid->int_scattering[k * N + i] += Gamma(dir->directions[num_direction].dir, dir->directions[grid->local_scattering_disp + k].dir) *
+            I * dir->directions[num_direction].area;
+    }
+
+    grid->int_scattering[k * N + i] /= dir->full_area;
+}
+
+__device__ void d_MakeEnergy(const grid_directions_device_t* dir, grid_device_t* grid)
 {
     const int N = grid->size;
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -84,7 +146,7 @@ __global__ void d_MakeImpuls(const grid_directions_device_t* dir, grid_device_t*
     return;
 }
 
-__global__ void d_MakeDivStream(const grid_directions_device_t* dir, grid_device_t* grid)
+__device__ void d_MakeDivStream(const grid_directions_device_t* dir, grid_device_t* grid)
 {
     const int M = dir->size;
     const int N = grid->size;
@@ -115,7 +177,7 @@ __global__ void d_MakeDivStream(const grid_directions_device_t* dir, grid_device
     return;
 }
 
-__global__ void d_MakeDivImpuls(const grid_directions_device_t* dir, grid_device_t* grid)
+__device__ void d_MakeDivImpuls(const grid_directions_device_t* dir, grid_device_t* grid)
 {
     const int M = dir->size;
     const int N = grid->size;
@@ -154,5 +216,13 @@ __global__ void d_MakeDivImpuls(const grid_directions_device_t* dir, grid_device
     return;
 }
 
+
+__global__ void d_MakeIllumParam(const grid_directions_device_t* dir, grid_device_t* grid)
+{
+    // эти функции можно объденить в одну. Тогда будет одно общее обращение в память к illum
+    d_MakeEnergy(dir, grid);
+    d_MakeDivStream(dir, grid);
+    d_MakeDivImpuls(dir, grid);
+}
 
 #endif //USE_CUDA

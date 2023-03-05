@@ -1,4 +1,4 @@
-#ifdef SOLVE
+#if 0//def SOLVE
 #include "solve_utils.h"
 
 

@@ -931,9 +931,12 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 
 }
 
-#if 1//def USE_MPI
+
 int MPI_RHLLC_3d(const int myid, const Type tau, grid_t& grid)
 {
+	//todo: shadule (static 1) (dynamic 1)
+#if 1//def USE_MPI
+
 	if (myid == 0)
 	{
 #pragma omp parallel default(none) shared(tau, grid, BASE_ADRESS)
@@ -1059,87 +1062,59 @@ int MPI_RHLLC_3d(const int myid, const Type tau, grid_t& grid)
 
 
 	} //myid ==0
+	
 
-
-#pragma omp parallel default(none) shared(tau, grid, send_hllc, disp_hllc, phys_local)
-	{
-
-	auto calc{[&grid, myid, tau] (const int left, const int right) {
-		if (myid == 0)
+		auto calc{ [&grid, myid, tau](const int left, const int right)
 		{
-#pragma omp for
-			for (int i = left; i < right; i++)
+			if (myid == 0)
 			{
-				elem_t& el = grid.cells[i];
-				flux_t sumF;
-				for (int j = 0; j < base; j++)
+//#pragma omp parallel default(none) shared(tau, grid, send_hllc, disp_hllc, phys_local,left,right)
 				{
-					if (el.geo.sign_n[j])
+#pragma omp for
+				for (int i = left; i < right; i++)
+				{
+					elem_t& el = grid.cells[i];
+					flux_t sumF;
+					for (int j = 0; j < base; j++)
 					{
-						sumF += grid.faces[el.geo.id_faces[j]].f;
+						if (el.geo.sign_n[j])
+						{
+							sumF += grid.faces[el.geo.id_faces[j]].f;
+						}
+						else
+						{
+							sumF -= grid.faces[el.geo.id_faces[j]].f;
+						}
 					}
-					else
-					{
-						sumF -= grid.faces[el.geo.id_faces[j]].f;
-					}
-				}
-				el.conv_val -= sumF * (tau / el.geo.V);
+					el.conv_val -= sumF * (tau / el.geo.V);
 
-				rhllc_get_phys_value_ost1098(el.conv_val, el.phys_val); // востановление физических переменных
-				phys_local[i] = el.phys_val;
+					rhllc_get_phys_value_ost1098(el.conv_val, el.phys_val); // востановление физических переменных
+					phys_local[i] = el.phys_val;
+				}
 			}
 		}
-	
-	} };
+		} };
 
 		const int size_grid = grid.size;
 
 		for (int i = 0; i < disp_hllc.size(); i++)
 		{
-			calc(disp_hllc[i], disp_hllc[i] + send_hllc[i]);
+#pragma omp parallel default(none) shared(i,tau, grid, send_hllc, disp_hllc, phys_local, calc)
+			{
+				calc(disp_hllc[i], disp_hllc[i] + send_hllc[i]);
+			}
 
-#pragma omp single
+//#pragma omp single
 			{
 				SendPhysValue(phys_local.data()+ disp_hllc[i], send_hllc[i], i);
 			}
 		}
-
-////		if (myid == 0)
-////		{
-////#pragma omp for
-////			for (int i = 0; i < size_grid; i++)
-////			{
-////				elem_t& el = grid.cells[i];
-////				flux_t sumF;
-////				for (int j = 0; j < base; j++)
-////				{
-////					if (el.geo.sign_n[j])
-////					{
-////						sumF += grid.faces[el.geo.id_faces[j]].f;
-////					}
-////					else
-////					{
-////						sumF -= grid.faces[el.geo.id_faces[j]].f;
-////					}
-////				}
-////				el.conv_val -= sumF * (tau / el.geo.V);
-////
-////				rhllc_get_phys_value_ost1098(el.conv_val, el.phys_val); // востановление физических переменных
-////				phys_local[i] = el.phys_val;
-////			}
-////		}
-//
-//#pragma omp single
-//		{
-//			SendPhysValue(phys_local.data(), size_grid, 0);
-//		}
-
-	}
-
+	
+#endif //USE_MPI
 	return 0;
 
 }
 
-#endif //USE_MPI
+
 #endif //NEW_CLASS
 #endif // RHLLC_3d

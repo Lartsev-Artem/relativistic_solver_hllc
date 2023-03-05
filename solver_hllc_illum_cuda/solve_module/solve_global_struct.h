@@ -161,6 +161,10 @@ struct grid_t
 
 	void InitMemory(const int M)
 	{
+		int np, id;
+		MPI_GET_INF(np, id);
+		WRITE_LOG_MPI("InitMem " << M << " " << size << '\n', id);
+
 		Illum = new Type[M * size * base];
 		scattering = new Type[M * size];
 
@@ -173,9 +177,12 @@ struct grid_t
 		impuls = new Matrix3[size];
 #endif
 #else
-		for (int i = 0; i < size; i++)
+		if (id == 0)
 		{
-			cells[i].illum_val.illum.resize(M*base, 0);
+			for (int i = 0; i < size; i++)
+			{
+				cells[i].illum_val.illum.resize(M * base, 0);
+			}
 		}
 #endif
 	}
@@ -206,4 +213,12 @@ struct grid_t
 };
 
 extern solve_mode_t solve_mode;
+
+enum e_cuda_stream_id_t
+{
+	eCuda_scattering_1 = 0,
+	eCuda_scattering_2,
+	eCuda_params,
+	eCuda_count
+};
 #endif //SOVLE_GLOBAL_STRUCT_H

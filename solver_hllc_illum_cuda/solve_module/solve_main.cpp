@@ -40,7 +40,7 @@ solve_mode_t solve_mode;
 */
 
 int RunSolveModule(const std::string& name_file_settings)
-{			
+{
 	int np, myid;
 	MPI_GET_INF(np, myid);
 
@@ -92,7 +92,7 @@ int RunSolveModule(const std::string& name_file_settings)
 	//--------------------------Файлы геометрии--------------------------------------------------------------------//
 	const std::string name_file_geometry_faces = BASE_ADRESS + "geo_faces.bin";
 	const std::string name_file_geometry_cells = BASE_ADRESS + "geo_cells.bin";
-	
+
 	grid_t grid;
 	if (myid == 0)
 	{
@@ -110,7 +110,7 @@ int RunSolveModule(const std::string& name_file_settings)
 #ifdef USE_MPI
 	MPI_Bcast(&grid.size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 #endif // USE_MPI
-	
+
 	double _clock;
 
 	//------------------------------ Illume section-----------------------------
@@ -144,33 +144,32 @@ int RunSolveModule(const std::string& name_file_settings)
 
 	ReadSimpleFileBin(name_file_neib, pairs);
 
-	if (myid == 0)
-	{
-		/*grid.Illum;
-
-		Illum.resize(base * grid.size * grid_direction.size, 0);
-		int_scattering.resize(grid.size * grid_direction.size, 0);*/
-
-#ifdef USE_CUDA //пока только на основном узле		
-		SetDevice(0);
-		InitDevice(grid_direction, grid);
-#else
-		grid.InitMemory(grid_direction.size);				
-#endif			
-		InitIllum(BASE_ADRESS, grid);
-	} //myid==0
+	WRITE_LOG_MPI("start Init illum\n", myid);
 
 #ifdef USE_MPI
 	InitSendDispIllumArray(myid, np, grid_direction.size, grid.size);
-	MPI_INIT(myid, np, grid_direction.size, grid);
+
 	InitPhysOmpMpi(grid.size);
 #endif
+
+	{
+#ifdef USE_CUDA //пока только на основном узле		
+		SetDevice(0);
+		InitDevice(grid_direction, grid, GetDisp(myid), GetDisp(myid) + GetSend(myid));
+#else
+		grid.InitMemory(grid_direction.size);
+#endif			
+		if (myid == 0) InitIllum(BASE_ADRESS, grid);
+	}
+
+	MPI_INIT(myid, np, grid_direction.size, grid);
+	WRITE_LOG_MPI("Init illum\n", myid);
 #endif //ILLUM
 	//------------------------------------------------------------------------------------------------------------
 
 	//---------------------------------------Solve section--------------------------------------------------------------
 	int res_count = 0; // счётчик решений	
-	
+
 
 #if defined HLLC || defined RHLLC
 	hllc_value_t hllc_cfg;
@@ -210,24 +209,26 @@ int RunSolveModule(const std::string& name_file_settings)
 		Type step;
 	}timer;
 #ifdef USE_MPI
-	{		
+	{
 		int len[5 + 1] = { 1,1,1,1,1,  1 };
 		MPI_Aint pos[6] = { offsetof(hllc_value_t,T),offsetof(hllc_value_t,CFL),offsetof(hllc_value_t,h)
-			,offsetof(hllc_value_t,print_timer) ,offsetof(hllc_value_t,tau) ,sizeof(hllc_value_t)};
+			,offsetof(hllc_value_t,print_timer) ,offsetof(hllc_value_t,tau) ,sizeof(hllc_value_t) };
 		MPI_Datatype typ[6] = { MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE, MPI_UB };
 		MPI_Type_struct(6, len, pos, typ, &MPI_hllc_value_t);
 		MPI_Type_commit(&MPI_hllc_value_t);
 	}
-	MPI_Bcast(&hllc_cfg, 1, MPI_hllc_value_t, 0, MPI_COMM_WORLD);			
+	MPI_Bcast(&hllc_cfg, 1, MPI_hllc_value_t, 0, MPI_COMM_WORLD);
 #endif // USE_MPI
 
 	timer.full_time = -omp_get_wtime();
+
+	MPI_Barrier(MPI_COMM_WORLD); // ждем пока все считается с дисков
 
 	while (t < hllc_cfg.T)
 	{
 		Type time_step = -omp_get_wtime();
 		timer.step = -omp_get_wtime();
-		
+
 		timer.hllc_time = -omp_get_wtime();
 
 		MPI_RHLLC_3d(myid, hllc_cfg.tau, grid);
@@ -235,48 +236,44 @@ int RunSolveModule(const std::string& name_file_settings)
 		{
 			//HLLC_STEP(hllc_cfg.tau, grid);
 
-			WRITE_LOG("\n hllc time= " << time_step + omp_get_wtime()<< " c\n");
+			WRITE_LOG("\n hllc time= " << time_step + omp_get_wtime() << " c\n");
 		}
 
 		timer.hllc_time += omp_get_wtime();
 
 #ifdef ILLUM
 		timer.illum_time = -omp_get_wtime();
-		{
-#ifdef USE_MPI
-			//MPI_Barrier(MPI_COMM_WORLD); //ждем газодинамического расчёта
-			MPI_CalculateIllumAsync(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid);
-			//MPI_Barrier(MPI_COMM_WORLD); //ждем  расчёта излучения
+
+#ifdef USE_MPI			
+		MPI_CalculateIllumAsync(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid);
 #else
-			CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
+		CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
 #endif // USE_MPI
-		}
+
+
+#ifndef USE_CUDA
+		CalculateIllumParam(grid_direction, grid);
+#endif
 		timer.illum_time += omp_get_wtime();
 
-			if (myid == 0)
+		if (myid == 0)
+		{
+			timer.solve_hllc_time = -omp_get_wtime();
+			if (SolveIllumAndHLLC(hllc_cfg.tau, grid) == 1)
 			{
-				timer.illum_param_time = -omp_get_wtime();
+				WRITE_LOG_ERR("bad illum solve\n");
+				D_LD;
+				//non phys conv value -> continue(надо учесть mpi)
+			}
+			timer.solve_hllc_time += omp_get_wtime();
 
-				CalculateIllumParam(grid_direction, grid);
-
-				timer.illum_param_time += omp_get_wtime();
-				
-				timer.solve_hllc_time = -omp_get_wtime();
-				if (SolveIllumAndHLLC(hllc_cfg.tau, grid) == 1)
-				{
-					WRITE_LOG_ERR("bad illum solve\n");
-					D_LD;
-					//non phys conv value -> continue(надо учесть mpi)
-				}
-				timer.solve_hllc_time += omp_get_wtime();
-				
-				//energy.swap(prev_energy);
-				//stream.swap(prev_stream);
-			}		
+			//energy.swap(prev_energy);
+			//stream.swap(prev_stream);
+		}
 #endif //iLLUM
 
 		t += hllc_cfg.tau;
-		
+
 		if (myid == 0)
 		{
 			cur_timer += hllc_cfg.tau;
@@ -285,10 +282,9 @@ int RunSolveModule(const std::string& name_file_settings)
 
 			if (cur_timer >= hllc_cfg.print_timer)
 			{
-				//calculate full array
 				WriteFileSolution(adress_solve + std::to_string(res_count++), grid);
-				
-				WRITE_LOG_ERR("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << " time_step= " << time_step << " c, time" << full_time << " c\n");
+
+				WRITE_LOG_ERR("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << " time_step= " << time_step + omp_get_wtime() << " c, time" << full_time + omp_get_wtime() << " c\n");
 				printf("\n t= %f,  tau= %lf,  res_step= %d\n", t, hllc_cfg.tau, res_count);
 				cur_timer = 0;
 			}
@@ -299,18 +295,17 @@ int RunSolveModule(const std::string& name_file_settings)
 
 		timer.step += omp_get_wtime();
 
-#ifdef USE_MPI
-		//можно сделать ассинхроно. Главный процесс и так знает как считаться и уже может начать выполнять шаг HLLC
+#ifdef USE_MPI		
 		MPI_Bcast(&hllc_cfg, 1, MPI_hllc_value_t, 0, MPI_COMM_WORLD);
 #endif
 
-		WRITE_LOG_MPI("t= "<<t<<", hllc= " << timer.hllc_time << ", illum " << timer.illum_time
+		WRITE_LOG_MPI("t= " << t << ", hllc= " << timer.hllc_time << ", illum " << timer.illum_time
 			<< ", illum_param " << timer.illum_param_time
 			<< ", solve " << timer.solve_hllc_time
 			<< ", step " << timer.step << "\n\n", myid);
 
-	//	EXIT_ERR("debug exit\n");
-		
+		//	EXIT_ERR("debug exit\n");
+
 	}// while(t < T)
 
 #elif defined ILLUM
@@ -321,7 +316,7 @@ int RunSolveModule(const std::string& name_file_settings)
 #else
 	CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
 #endif
-	
+
 
 	if (myid == 0)
 	{
@@ -335,15 +330,17 @@ int RunSolveModule(const std::string& name_file_settings)
 	timer.full_time += omp_get_wtime();
 	WRITE_LOG_MPI("full time= " << timer.full_time << '\n', myid);
 
-	if (myid == 0)
-	{
-		full_time += omp_get_wtime();
-		printf("Time while(): %f\n", full_time);
+
+	full_time += omp_get_wtime();
+
 
 #ifdef USE_CUDA // только на главном узле		
-		ClearDevice();		
+	ClearDevice();
 #endif
 
+	if (myid == 0)
+	{
+		printf("Time while(): %f\n", full_time);
 		WriteFileSolution(adress_solve + std::to_string(res_count), grid);
 
 		WRITE_LOG_ERR("End solve module\n");
