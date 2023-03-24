@@ -34,6 +34,79 @@ int RHllcPhysToConv(std::vector<elem_t>& cells)
 	return 0;
 }
 
+Type Density(const Vector3& p)
+{
+	return 1e-8;
+	const Type x = p[0];	
+	const Type x1 = 0.04;
+	const Type x2 = 0.06;
+	const Type x3 = 0.1;
+
+	const Type a = 1e-9;
+	const Type b = 1e-14;
+	const Type betta0 = 0.012;
+	const Type betta1 = 0.1;
+	if (x < x1)
+	{
+		const Type val = (x1 - x2) / betta0;
+		return a * exp(-val * val);
+	}
+
+	if (x < x2)
+	{
+		const Type val = (x - x2) / betta0;
+		return a * exp(-val * val);
+	}
+
+	if (x < x3) 
+	{
+		return a;
+	}
+
+	const Type val = (x - x3) / betta1;
+	return a * exp(-val * val) + b;	
+}
+Type Pressure(const Vector3& p)
+{
+	return 100;
+	const Type x = p[0];
+	const Type x1 = 0.04;
+	const Type x2 = 0.06;
+	const Type x3 = 0.1;
+
+	const Type A = 200;
+	const Type betta2 = 0.03;
+	const Type betta3 = 0.02;
+	const Type b = 1e-2;
+
+	if (x < x1)
+	{
+		return A;
+	}
+
+	if (x < x2)
+	{
+		const Type val = (x - x1) / betta3;
+		return A * exp(-val * val);
+	}
+
+	if (x < x3)
+	{
+		const Type val = (x2 - x1) / betta3;
+		return A * exp(-val * val);
+	}
+
+	const Type val0 = (x2 - x1) / betta3;
+	const Type coef = A * exp(-val0 * val0);
+
+	const Type val = (x - x3) / betta2;	
+	return coef * exp(-val * val)+b;
+}
+Vector3 Velocity(const Vector3& p)
+{
+	return Vector3(C_LIGHT * 1e-5, 0, 0);
+}
+
 static int SetRHllcValueDefault(std::vector<elem_t>& cells)
 {
 	std::vector<Vector3> centers;
@@ -71,21 +144,22 @@ static int SetRHllcValueDefault(std::vector<elem_t>& cells)
 			el.phys_val.v = Vector3(0, 0, 0);
 		}
 #elif defined Cone
-		const Type betta = 0.01;
+		/*const Type betta = 0.01;
 		const Type a = 1;
 		const Type b = 0.001;
 		Type x = centers[i][0];
 		el.phys_val.d = (3*1e-8 * exp(-x * x / betta) + 1e-12) / DENSITY;
 		el.phys_val.p = (100 * exp(-x * x / betta) + (1e-2)) / PRESSURE;
-		el.phys_val.v = (Vector3(1e4, 0, 0)) / VELOCITY;
+		el.phys_val.v = (Vector3(1e4, 0, 0)) / VELOCITY;*/
 
-		/*el.phys_val.d = (1e-10 ) / DENSITY;
-		el.phys_val.p = (100 ) / PRESSURE;
-		el.phys_val.v = (Vector3(1e5, 0, 0)) / VELOCITY;*/
-#else
-		el.phys_val.d = 10;
-		el.phys_val.p = 0.1;
-		el.phys_val.v = Vector3(0, 0, 0);
+		const Vector3 x = centers[i];
+		el.phys_val.d = Density(x) / DENSITY;
+		el.phys_val.p = Pressure(x) / PRESSURE;
+		el.phys_val.v = Velocity(x) / VELOCITY;
+#else		
+		el.phys_val.d = 0.1;
+		el.phys_val.p = 1;
+		el.phys_val.v = Vector3(1e-4, 0, 0);
 #endif // Cube
 
 		i++;

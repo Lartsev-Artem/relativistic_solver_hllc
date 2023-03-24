@@ -4,6 +4,7 @@
 #include "../../file_module/reader_bin.h"
 #include "../../utils/grid_geometry/geometry_solve.h"
 #include "../solve_utils.h"
+#include "rhllc_utils.h"
 
 #ifdef USE_MPI
 extern std::vector<flux_t> phys_local;
@@ -744,35 +745,46 @@ static int rhllc_get_phys_value_ost1098(const flux_t& U, flux_t& W)
 
 		if (p < 0 || U.d < 0 || std::isnan(p) || std::isnan(U.d))
 		{
-			p = max(sqrt(mm) - E, 1e-20);
-			if (std::isnan(p)) p = 1e-20;
-			v = m / (E + p);
-			if (v.norm() > 0.9999999995)
-			{
-				v /= 1.0005;
-			}
-			Gamma0 = 1. / sqrt(1 - v.dot(v));
-		//	printf("try resolve %.16lf\n", v.norm());
-			//printf("Error cell (p = %lf, d= %lf)", p, D / Gamma0);
-			//D_LD;
+		//	EXIT(1);
+		//	p = max(sqrt(mm) - E, 1e-20);
+		//	if (std::isnan(p)) p = 1e-20;
+		//	v = m / (E + p);
+		//	if (v.norm() > 0.9999999995)
+		//	{
+		//		v /= 1.0005;
+		//	}
+		//	Gamma0 = 1. / sqrt(1 - v.dot(v));
+		////	printf("try resolve %.16lf\n", v.norm());
+		//	//printf("Error cell (p = %lf, d= %lf)", p, D / Gamma0);
+		//	//D_LD;
 			call_back_flag = 1;
 			break;
 		}
 
 	} while (fabs(err / W0) > 1e-14);
 
-	if (p < 0 || U.d < 0 || std::isnan(p) || std::isnan(U.d) || v.norm()>1)
+	/*if (p < 0 || U.d < 0 || std::isnan(p) || std::isnan(U.d) || v.norm()>1)
 	{
 		printf("W= %lf,(%lf), %lf\n", W.d, W.v.norm(), W.p);
 		printf("Error cell (p = %lf, d= %lf, %lf)\n", p, D , Gamma0);
 		EXIT(1);
 		call_back_flag = 2;
-	}
+	}*/
 
-	W.d = max(D / Gamma0, 1e-10);
-	if (std::isnan(Gamma0) || std::isinf(Gamma0)) W.d = 1e-10;
+	W.d = D / Gamma0;
+	if (std::isnan(Gamma0) || std::isinf(Gamma0) || (D / Gamma0) < 1e-10)
+	{
+		W.d = 1e-10;
+		call_back_flag = 1;
+	}
 	W.v = v;	
-	W.p = max(p, 1e-20);
+
+	W.p = p;
+	if (std::isnan(p) || std::isinf(p) || p < 1e-20)
+	{
+		W.p = 1e-20;
+		call_back_flag = 1;
+	}
 	
 	return call_back_flag;
 }
@@ -781,7 +793,8 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 {
 #pragma omp parallel default(none) shared(tau, grid, BASE_ADRESS)
 	{
-		const int size_grid = grid.size;		
+		const int size_grid = grid.size;	
+
 #ifdef ILLUM
 		// востановление физических переменных
 #pragma omp for
@@ -789,7 +802,8 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 		{
 			int back = rhllc_get_phys_value_ost1098(grid.cells[i].conv_val, grid.cells[i].phys_val);
 			if (back)
-			{				
+			{		
+				D_LD;
 				if (back == 2)
 				{
 					
@@ -817,9 +831,7 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 		// потоки
 #pragma omp for
 		for (int i = 0; i < size_face; i++)
-		{
-			D_LD;
-
+		{			
 			face_t& f = grid.faces[i];
 			cell = &grid.cells[f.geo.id_l];
 			switch (f.geo.id_r)// id соседа она же признак ГУ
@@ -833,12 +845,12 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 				phys_bound_val.d = 0.1; phys_bound_val.v << 0, 0, 0; phys_bound_val.p = 0.1;
 				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #elif defined Cone_JET
-				phys_bound_val.d = (3 * 1e-8 + 1e-12) / DENSITY;
-				phys_bound_val.p = (100 + (1e-2)) / PRESSURE;
-				phys_bound_val.v = (Vector3(1e4, 0, 0)) / VELOCITY;
-				//phys_bound_val.d = 0.001;
-				//phys_bound_val.p = 0.1;
-				//phys_bound_val.v = (Vector3(0, 0, 0));
+				//phys_bound_val.d = Density(Vector3::Zero()) / DENSITY;
+				//phys_bound_val.p = Pressure(Vector3::Zero()) / PRESSURE;
+				//phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;
+				phys_bound_val.d = 10;
+				phys_bound_val.p = 0.01;
+				phys_bound_val.v = (Vector3(0, 0, 0));
 				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #else
 				bound_val = cell->conv_val;
@@ -852,12 +864,13 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 				phys_bound_val.p = 0.01;
 				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #elif defined Cone
-				phys_bound_val.d = (3 * 1e-8  + 1e-12) / DENSITY;
-				phys_bound_val.p = (100 + (1e-2)) / PRESSURE;
-				phys_bound_val.v = (Vector3(1e4, 0, 0)) / VELOCITY;
-				//phys_bound_val.d = 0.001;
-				//phys_bound_val.p = 0.1;
-				//phys_bound_val.v = (Vector3(0, 0, 0));
+			/*	phys_bound_val.d = Density(Vector3::Zero()) / DENSITY;
+				phys_bound_val.p = Pressure(Vector3::Zero()) / PRESSURE;
+				phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;*/
+
+				phys_bound_val.d = 10;
+				phys_bound_val.p = 0.01;
+				phys_bound_val.v = (Vector3(0, 0, 0));
 				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #else
 				bound_val = cell->conv_val;
@@ -935,7 +948,7 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 int MPI_RHLLC_3d(const int myid, const Type tau, grid_t& grid)
 {
 	//todo: shadule (static 1) (dynamic 1)
-#if 1//def USE_MPI
+#ifdef ILLUM
 
 	if (myid == 0)
 	{
@@ -949,11 +962,10 @@ int MPI_RHLLC_3d(const int myid, const Type tau, grid_t& grid)
 			{				
 				int back = rhllc_get_phys_value_ost1098(grid.cells[i].conv_val, grid.cells[i].phys_val);
 				if (back)
-				{
-					D_LD;
+				{					
 					if (back == 2)
 					{
-
+						D_LD;
 					}
 					else
 					{
@@ -992,12 +1004,13 @@ int MPI_RHLLC_3d(const int myid, const Type tau, grid_t& grid)
 					phys_bound_val.d = 0.1; phys_bound_val.v << 0, 0, 0; phys_bound_val.p = 0.1;
 					rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #elif defined Cone_JET
-					phys_bound_val.d = (3 * 1e-8 + 1e-12) / DENSITY;
-					phys_bound_val.p = (100 + (1e-2)) / PRESSURE;
-					phys_bound_val.v = (Vector3(1e4, 0, 0)) / VELOCITY;
-					//phys_bound_val.d = 0.001;
-					//phys_bound_val.p = 0.1;
-					//phys_bound_val.v = (Vector3(0, 0, 0));
+					//phys_bound_val.d = 0.1; // (3 * 1e-8 + 1e-12) / DENSITY;
+					//phys_bound_val.p = 1; // (100 + (1e-2)) / PRESSURE;
+					//phys_bound_val.v = Vector3(1e-4, 0, 0);// (Vector3(1e4, 0, 0)) / VELOCITY;
+					
+					phys_bound_val.d = Density(Vector3::Zero()) / DENSITY;
+					phys_bound_val.p = Pressure(Vector3::Zero()) / PRESSURE;
+					phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;
 					rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #else
 					bound_val = cell->conv_val;
@@ -1011,12 +1024,13 @@ int MPI_RHLLC_3d(const int myid, const Type tau, grid_t& grid)
 					phys_bound_val.p = 0.01;
 					rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #elif defined Cone
-					phys_bound_val.d = (3 * 1e-8 + 1e-12) / DENSITY;
-					phys_bound_val.p = (100 + (1e-2)) / PRESSURE;
-					phys_bound_val.v = (Vector3(1e4, 0, 0)) / VELOCITY;
-					//phys_bound_val.d = 0.001;
-					//phys_bound_val.p = 0.1;
-					//phys_bound_val.v = (Vector3(0, 0, 0));
+					//phys_bound_val.d = 0.1; // (3 * 1e-8 + 1e-12) / DENSITY;
+					//phys_bound_val.p = 1; // (100 + (1e-2)) / PRESSURE;
+					//phys_bound_val.v = Vector3(1e-4, 0, 0);// (Vector3(1e4, 0, 0)) / VELOCITY;
+					
+					phys_bound_val.d = Density(Vector3::Zero()) / DENSITY;
+					phys_bound_val.p = Pressure(Vector3::Zero()) / PRESSURE;
+					phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;
 					rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #else
 					bound_val = cell->conv_val;
@@ -1099,7 +1113,7 @@ int MPI_RHLLC_3d(const int myid, const Type tau, grid_t& grid)
 
 		for (int i = 0; i < disp_hllc.size(); i++)
 		{
-#pragma omp parallel default(none) shared(i,tau, grid, send_hllc, disp_hllc, phys_local, calc)
+#pragma omp parallel default(none)firstprivate(i,tau) shared(grid, send_hllc, disp_hllc, phys_local, calc)
 			{
 				calc(disp_hllc[i], disp_hllc[i] + send_hllc[i]);
 			}
@@ -1110,7 +1124,12 @@ int MPI_RHLLC_3d(const int myid, const Type tau, grid_t& grid)
 			}
 		}
 	
+
+#else
+	D_LD;
 #endif //USE_MPI
+
+
 	return 0;
 
 }

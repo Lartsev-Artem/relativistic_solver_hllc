@@ -7,6 +7,7 @@
 int ReBuildNetgenToVTK2d(int argc, char* argv[]);
 int ReNumberingGrid(int argc, char* argv[]);
 int ReBuildNetgenToMetis(int argc, char* argv[]);
+void GenerateMeshSizeFileNetgen();
 
 #ifdef USE_VTK
 int SetScalarDataVtkFromFile(int argc, char* argv[]);

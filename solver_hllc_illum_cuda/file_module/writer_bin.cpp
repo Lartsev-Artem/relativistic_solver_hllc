@@ -53,11 +53,11 @@ size_t WriteFileSolution(const std::string& main_dir, const grid_t& grid)
 
 	//WRITE_FILE_PHYS((main_dir + "velocity.bin").c_str(), cells, phys_val.v, Vector3, VELOCITY);
 #else
-	WRITE_FILE((main_dir + "density.bin").c_str(), cells, phys_val.d);
+	WRITE_FILE_VECTOR((main_dir + "density.bin").c_str(), grid.cells, phys_val.d);
 
-	WRITE_FILE((main_dir + "pressure.bin").c_str(), cells, phys_val.p);
+	WRITE_FILE_VECTOR((main_dir + "pressure.bin").c_str(), grid.cells, phys_val.p);
 
-	WRITE_FILE((main_dir + "velocity.bin").c_str(), cells, phys_val.v);
+	WRITE_FILE_VECTOR((main_dir + "velocity.bin").c_str(), grid.cells, phys_val.v);
 #endif
 #endif
 

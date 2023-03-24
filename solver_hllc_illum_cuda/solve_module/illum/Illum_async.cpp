@@ -360,9 +360,9 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 
 	case 10: // дл€ конуса (считаем, что излучающа€ часть не измен€етс€ в зависимости от газораспределени€)
 	{
-		Type Q = 0;
+		Type Q = 0.01;
 		Type alpha = 0.5;
-		Type betta = 0.5;
+		Type betta = 150; ////0.5;
 		Type S = int_scattering;
 
 
@@ -383,7 +383,14 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 		{
 			return 0;
 		}
-
+#ifdef DEBUG
+		static Type max = 0;
+		if ((I / RADIATION) > max)
+		{
+			max = I / RADIATION;
+			WRITE_LOG("I= " << max << ", S= " << S <<  '\n');
+		}
+#endif
 		return I;
 	}
 
@@ -395,7 +402,7 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 		const Type d = cell.d * DENSITY;
 		const Type p = cell.p * PRESSURE;
 
-		const Type T = 1e-5 * p / (d * R_gas);
+		const Type T = std::min( 1e-6 * p / (d * R_gas), 5000.);
 
 		const Type T1 = k_boltzmann * PI * T;
 		const Type T2 = T1 * T1;
@@ -423,6 +430,15 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 		{
 			return 0;
 		}
+
+#ifdef DEBUG
+		static Type max = 0;
+		if ((I / RADIATION) > max) 
+		{
+			max = I / RADIATION;
+			WRITE_LOG("I= " << max<<", T= "<<T<<", ie= " << Ie <<", I0="<< I0<< ", S="<< S << '\n');
+		}
+#endif
 
 		return  I / RADIATION;
 	}
@@ -497,17 +513,71 @@ static Type ReCalcIllumGlobal(const int dir_size, grid_t& grid)
 }
 #endif
 
+static Type BoundaryConditionsNoOff(const int type_bound, const Vector3& x, Vector3& inter_coef)
+{
+	Type I0 = 0;
+
+	const Type p = x.norm();
+	const Type a = 1e3;
+	const Type b = 0.01;
+	const Type c = 10;
+
+	switch (type_bound)
+	{
+	case eBound_OutSource: // дно конуса
+		I0 = a * exp(-(p / b) * (p / b)) + c;
+		//I0 = 1e4;
+		break;
+	case eBound_FreeBound:
+		I0 = 0;
+		break;
+
+	case eBound_LockBound:
+		I0 = 0;
+		break;
+
+	case eBound_InnerSource:  // внутренн€€ граница	
+	{
+		//I0 = a * exp(-(p / b) * (p / b)) + c;
+		//I0 = 100;// 1e5;
+		I0 = 0;
+		break;
+	}
+	case 100:// дно конуса(апроксимаци€ экспонеты: a Exp[- (x/b)^2] + c)  eBound_
+				
+#if 0 //через р€д до 2 и 3 члена
+		if (p > 0.5)
+		{
+			// задать константой... без abc
+		}
+		else //р€д в нуле: (a + c) - (a x ^ 2) / b ^ 2 + (a x ^ 4) / (2 b ^ 4)
+		{
+			const Type x2 = p * p;
+			const Type ax2 = a * x2;
+			const Type b2 = 1./(b * b);
+			I0 = (a + c) - ax2 * b2 + (ax2 * x2) * (0.5 * b2 * b2);
+		}
+#endif
+		break;
+	default:
+		D_LD;
+	}
+
+	inter_coef = Vector3(I0, I0, I0);
+	return I0;
+}
+
 int MPI_CalculateIllumAsync(const grid_directions_t& grid_direction, const std::vector< std::vector<int>>& face_states, const std::vector<int>& pairs,
 	const std::vector < std::vector<cell_local>>& vec_x0, std::vector<BasePointTetra>& vec_x,
 	const std::vector < std::vector<int>>& sorted_id_cell, grid_t& grid)
 {
 	const int count_directions = grid_direction.size;
 	const int count_cells = grid.size;
-	const int n_illum = count_cells * base;	
+	const int n_illum = count_cells * base;
 
 	int np, myid;
 	MPI_GET_INF(np, myid);
-	
+
 	const int local_size = send_count[myid];
 	const int local_disp = disp[myid];
 
@@ -515,7 +585,7 @@ int MPI_CalculateIllumAsync(const grid_directions_t& grid_direction, const std::
 	Type norm = -1;
 	std::vector<Type> norms(np, -10);
 
-	struct 
+	struct
 	{
 		Type phys_time;
 
@@ -528,23 +598,40 @@ int MPI_CalculateIllumAsync(const grid_directions_t& grid_direction, const std::
 		Type send2_wait_time;
 
 		Type dir_time;
-		
+
 		Type cuda_time;
 		Type cuda_wait_time_1;
 		Type cuda_wait_time_2;
-		
-		Type norm_gather;				
+
+		Type norm_gather;
 	}timer;
 
-	timer.phys_time = -omp_get_wtime();	
+	timer.phys_time = -omp_get_wtime();
 	MPI_Waitall(requests_hllc.size(), requests_hllc.data(), MPI_STATUSES_IGNORE); //ждЄм сообщнени€ с газовым расчЄтом			
 	timer.phys_time += omp_get_wtime();
-	
+
 
 	do {
 
 		Type _clock = -omp_get_wtime();
-		norm = -1;	
+		norm = -1;
+		// эта проверка скрывает расчЄт видеокарты
+		timer.send1_wait_time = -omp_get_wtime();
+		{
+			if (np > 1 && requests_send_1_section[0] != MPI_REQUEST_NULL)
+			{
+				MPI_Waitall(requests_send_1_section.size(), requests_send_1_section.data(), MPI_STATUSES_IGNORE);
+			}
+		}
+		timer.send1_wait_time += omp_get_wtime();
+		timer.send2_wait_time = -omp_get_wtime();
+		{
+			if (np > 1 && requests_send_2_section[0] != MPI_REQUEST_NULL)
+			{
+				MPI_Waitall(requests_send_2_section.size(), requests_send_2_section.data(), MPI_STATUSES_IGNORE);
+			}
+		}
+		timer.send2_wait_time += omp_get_wtime();
 
 #ifdef USE_CUDA			
 		timer.cuda_wait_time_1 = -omp_get_wtime();
@@ -654,15 +741,7 @@ flags_send_to_gpu_2_section, requests_rcv_2_section, status_rcv_2_section, reque
 #pragma omp single
 			{
 				if (np > 1)
-				{
-					timer.send1_wait_time = -omp_get_wtime();
-					{
-						if (requests_send_1_section[0] != MPI_REQUEST_NULL)
-						{
-							MPI_Waitall(requests_send_1_section.size(), requests_send_1_section.data(), MPI_STATUSES_IGNORE);
-						}
-					}
-					timer.send1_wait_time += omp_get_wtime();
+				{					
 					MPI_Startall(requests_send_1_section.size(), requests_send_1_section.data());
 				}
 		
@@ -684,18 +763,7 @@ flags_send_to_gpu_2_section, requests_rcv_2_section, status_rcv_2_section, reque
 					}				
 					{
 						MPI_Startall(requests_rcv_2_section.size(), requests_rcv_2_section.data());
-					}
-
-					//#pragma omp single //nowait					
-					timer.send2_wait_time = -omp_get_wtime();
-					{
-						if (requests_send_2_section[0] != MPI_REQUEST_NULL)
-						{
-							MPI_Waitall(requests_send_2_section.size(), requests_send_2_section.data(), MPI_STATUSES_IGNORE);
-						}
-					}
-					timer.send2_wait_time += omp_get_wtime();					
-
+					}							
 				}	
 
 #ifdef USE_CUDA			

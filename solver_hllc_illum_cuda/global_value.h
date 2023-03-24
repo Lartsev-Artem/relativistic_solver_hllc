@@ -35,7 +35,7 @@ const Type inner_radius = 0.12; // радиус внутренней сферы (с запасом)
 #define C_LIGHT 299792458.0
 #define C_LIGHT_INV (1.0/(C_LIGHT))
 
-#define DIST  (1*1e10) //DistMoon
+#define DIST  1e6;//(1*1e10) //DistMoon
 #define MASS (1 * 1e21)//EarthMass
 #define VELOCITY (3 * 1e8)//C_LIGHT
 
@@ -43,7 +43,7 @@ const Type inner_radius = 0.12; // радиус внутренней сферы (с запасом)
 //#define DENSITY (MASS/(DIST*DIST*DIST))
 //#define PRESSURE (MASS/(DIST*TIME*TIME))
 //#define RADIATION (MASS/(TIME*TIME*TIME))
-#define DENSITY (3.34*10e-24)
+#define DENSITY (3.34*10e-14)
 #define PRESSURE (DENSITY*VELOCITY*VELOCITY)
 #define RADIATION (DENSITY*VELOCITY*VELOCITY*VELOCITY)
 

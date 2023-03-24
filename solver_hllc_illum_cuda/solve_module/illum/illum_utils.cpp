@@ -313,7 +313,7 @@ int SolveIllumAndHLLC(const Type tau, grid_t& grid)
 #pragma omp parallel  default(none) firstprivate(tau) shared(ret_flag, grid) 
 	{
 		const int n = grid.size;
-#pragma omp for //schedule(static, 1) //почему это хуже??
+#pragma omp for schedule(static, 200) //почему это хуже??
 		for (int i = 0; i < n; i++)
 		{
 			elem_t &el = grid.cells[i];
@@ -326,11 +326,12 @@ int SolveIllumAndHLLC(const Type tau, grid_t& grid)
 			el.conv_val.v += tau * (-el.illum_val.div_impuls * 1);  //- tau*(stream[i][0] - prev_stream[i][0]) / tau / c / c);  // +F_g //vx
 			el.conv_val.p += tau * (-el.illum_val.div_stream); //  tau*(-(energy[i] - prev_energy[i]) / tau / c)  //+F_g.dot(vel)  //e			
 #endif
-			
+#ifdef DEBUG
 			if (el.conv_val.p - sqrt(el.conv_val.d * el.conv_val.d + el.conv_val.v.dot(el.conv_val.v)) < 0)
 			{
 				ret_flag = 1;// return 1;
 			}
+#endif
 		}
 	}
 	return ret_flag;
@@ -370,7 +371,7 @@ Type BoundaryConditions(const int type_bound, Vector3& inter_coef)
 	switch (type_bound)
 	{
 	case eBound_OutSource: // дно конуса
-		I0 = 1e4;
+		I0 = 1;
 		break;
 	case eBound_FreeBound:
 		I0 = 0;
@@ -417,14 +418,11 @@ Type BoundaryConditions(const int type_bound, Vector3& inter_coef)
 
 		}
 #endif
-		I0 = 100;// 1e5;
+		I0 = 0;// 100;// 1e5;
 		break;
 	}
 	default:
-
-		WRITE_LOG("unknown bound type in illum\n");
-		I0 = 0;
-		break;
+		D_LD;
 	}
 
 	inter_coef = Vector3(I0, I0, I0);

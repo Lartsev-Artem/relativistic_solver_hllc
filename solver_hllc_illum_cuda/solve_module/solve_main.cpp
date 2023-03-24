@@ -224,18 +224,25 @@ int RunSolveModule(const std::string& name_file_settings)
 
 	MPI_Barrier(MPI_COMM_WORLD); // ждем пока все считается с дисков
 
+	int skip_count = 0;
+	const int skip_size = solve_mode.class_vtk != 10 ? 10 : 1e10; //10-стационарное излучение (пропускаем всегда)
+
 	while (t < hllc_cfg.T)
 	{
 		Type time_step = -omp_get_wtime();
 		timer.step = -omp_get_wtime();
 
 		timer.hllc_time = -omp_get_wtime();
-
+#ifdef ILLUM
 		MPI_RHLLC_3d(myid, hllc_cfg.tau, grid);
+#else
 		if (myid == 0)
 		{
-			//HLLC_STEP(hllc_cfg.tau, grid);
-
+			HLLC_STEP(hllc_cfg.tau, grid);
+		}
+#endif
+		if (myid == 0)
+		{
 			WRITE_LOG("\n hllc time= " << time_step + omp_get_wtime() << " c\n");
 		}
 
@@ -244,16 +251,18 @@ int RunSolveModule(const std::string& name_file_settings)
 #ifdef ILLUM
 		timer.illum_time = -omp_get_wtime();
 
+		if (skip_count++ % skip_size == 0)
+		{
 #ifdef USE_MPI			
-		MPI_CalculateIllumAsync(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid);
-#else
-		CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
-#endif // USE_MPI
-
-
+			MPI_CalculateIllumAsync(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid);
 #ifndef USE_CUDA
-		CalculateIllumParam(grid_direction, grid);
-#endif
+			CalculateIllumParam(grid_direction, grid);
+#endif		
+#else
+			CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
+#endif // USE_MPI
+		}
+
 		timer.illum_time += omp_get_wtime();
 
 		if (myid == 0)
@@ -303,9 +312,7 @@ int RunSolveModule(const std::string& name_file_settings)
 			<< ", illum_param " << timer.illum_param_time
 			<< ", solve " << timer.solve_hllc_time
 			<< ", step " << timer.step << "\n\n", myid);
-
-		//	EXIT_ERR("debug exit\n");
-
+		
 	}// while(t < T)
 
 #elif defined ILLUM

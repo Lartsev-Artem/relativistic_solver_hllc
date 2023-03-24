@@ -212,6 +212,51 @@ int ReNumberingGrid(int argc, char* argv[])
 	return 0;
 }
 
+void GenerateMeshSizeFileNetgen()
+{
+	Type left = 0;
+	Type right = 0.175;
+	Type R1 = 0.05 / sqrt(2);
+	Type R2 = 0.1;
+
+	Type h = 0.0025;
+	Type h_x = h;
+	Type h_y = h;
+	Type h_z = h;
+
+	int Nx = (right - left) / h_x;
+	int Ny = 2 * (R1 / h_y - 1) + 1;
+	int Nz = 2 * (R1 / h_z - 1) + 1;
+
+	std::ofstream out("D:\\Desktop\\FilesCourse\\Grids\\size.msz");
+
+	out << Nx * Ny * Nz << '\n';
+	int N = 0;
+	Vector3 x(left + h_x / 2, -R1 + h_y, -R1 + h_z);
+	for (int i = 0; i < Nx; i++)
+	{
+		x[1] = -R1 + h_y;
+		for (int j = 0; j < Ny; j++)
+		{
+			x[2] = -R1 + h_z;
+			for (int k = 0; k < Nz; k++)
+			{
+				out << x[0] << ' ' << x[1] << ' ' << x[2] << ' ' << h_x << '\n';
+				x[2] += h_z;
+				N++;
+			}
+			x[1] += h_y;
+		}
+		x[0] += h_x;
+	}
+
+	out << 0 << '\n';
+	out.close();
+	printf("N=%d\n", N);
+	return;
+}
+
+
 #ifdef USE_VTK
 static int WriteDataToGrid(file_name name_file_grid, file_name name_file_data, file_name name_file_output, file_name name_data) 
 {

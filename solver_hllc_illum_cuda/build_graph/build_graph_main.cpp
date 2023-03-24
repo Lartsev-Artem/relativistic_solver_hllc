@@ -272,7 +272,7 @@ int RunBuildModule(const std::string& name_file_settings)
 
 						//пытаться определять внутреннюю границу до последнего
 						static int cc = 0;
-						if (cc++ < 3)
+						if (cc++ < 10)
 							try_restart = !try_restart;
 
 						continue;

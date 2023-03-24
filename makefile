@@ -2,7 +2,7 @@ CPC = mpiicpc
 NVCC = nvcc
 OUT = run
 
-DEFINES = #CLASTER SOLVE USE_CUDA #BUILD MAKE
+DEFINES = CLASTER SOLVE USE_CUDA #BUILD MAKE
 
 ONDEF =  $(addprefix -D , $(DEFINES))
 
@@ -46,7 +46,7 @@ HLLC_OBJ = hllc_1d.o hllc_2d.o hllc_3d.o hllc_utils.o
 
 RHLCC_OBJ = rhllc_1d.o rhllc_2d.o rhllc_3d.o rhllc_utils.o rhllc_2d_mpi.o rhllc_3d_mpi.o
 
-ILLUM_OBJ = illum_utils.o Illum_part.o Illum_part_mpi.o Illum_part_mpi_omp.o
+ILLUM_OBJ = illum_utils.o Illum_part.o Illum_part_mpi.o Illum_part_mpi_omp.o Illum_async.o
 
 SOLVE_OBJ = solve_utils.o solve_global_struct.o solve_main.o $(HLLC_OBJ) $(ILLUM_OBJ) $(RHLCC_OBJ) $(CUDA_OBJ)
 
@@ -146,6 +146,9 @@ Illum_part_mpi.o: $(SRC_ILLUM)/Illum_part_mpi.cpp reader_bin.o reader_txt.o illu
 
 Illum_part_mpi_omp.o: $(SRC_ILLUM)/Illum_part_mpi_omp.cpp reader_bin.o reader_txt.o illum_utils.o writer_bin.o solve_utils.o
 	$(CPC) $(CPP_FLAGS) -c $(SRC_ILLUM)/Illum_part_mpi_omp.cpp
+ 
+Illum_async.o: $(SRC_ILLUM)/Illum_async.cpp reader_bin.o reader_txt.o illum_utils.o writer_bin.o solve_utils.o cuda_solve.o geometry_solve.o
+	$(CPC) $(CPP_FLAGS) -c $(SRC_ILLUM)/Illum_async.cpp
 
 
 solve_utils.o: $(SRC_SOLVE)/solve_utils.cpp reader_bin.o writer_bin.o hllc_utils.o rhllc_utils.o

@@ -125,12 +125,12 @@ ofile.close(); }
 
 
 #define D_LD \
-__pragma("omp critical") \
+/*__pragma("omp critical")*/ \
 {\
 std::ofstream out(Files_log, std::ios::app); \
 out << "DIE: " << __FILE__ << " " << __FUNCTION__ << ", " <<__LINE__<<"c.\n"; \
 out.close(); \
-MPI_END \
+/*MPI_END*/ \
 exit(1); \
 }
 
@@ -163,16 +163,21 @@ MPI_Comm_rank(MPI_COMM_WORLD, &_num_cur_id);}
 
 #define WRITE_LOG(str) WRITE_LOG_ERR(str)
 
+#ifdef WRITE_MPI_LOG
 #define WRITE_LOG_MPI(str, id){  \
 std::ofstream ofile; \
 ofile.open(Files_log + std::to_string(id)+".txt", std::ios::app); \
 ofile << str; \
 ofile.close(); }
+#else
+#define WRITE_LOG_MPI(str, id) {CONVERT_TO_STRING(str);CONVERT_TO_STRING(id); }
+#endif
 
 
 #endif  //WRITE_LOG_ON_SCREAN
 #else
 #define WRITE_LOG(str) {CONVERT_TO_STRING(str);}
+#define WRITE_LOG_MPI(str, id) {CONVERT_TO_STRING(str);CONVERT_TO_STRING(id); }
 #endif //WRITE_GLOBAL_LOG
 
 #ifdef _MSC_VER
@@ -227,7 +232,7 @@ fclose(f); \
 #ifdef USE_MPI
 #define MPI_START(argc, argv) MPI_Init(&argc, &argv);
 #define MPI_END MPI_Finalize();
-#define EXIT(a) {WRITE_LOG_ERR("Err calls from"<<__FILE__<<": " <<__FUNCTION__<<", "<<__LINE__<<" c.\n"); PRINT_POS MPI_END exit(a); }
+#define EXIT(a) {WRITE_LOG_ERR("Err calls from"<<__FILE__<<": " <<__FUNCTION__<<", "<<__LINE__<<" c.\n"); PRINT_POS /*MPI_END*/ exit(a); }
 #else
 #define MPI_START(argc, argv) {}
 #define MPI_END {}

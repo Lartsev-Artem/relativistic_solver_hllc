@@ -23,5 +23,9 @@ int InitRHLLC(file_name file_settings_hllc, hllc_value_t& hllc_set, file_name fi
 int RHLLC_3d(const Type tau, grid_t& grid);
 int RHllcGetTimeStep(hllc_value_t& hllc_set, const std::vector<elem_t>& cells);
 
+Type Density(const Vector3& p);
+Type Pressure(const Vector3& p);
+Vector3 Velocity(const Vector3& p);
+
 #endif //RHLLC
 #endif //RHLLC_UTILS_H

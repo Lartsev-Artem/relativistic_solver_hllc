@@ -1,0 +1,7 @@
+#!/bin/sh
+#SBATCH --job-name=Lartsev
+#SBATCH --time=00:10:00
+#SBATCH --nodes=5 --cpus-per-task=18
+#SBATCH --partition release
+ulimit -l unlimited
+mpirun -n 5 /nethome/student/FS18/FS2-x1/Lartsev/NewSolve/build/run /nethome/student/FS18/FS2-x1/Lartsev/NewSolve/settings_file.txt
