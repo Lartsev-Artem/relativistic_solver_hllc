@@ -2,6 +2,7 @@
 
 #include "../global_headers.h"
 #include "../global_def.h"
+#include "../global_value.h"
 
 #include "reader_vtk.h"
 #include "writer_bin.h"

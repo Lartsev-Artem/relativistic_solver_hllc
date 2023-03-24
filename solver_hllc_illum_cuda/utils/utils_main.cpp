@@ -7,7 +7,7 @@
 
 int RunUtilsModule(int argc, char* argv[], const std::string& settings)
 {		
-	CompareFiles(argc, argv);
+// CompareFiles(argc, argv);
 
 //	ReNumberingGrid(argc, argv);
 	
@@ -19,7 +19,7 @@ int RunUtilsModule(int argc, char* argv[], const std::string& settings)
 
 #ifdef USE_VTK
 
-//  MakeHllcInitFromGrid(argc, argv, settings);
+  MakeHllcInitFromGrid(argc, argv, settings);
 
 //	rebuild_solve(argc, argv, settings);
 

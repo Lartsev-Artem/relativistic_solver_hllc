@@ -42,17 +42,26 @@ int GetDisp(const int myid) { return disp[myid]; }
 
 int InitPhysOmpMpi(const int count_cells)
 {
-	const int nthr = 6; //разделим иходный массив на 6 равных куска
+	int nthr = 1;   //не делим массив, если только один узел
+	int np, id;
+	MPI_GET_INF(np, id);
+	if (np != 1)
+	{
+		nthr = 6;  //разделим иходный массив на 6 равных куска
+		requests_hllc.resize(nthr);
+	}
 
 	GetSend(nthr, count_cells, send_hllc);
 	GetDisp(nthr, count_cells, disp_hllc);
-
-	requests_hllc.resize(nthr);	
+	
 	return 0;
 }
 void SendPhysValue(flux_t* phys, const int size, const int msg_id)
 {
-	MPI_Ibcast(phys, size, MPI_flux_t, 0, MPI_COMM_WORLD, &requests_hllc[msg_id]);
+	if (requests_hllc.size())
+	{
+		MPI_Ibcast(phys, size, MPI_flux_t, 0, MPI_COMM_WORLD, &requests_hllc[msg_id]);
+	}
 }
 
 int InitSendDispIllumArray(const int myid, const int np, const int count_directions, const int count_cells)

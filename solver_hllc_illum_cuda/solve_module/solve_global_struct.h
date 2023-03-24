@@ -3,6 +3,7 @@
 
 #include "solve_config.h"
 #include "../global_def.h"
+#include "../global_value.h"
 
 struct hllc_value_t
 {		

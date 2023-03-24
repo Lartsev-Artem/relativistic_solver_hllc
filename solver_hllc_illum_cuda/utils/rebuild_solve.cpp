@@ -474,8 +474,8 @@ int MakeHllcInitFromGrid(int argc, char* argv[], file_name name_file_settings)
 	
 	for (size_t i = 0; i < n; i++)
 	{
-		cells[i].d = density->GetTuple1(i);
-		cells[i].p = pressure->GetTuple1(i);
+		cells[i].d = density->GetTuple1(i);// / DENSITY;
+		cells[i].p = pressure->GetTuple1(i);// / PRESSURE;
 		cells[i].v = Vector3(velocity->GetTuple3(i));
 	}
 	

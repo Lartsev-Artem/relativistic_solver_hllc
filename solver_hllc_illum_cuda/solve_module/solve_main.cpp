@@ -195,7 +195,7 @@ int RunSolveModule(const std::string& name_file_settings)
 
 		WriteFileSolution(adress_solve + std::to_string(res_count++), grid); //печать начальной сетки
 
-		WRITE_LOG("Start main task\n");
+		WRITE_LOG_ERR("Start main task\n");
 	}
 
 	Type full_time = -omp_get_wtime();
