@@ -11,7 +11,7 @@
 static int ReadNetgenGrid(file_name name_file_in, std::vector<Vector3>& point, std::vector<Eigen::Vector4i>& cell, const int size = 3)
 {
 	std::ifstream ifile;
-	OPEN_FSTREAM(ifile, name_file_in);
+	OPEN_FSTREAM(ifile, name_file_in.c_str());
 
 	int n;
 	ifile >> n;
@@ -102,7 +102,7 @@ int ReBuildNetgenToMetis(int argc, char* argv[])
 	ReadNetgenGrid(name_file_in, point, cell, size);
 
 	std::ofstream ofile;
-	OPEN_FSTREAM(ofile, name_file_out);
+	OPEN_FSTREAM(ofile, name_file_out.c_str());
 
 	ofile << cell.size() << "\n";
 	for (size_t i = 0; i < cell.size(); i++)

@@ -156,6 +156,40 @@ int rebuild_solve(int argc, char* argv[], file_name name_file_settings)
 	return 0;
 }
 
+int rebuild_solve(int argc, char* argv[])
+{
+	if (argc != 4)
+	{
+		printf("Error input data!\n");
+		printf("Input:\n");
+		printf("name_file_vtk\n");
+		printf("adress_solve (like \"path\\file\")\n");
+		printf("max_number_of_iter\n");		
+		return 1;
+	}
+
+	const std::string name_file_vtk = argv[1];
+	const std::string adress_solve = argv[2];
+	const int max_number_of_iter = std::stoi(argv[3]);	
+
+	for (int i = 0; i < max_number_of_iter; i++)
+	{
+		std::string file_solve = adress_solve + std::to_string(i);
+		std::string vtk_file_solve = adress_solve + std::to_string(i) + ".vtk";
+
+		if (ReBuildDataVtkArray(name_file_vtk, vtk_file_solve, file_solve))
+		{
+			printf("Error ReBuild\n");
+			continue;
+			//ERR_RETURN("Error ReBuild\n");
+		}
+
+		printf("grid %d\n", i);
+	}
+	return 0;
+}
+
+
 int rewrite_vtk_array(int argc, char* argv[], file_name name_file_settings)
 {
 	std::string name_file_vtk;

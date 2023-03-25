@@ -4,9 +4,14 @@
 #include "rebuild_grid.h"
 #include "grid_geometry/get_grid_data.h"
 #include "../global_value.h"
+#include "files_utils.h"
 
 int RunUtilsModule(int argc, char* argv[], const std::string& settings)
 {		
+	//DeleteSolveFiles(argc, argv);
+	//ReduceNameSolveFiles(argc, argv);
+	//CopySolveFiles(argc, argv);
+
 // CompareFiles(argc, argv);
 
 //	ReNumberingGrid(argc, argv);
@@ -19,9 +24,10 @@ int RunUtilsModule(int argc, char* argv[], const std::string& settings)
 
 #ifdef USE_VTK
 
-  MakeHllcInitFromGrid(argc, argv, settings);
+ // MakeHllcInitFromGrid(argc, argv, settings);
 
 //	rebuild_solve(argc, argv, settings);
+	rebuild_solve(argc, argv);
 
 //	BuildHLLC_1dTime(argc, argv);
 

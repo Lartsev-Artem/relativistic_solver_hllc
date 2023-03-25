@@ -848,9 +848,9 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 				//phys_bound_val.d = Density(Vector3::Zero()) / DENSITY;
 				//phys_bound_val.p = Pressure(Vector3::Zero()) / PRESSURE;
 				//phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;
-				phys_bound_val.d = 10;
-				phys_bound_val.p = 0.01;
-				phys_bound_val.v = (Vector3(0, 0, 0));
+				phys_bound_val.d = Density(Vector3::Zero()) / DENSITY;
+				phys_bound_val.p = Pressure(Vector3::Zero()) / PRESSURE;
+				phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;
 				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #else
 				bound_val = cell->conv_val;
@@ -868,9 +868,9 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 				phys_bound_val.p = Pressure(Vector3::Zero()) / PRESSURE;
 				phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;*/
 
-				phys_bound_val.d = 10;
-				phys_bound_val.p = 0.01;
-				phys_bound_val.v = (Vector3(0, 0, 0));
+				phys_bound_val.d = Density(Vector3::Zero()) / DENSITY;
+				phys_bound_val.p = /*Pressure(Vector3::Zero())*/5000. / PRESSURE;
+				phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;
 				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #else
 				bound_val = cell->conv_val;
