@@ -418,7 +418,12 @@ Type BoundaryConditions(const int type_bound, Vector3& inter_coef)
 
 		}
 #endif
+#ifdef Sphere
+		I0 = 1;
+#else
 		I0 = 0;// 100;// 1e5;
+#endif
+
 		break;
 	}
 	default:

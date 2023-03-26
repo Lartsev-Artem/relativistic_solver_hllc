@@ -105,8 +105,8 @@ int CalculateIntScatteringAsyncMPIStream(const grid_directions_t& grid_dir, grid
     // CUDA_CALL_FUNC(cudaGetLastError);
 
     CUDA_MEMCPY_TO_HOST_ASYNC_STREAM(grid.scattering+start, device_host_ptr.int_scattering + start, N * (end-start) * sizeof(grid.scattering[0]),
-        cuda_streams[stream]);    
-    
+        cuda_streams[stream]);  
+
     return 0;
 }
 int CalculateIntScatteringAsyncMPI(const grid_directions_t& grid_dir, grid_t& grid, int local_size)

@@ -156,6 +156,10 @@ static int SetRHllcValueDefault(std::vector<elem_t>& cells)
 		el.phys_val.d = Density(x) / DENSITY;
 		el.phys_val.p = Pressure(x) / PRESSURE;
 		el.phys_val.v = Velocity(x) / VELOCITY;
+#elif defined Sphere
+		el.phys_val.d = 0.1;
+		el.phys_val.p = 0.1;
+		el.phys_val.v = Vector3(0, 0, 0);
 #else		
 		el.phys_val.d = 0.1;
 		el.phys_val.p = 1;

@@ -216,6 +216,14 @@ static Type GetS(const int num_cell, const Vector3& direction, const grid_t& gri
 
 		S += Gamma(grid_direction.directions[num_direction].dir, direction) * I * grid_direction.directions[num_direction].area;
 	}
+#ifdef DEBUG
+	if (S < -0.0000001)
+	{
+		printf("S=%lf, num_cell=%d\n",S, num_cell/base);
+		D_LD;
+	}
+#endif
+
 	return S / grid_direction.full_area;     // было *4PI, но из-за нормировки Gamma разделили на 4PI
 }
 
@@ -235,7 +243,7 @@ static int CalculateIntCPU(const int num_cells, const grid_directions_t& grid_di
 		for (int num_direction = 0; num_direction < size_loc; ++num_direction) {
 			direction = grid_direction.directions[disp_loc + num_direction].dir;
 			for (int cell = 0; cell < num_cells; cell++)
-			{
+			{				
 				grid.scattering[num_direction * num_cells + cell] = GetS(base * cell, direction, grid, grid_direction);
 			}
 		}
@@ -369,9 +377,9 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 
 	case 10: // для конуса (считаем, что излучающая часть не изменяется в зависимости от газораспределения)
 	{
-		Type Q = 0.01;
+		Type Q = 0; // 0.01;
 		Type alpha = 0.5;
-		Type betta = 150; ////0.5;
+		Type betta = 100;
 		Type S = int_scattering;
 
 
@@ -975,8 +983,13 @@ flags_send_to_gpu_2_section, requests_rcv_2_section, status_rcv_2_section, reque
 		if (solve_mode.max_number_of_iter > 1)
 		{
 #ifdef USE_CUDA
+#if 1 // очень плохой патч!!!!. Второй поток будет зависать, на копирование всего массива.  но иначе, копия не проходит вообще
+			CalculateIntScatteringAsyncMPIStream(grid_direction, grid, 0, size_1_section, eCuda_scattering_1);
+			CalculateIntScatteringAsyncMPIStream(grid_direction, grid, 0, local_size, eCuda_scattering_2);
+#else
 			CalculateIntScatteringAsyncMPIStream(grid_direction, grid, 0, size_1_section, eCuda_scattering_1);
 			CalculateIntScatteringAsyncMPIStream(grid_direction, grid, size_1_section, local_size, eCuda_scattering_2);						
+#endif		
 			//CalculateIntScatteringAsyncMPI(grid_direction, grid, local_size);
 #else
 
@@ -1023,6 +1036,27 @@ flags_send_to_gpu_2_section, requests_rcv_2_section, status_rcv_2_section, reque
 	}
 #else
 	CudaSyncStream(eCuda_params);
+#endif
+
+#if 0 //def DEBUG
+	std::vector<Type> int_scat(count_cells, 0);
+	std::vector<Type> scat(count_cells*count_directions, 0);
+	std::vector<Type> scat_last(count_cells, -1);
+
+	for (int i = 0; i < count_cells; i++)
+	{
+		for (int j = 0; j < count_directions; j++)
+		{
+			int_scat[i] += grid.scattering[j * count_cells + i];
+			scat[j * count_cells + i] += grid.scattering[j * count_cells + i];
+		}
+		scat_last[i] = grid.scattering[(count_directions - 1) * count_cells + i];
+	}
+	WriteSimpleFileBin(BASE_ADRESS + "scatter_int.bin", int_scat);
+	WriteSimpleFileTxt(BASE_ADRESS + "scatter_all.txt", scat);
+	WriteSimpleFileTxt(BASE_ADRESS + "scatter_last.txt", scat_last);
+
+	WRITE_FILE((BASE_ADRESS + "scatter.bin").c_str(), grid.scattering, count_cells);
 #endif
 
 	return 0;

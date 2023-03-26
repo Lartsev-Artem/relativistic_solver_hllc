@@ -268,7 +268,7 @@ static int WriteDataToGrid(file_name name_file_grid, file_name name_file_data, f
 
 	vtkSmartPointer<vtkDoubleArray> DataArray = vtkSmartPointer<vtkDoubleArray>::New();
 
-	std::vector<int> vector_data;
+	std::vector<Type> vector_data;
 
 	std::string formats = name_file_data.substr(name_file_data.find(".") + 1, 3);
 	if (formats == "txt")
@@ -304,41 +304,28 @@ static int WriteDataToGrid(file_name name_file_grid, file_name name_file_data, f
 
 int SetScalarDataVtkFromFile(int argc, char* argv[])
 {
-	std::string file_grid = "";
-	std::string file_data = "";
-	std::string file_out = "";
-	std::string name_data = "data";
-
 	if (argc < 4)
 	{
-#ifdef RELEASE_VER
 		printf("Error input data!\n");
 		printf("Input Format: path\\file.vtk,  path\\data.bin,  path\\outfile.vtk\n");
 		printf("Additional parameters: name_field_data");
 		printf("Data format: size a b c ... \n");
 		return 1;
-#else
-		file_grid = "D:\\Desktop\\FilesCourse\\Grids\\step.vtk";
-		file_data = "D:\\Desktop\\FilesCourse\\Step\\data.bin";
-		file_out = "D:\\Desktop\\FilesCourse\\Step\\out.vtk";
-#endif
 	}
-	else
+
+	std::string file_grid = argv[1];
+	std::string file_data = argv[2];
+	std::string file_out = argv[3];
+	std::string name_data = "data";
+	
+	if (argc > 4)
 	{
-		file_grid = argv[1];
-		file_data = argv[2];
-		file_out = argv[3];
-
-		if (argc > 4)
-		{
-			name_data = argv[4];
-		}
+		name_data = argv[4];
 	}
-
+	
 	if (WriteDataToGrid(file_grid, file_data, file_out, name_data))
 	{
-		printf("Error write data to vtk grid\n");
-		return 1;
+		RETURN_ERR("Error write data to vtk grid\n");		
 	}
 
 	return 0;

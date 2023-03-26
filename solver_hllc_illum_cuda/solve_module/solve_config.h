@@ -13,7 +13,7 @@
 
 #if NUMBER_OF_MEASUREMENTS == 3 // излучение доступно только для 3d
 
-//#define ILLUM
+#define ILLUM
 
 #ifdef ILLUM
 //#define SORT_ILLUM  //сорьтровать ли суммирование интегралов по возростанию
@@ -42,6 +42,11 @@
 #ifndef CLASTER
 //#define RUN_TEST
 #endif
+
+#if defined USE_CUDA && !defined ILLUM
+#error "Bad config. CUDA only with ILLUM!!!"
+#endif
+
 
 #define ON_FULL_ILLUM_ARRAYS
 

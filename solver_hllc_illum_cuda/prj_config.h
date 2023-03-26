@@ -48,18 +48,17 @@
 
 #endif //UTILS
 
-
 // Геометрия
 
 //#define Cube
 
 //#define Step
 
-#define Cone
+//#define Cone
 
-#define Cone_JET
+//#define Cone_JET
 
-//#define Sphere
+#define Sphere
 
 //#define Cylinder
 

@@ -155,7 +155,6 @@ int rebuild_solve(int argc, char* argv[], file_name name_file_settings)
 	}
 	return 0;
 }
-
 int rebuild_solve(int argc, char* argv[])
 {
 	if (argc != 4)
@@ -189,6 +188,61 @@ int rebuild_solve(int argc, char* argv[])
 	return 0;
 }
 
+static void recalc_vtk_data(const std::string& name_data, const double mult_coef, vtkSmartPointer<vtkUnstructuredGrid>& ugrid)
+{
+	vtkDataArray* data = ugrid->GetCellData()->GetScalars(name_data.c_str());
+
+	const int size = data->GetNumberOfComponents();
+	const int n = data->GetSize();
+
+	for (int i = 0; i < n / size; i++)
+	{
+		double* val = data->GetTuple(i);
+
+		for (int j = 0; j < size; j++)
+		{
+			val[j] *= mult_coef;
+		}
+		data->SetTuple(i, val);
+	}
+}
+
+int recalc_grid_data(int argc, char* argv[])
+{
+	if (argc < 5 || argc % 2 == 0)
+	{
+		printf("Error input data!\n");
+		printf("Input:\n");
+		printf("name_base_file_vtk (e.g. path\\Solve )\n");
+		printf("number_of_files\n");
+		printf("name_data_i\n");
+		printf("mult_coef_i (new_data = mult_coef*data)\n");
+		return 1;
+	}
+
+	const std::string name_base_file_vtk = argv[1];
+	const int num_files = std::stoi(argv[2]);
+
+	for (int id_file = 0; id_file < num_files; id_file++)
+	{
+		const std::string name_file_vtk = name_base_file_vtk + std::to_string(id_file) + ".vtk";
+
+		vtkSmartPointer<vtkUnstructuredGrid> ugrid = vtkSmartPointer<vtkUnstructuredGrid>::New();
+
+		if (ReadFileVtk(name_file_vtk, ugrid)) RETURN_ERR("Error reading the file vtk\n");
+
+		for (int n_data = 3; n_data < argc; n_data += 2)
+		{
+			recalc_vtk_data(argv[n_data], std::stod(argv[n_data + 1]), ugrid);
+		}
+
+		WriteVtkGrid(name_base_file_vtk + std::to_string(id_file) + "_new.vtk", ugrid, true);
+		
+		printf("file_%d's rewrited\n", id_file);
+	}
+
+	return 0;
+}
 
 int rewrite_vtk_array(int argc, char* argv[], file_name name_file_settings)
 {
@@ -508,8 +562,8 @@ int MakeHllcInitFromGrid(int argc, char* argv[], file_name name_file_settings)
 	
 	for (size_t i = 0; i < n; i++)
 	{
-		cells[i].d = density->GetTuple1(i);// / DENSITY;
-		cells[i].p = pressure->GetTuple1(i);// / PRESSURE;
+		cells[i].d = density->GetTuple1(i) / DENSITY;
+		cells[i].p = pressure->GetTuple1(i) / PRESSURE;
 		cells[i].v = Vector3(velocity->GetTuple3(i));
 	}
 	

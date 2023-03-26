@@ -12,7 +12,7 @@ int RunUtilsModule(int argc, char* argv[], const std::string& settings)
 	//ReduceNameSolveFiles(argc, argv);
 	//CopySolveFiles(argc, argv);
 
-// CompareFiles(argc, argv);
+//  CompareFiles(argc, argv);
 
 //	ReNumberingGrid(argc, argv);
 	
@@ -24,10 +24,11 @@ int RunUtilsModule(int argc, char* argv[], const std::string& settings)
 
 #ifdef USE_VTK
 
- // MakeHllcInitFromGrid(argc, argv, settings);
+//	recalc_grid_data(argc, argv);
+//  MakeHllcInitFromGrid(argc, argv, settings);
 
 //	rebuild_solve(argc, argv, settings);
-	rebuild_solve(argc, argv);
+//	rebuild_solve(argc, argv);
 
 //	BuildHLLC_1dTime(argc, argv);
 
@@ -35,7 +36,7 @@ int RunUtilsModule(int argc, char* argv[], const std::string& settings)
 
 //	rewrite_vtk_array(argc, argv, settings);
 
-//	SetScalarDataVtkFromFile(argc, argv);
+	SetScalarDataVtkFromFile(argc, argv);
 
 #if NUMBER_OF_MEASUREMENTS == 2
 	// Trace2D(argc, argv);
