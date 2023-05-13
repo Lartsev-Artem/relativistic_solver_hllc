@@ -461,10 +461,10 @@ int BuildHLLC_1dTime(int argc, char* argv[])
 	return 0;
 }
 
-int MakeHllcInitFile(file_name BASE_ADRESS)
+int MakeHllcInitFile(file_name base_adress)
 {
 	std::vector<Vector3> centers;
-	if (ReadSimpleFileBin(BASE_ADRESS + "centers.bin", centers)) RETURN_ERR("Default rhllc value not set\n");
+	if (ReadSimpleFileBin(glb_files.base_adress + F_CENTERS, centers)) RETURN_ERR("Default rhllc value not set\n");
 
 	std::vector<elem_t> cells(centers.size());
 	int i = 0;
@@ -498,7 +498,7 @@ int MakeHllcInitFile(file_name BASE_ADRESS)
 		i++;
 	} //for
 
-	WRITE_FILE_VECTOR((BASE_ADRESS + "hllc_init_value_illum_jet.bin").c_str(), cells, phys_val);
+	WRITE_FILE_VECTOR((glb_files.base_adress + "hllc_init_value_illum_jet.bin").c_str(), cells, phys_val);
 
 	return 0;
 }
@@ -528,27 +528,19 @@ int GetPhysScale()
 
 
 //! Функция создает начальное приближение для hllc из предыдущего решения (позволяет начать расчёт не с нуля)
-int MakeHllcInitFromGrid(int argc, char* argv[], file_name name_file_settings)
+int MakeHllcInitFromGrid(int argc, char* argv[])
 {
-	int a;
-	std::string base_adress;
-	std::string name_file_vtk;
-	std::string foo;
-	std::string file_init;
-	switch (argc)
+	if (argc < 3)
 	{
-	case 2:
-		if (ReadStartSettings(argv[1], a, name_file_vtk, foo, foo, foo, base_adress, foo, a, file_init))
-		{
-			RETURN_ERR("Error reading  settings\n");
-		}
-	default:
-		if (ReadStartSettings(name_file_settings, a, name_file_vtk, foo, foo, foo, base_adress, foo, a, file_init))
-		{
-			RETURN_ERR("Error reading default settings\n");
-		}
-		break;
+		printf("Error input data!\n");
+		printf("Input:\n");
+		printf("name_file_vtk \n");
+		printf("file_init\n");	
+		return 1;
 	}
+	std::string name_file_vtk = argv[1];
+	std::string file_init = argv[2];
+
 
 	vtkDataArray* pressure;
 	vtkDataArray* velocity;
@@ -562,8 +554,8 @@ int MakeHllcInitFromGrid(int argc, char* argv[], file_name name_file_settings)
 	
 	for (size_t i = 0; i < n; i++)
 	{
-		cells[i].d = density->GetTuple1(i) / DENSITY;
-		cells[i].p = pressure->GetTuple1(i) / PRESSURE;
+		cells[i].d = density->GetTuple1(i);// / DENSITY;
+		cells[i].p = pressure->GetTuple1(i);// / PRESSURE;
 		cells[i].v = Vector3(velocity->GetTuple3(i));
 	}
 	

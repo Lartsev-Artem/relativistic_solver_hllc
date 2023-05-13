@@ -107,14 +107,20 @@ struct cell_local // дл€ каждой €чейки и каждого направлени€
 	friend std::ostream& operator<< (std::ostream& out, const cell_local& point);
 };
 
+enum class_vtk_t
+{
+	e_class_grid_default = 0,
+	e_class_grid_static_illum = 10,
+};
+
 #define OPEN_FSTREAM(file, namefile) \
 file.open(namefile); \
 if (!file.is_open()) RETURN_ERRS("Error : file %s is not open\n", namefile);
 
 #ifdef CLASTER
-#define Files_log "File_Logs.txt"
+#define Files_log F_LOG
 #else
-#define Files_log std::string(BASE_ADRESS + "File_Logs.txt").c_str()
+#define Files_log std::string(glb_files.base_adress + F_LOG).c_str()
 #endif
 
 #define WRITE_LOG_ERR(str){  \
@@ -130,7 +136,7 @@ ofile.close(); }
 std::ofstream out(Files_log, std::ios::app); \
 out << "DIE: " << __FILE__ << " " << __FUNCTION__ << ", " <<__LINE__<<"c.\n"; \
 out.close(); \
-/*MPI_END*/ \
+/*MPI_END  MPI_Abort(MPI_COMM_WORLD, MPI_ERR_COMM);*/ \
 exit(1); \
 }
 
@@ -244,5 +250,66 @@ fclose(f); \
 #ifdef  USE_MPI
 extern MPI_Datatype MPI_flux_t;
 extern MPI_Datatype MPI_hllc_value_t;
+extern MPI_Datatype MPI_flux_all_t;
+extern MPI_Datatype MPI_flux_elem_t;
 #endif
+
+#define FOR_EACH_1(what,x)		what(x);
+#define FOR_EACH_2(what,x, ...) what(x); FOR_EACH_1(what,__VA_ARGS__);
+#define FOR_EACH_3(what,x, ...) what(x); FOR_EACH_2(what,__VA_ARGS__);
+#define FOR_EACH_4(what,x, ...) what(x); FOR_EACH_3(what,__VA_ARGS__);
+#define FOR_EACH_5(what,x, ...) what(x); FOR_EACH_4(what,__VA_ARGS__);
+#define FOR_EACH_6(what,x, ...) what(x); FOR_EACH_4(what,__VA_ARGS__);
+#define FOR_EACH_7(what,x, ...) what(x); FOR_EACH_4(what,__VA_ARGS__);
+#define FOR_EACH_8(what,x, ...) what(x); FOR_EACH_4(what,__VA_ARGS__);
+#define FOR_EACH_ID(_1,_2,_3,_4,_5,_6,_7,_8,NAME,...) NAME
+
+//#define CREATE_TYPE(type, ...) type __VA_ARGS__
+//
+//#define CREATE_STRUCT_(name, ...) struct name{ FOR_EACH_ID(__VA_ARGS__,\
+//FOR_EACH_8, FOR_EACH_7, FOR_EACH_6, FOR_EACH_5, FOR_EACH_4, FOR_EACH_3, FOR_EACH_2, FOR_EACH_1)\
+//(CREATE_TYPE, __VA_ARGS__) }
+//#define CREATE_STRUCT(name, type, ...) CREATE_STRUCT_(name, CREATE_TYPE(type, __VA_ARGS__))
+
+#define CREATE_STRUCT(name, type, ...) struct name {type __VA_ARGS__ ;}
+
+#define PRINT_STRUCT(st, type) \
+type* str = (type*)&st; \
+while (str < (type*)&st + sizeof(st) / sizeof(type)) \
+{\
+	std::cout << *str++ << '\n'; \
+}
+
+#define FILL_STRUCT(st, type, val) {\
+type* str = (type*)&st; \
+while (str < (type*)&st + sizeof(st) / sizeof(type)) \
+{\
+	*str++ = val; \
+}}
+
+#if 0 // под intel22 собираетс€
+#define STRINGIZE(arg) #arg
+#define CONCATENATE(arg1, arg2)  arg1##arg2
+
+#define FOR_EACH_1(what, x, ...) what(x);
+#define FOR_EACH_2(what, x, ...) what(x); FOR_EACH_1(what,  __VA_ARGS__);
+#define FOR_EACH_3(what, x, ...) what(x); FOR_EACH_2(what, __VA_ARGS__);
+#define FOR_EACH_4(what, x, ...) what(x); FOR_EACH_3(what,  __VA_ARGS__);
+#define FOR_EACH_5(what, x, ...) what(x); FOR_EACH_4(what,  __VA_ARGS__);
+#define FOR_EACH_6(what, x, ...) what(x); FOR_EACH_5(what,  __VA_ARGS__); 
+#define FOR_EACH_7(what, x, ...) what(x); FOR_EACH_6(what,  __VA_ARGS__);
+#define FOR_EACH_8(what, x, ...) what(x); FOR_EACH_7(what,  __VA_ARGS__);
+
+#define FOR_EACH_ARG_N(_1, _2, _3, _4, _5, _6, _7, _8, N, ...) N 
+#define FOR_EACH_RSEQ_N() 8, 7, 6, 5, 4, 3, 2, 1, 0
+#define FOR_EACH_NARG_(...) FOR_EACH_ARG_N(__VA_ARGS__) 
+#define FOR_EACH_NARG(...) FOR_EACH_NARG_(__VA_ARGS__, FOR_EACH_RSEQ_N())
+
+
+#define FOR_EACH_(N, what, x, ...) CONCATENATE(FOR_EACH_, N)(what, x, __VA_ARGS__)
+#define FOR_EACH(what, x, ...) FOR_EACH_(FOR_EACH_NARG(x, __VA_ARGS__), what, x, __VA_ARGS__)
+
+//#define CREATE_STRUCT(name, type, ...) struct name { FOR_EACH(type, __VA_ARGS__) }
+#endif
+
 #endif //GLOBAL_DEF

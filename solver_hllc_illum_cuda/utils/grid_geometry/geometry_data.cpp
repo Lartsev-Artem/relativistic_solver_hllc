@@ -486,7 +486,7 @@ int SetTypeOfBound(const std::vector<Vector3>& centers, const std::vector<Normal
 				if ((normals[num_cell].n[num_face] - Vector3(-1, 0, 0)).norm() < 1e-7)
 				{
 #ifdef Cone_JET
-					if(Vector2(P[1], P[2]).norm() < 0.03)
+					if(Vector2(P[1], P[2]).norm() < 0.01)
 						all_pairs_face[id] = eBound_OutSource; // »—“ќ„Ќ»  джет	
 					else
 						all_pairs_face[id] = eBound_InnerSource; // свободна€ поверхность
@@ -548,6 +548,105 @@ int SetTypeOfBound(const std::vector<Vector3>& centers, const std::vector<Normal
 	} //cell
 
 	return 0;
+}
+
+#if NUMBER_OF_MEASUREMENTS == 3 
+
+#include "../../solve_module/solve_global_struct.h"
+static void ReBuildNeighStruct(
+	std::vector<int>& neighbours_id_faces,
+	std::vector<Normals>& normals,
+	std::vector<Type>& squares_faces,
+	std::vector<Type>& volume,
+	std::vector<Vector3>& centers,
+	std::vector<face_t>& faces, std::vector<elem_t>& cells)
+{
+	const int N = centers.size();
+	cells.resize(N);
+
+	int cc = 0;
+	for (int i = 0; i < N * base; i++)
+	{
+		int idx = neighbours_id_faces[i];
+
+		if (idx != -10)
+		{
+			face_t f;
+			f.geo.id_l = i / base; //€чейка
+
+			f.geo.n = normals[i / base].n[i % base];
+			f.geo.S = squares_faces[i];
+
+			cells[i / base].geo.sign_n[i % base] = true;
+			cells[i / base].geo.id_faces[i % base] = cc;
+
+			neighbours_id_faces[i] = -10;
+			if (idx >= 0)
+			{
+				f.geo.id_r = idx / base; //сосед
+
+				cells[idx / base].geo.sign_n[idx % base] = false;
+				cells[idx / base].geo.id_faces[idx % base] = cc;
+
+				neighbours_id_faces[idx] = -10;
+			}
+			else
+			{
+				f.geo.id_r = idx; // код границы
+			}
+
+			faces.push_back(f); // как потом искать с €чейками?
+			cc++;
+		}
+	}
+
+	neighbours_id_faces.clear();
+	normals.clear();
+	squares_faces.clear();
+
+	for (int i = 0; i < N; i++)
+	{
+		cells[i].geo.center = centers[i];
+		cells[i].geo.V = volume[i];
+
+	}
+
+	volume.clear();
+	centers.clear();
+
+	return;
+}
+#endif //3d
+
+#include "../../file_module/reader_bin.h"
+#include "../../file_module/writer_bin.h"
+int ReWriteGeoFiles(file_name name_file_geometry_faces, file_name name_file_geometry_cells)
+{
+	WRITE_LOG("Error reading grid, try read parts geo\n");
+
+	grid_t grid;
+	const std::string name_file_id_neighbors = glb_files.base_adress + F_NEIB;
+	const std::string name_file_normals = glb_files.base_adress + F_NORMALS;
+	const std::string name_file_centers = glb_files.base_adress + F_CENTERS;
+	const std::string name_file_squares = glb_files.base_adress + F_SQUARES;
+	const std::string name_file_volume = glb_files.base_adress + F_VOLUME;
+
+	std::vector<int> neighbours_id_faces;
+	std::vector<Normals> normals;
+	std::vector<Type> squares_faces;
+	std::vector<Type> volume;
+	std::vector<Vector3> centers;
+
+	if (ReadSimpleFileBin(name_file_id_neighbors, neighbours_id_faces)) RETURN_ERR("Error reading file neighbours\n");
+	if (ReadNormalFile(name_file_normals, normals)) RETURN_ERR("Error reading file normals\n");
+	if (ReadSimpleFileBin(name_file_squares, squares_faces)) RETURN_ERR("Error reading file squares_faces\n");
+	if (ReadSimpleFileBin(name_file_volume, volume)) RETURN_ERR("Error reading file volume\n");
+	if (ReadSimpleFileBin(name_file_centers, centers)) RETURN_ERR("Error reading file centers\n");
+
+	ReBuildNeighStruct(neighbours_id_faces, normals, squares_faces, volume, centers, grid.faces, grid.cells);
+	grid.size = grid.cells.size();
+
+	return WriteGeometryGrid(name_file_geometry_cells, name_file_geometry_faces, grid);
 }
 
 

@@ -74,11 +74,11 @@ int ReWriteGeoFiles(file_name name_file_geometry_faces, file_name name_file_geom
 {
 	grid_t grid;
 	WRITE_LOG("Error reading grid, try read parts geo\n");
-	const std::string name_file_id_neighbors = BASE_ADRESS + "pairs.bin";
-	const std::string name_file_normals = BASE_ADRESS + "normals.bin";
-	const std::string name_file_centers = BASE_ADRESS + "centers.bin";
-	const std::string name_file_squares = BASE_ADRESS + "squares.bin";
-	const std::string name_file_volume = BASE_ADRESS + "volume.bin";
+	const std::string name_file_id_neighbors = glb_files.base_adress + "pairs.bin";
+	const std::string name_file_normals = glb_files.base_adress + "normals.bin";
+	const std::string name_file_centers = glb_files.base_adress + "centers.bin";
+	const std::string name_file_squares = glb_files.base_adress + "squares.bin";
+	const std::string name_file_volume = glb_files.base_adress + "volume.bin";
 
 	std::vector<int> neighbours_id_faces;
 	std::vector<Normals> normals;
@@ -151,11 +151,11 @@ int GetTimeStep(hllc_value_t& hllc_cfg, const grid_t& grid)
 
 int StartLowDimensionTask(file_name main_dir)
 {
-	const std::string name_file_id_neighbors = BASE_ADRESS + "pairs.bin";
-	const std::string name_file_normals = BASE_ADRESS + "normals.bin";
-	const std::string name_file_centers = BASE_ADRESS + "centers.bin";
-	const std::string name_file_squares = BASE_ADRESS + "squares.bin";
-	const std::string name_file_volume = BASE_ADRESS + "volume.bin";
+	const std::string name_file_id_neighbors = glb_files.base_adress + "pairs.bin";
+	const std::string name_file_normals = glb_files.base_adress + "normals.bin";
+	const std::string name_file_centers = glb_files.base_adress + "centers.bin";
+	const std::string name_file_squares = glb_files.base_adress + "squares.bin";
+	const std::string name_file_volume = glb_files.base_adress + "volume.bin";
 
 #if NUMBER_OF_MEASUREMENTS == 3
 	return 0;
@@ -204,11 +204,11 @@ int StartLowDimensionTask(file_name main_dir)
 }
 
 #ifdef RUN_TEST
-int TestDivStream(file_name BASE_ADRESS)
+int TestDivStream(file_name glb_files.base_adress)
 {
-	const std::string name_file_geometry_faces = BASE_ADRESS + "geo_faces.bin";
-	const std::string name_file_geometry_cells = BASE_ADRESS + "geo_cells.bin";
-	const std::string name_file_centers_faces = BASE_ADRESS + "center_face.bin";
+	const std::string name_file_geometry_faces = glb_files.base_adress + "geo_faces.bin";
+	const std::string name_file_geometry_cells = glb_files.base_adress + "geo_cells.bin";
+	const std::string name_file_centers_faces = glb_files.base_adress + "center_face.bin";
 
 	grid_t grid;
 	if (ReadGeometryGrid(name_file_geometry_cells, name_file_geometry_faces, grid))
@@ -225,7 +225,7 @@ int TestDivStream(file_name BASE_ADRESS)
 	std::vector<Vector3> center_cells;
 	ReadSimpleFileBin(name_file_centers_faces, center_cells);
 	TestDivStream(center_cells, grid);
-	WriteFileSolution(BASE_ADRESS+"Solve\\Solve0", std::vector<Type>(), grid.cells); //печать начальной сетки
+	WriteFileSolution(glb_files.base_adress+"Solve\\Solve0", std::vector<Type>(), grid.cells); //печать начальной сетки
 
 	return 0;
 }

@@ -1,116 +1,61 @@
+#if defined SOLVE
 #include "../solve_config.h"
 #if defined RHLLC && NUMBER_OF_MEASUREMENTS == 3 && defined RHLLC_MPI
 #include "../solve_global_struct.h"
-#include "../../file_module/reader_bin.h"
+#include "../../global_value.h"
 #include "../../utils/grid_geometry/geometry_solve.h"
+#include "../solve_utils.h"
+#include "rhllc_utils.h"
 
-#define MPI_RETURN(a) EXIT(a)
+extern std::vector<flux_t> phys_local;
+extern std::vector<int> send_hllc;
+extern std::vector<int> disp_hllc;
 
-class VectorVal
+
+static int rhllc_get_conv_value_ost1098(const flux_t& W, flux_t& U)
 {
-private:
-	Type _val[base + 1];
-public:
-	VectorVal() {};
-	VectorVal(const Type val) { for (int i = 0; i < base + 1; i++) _val[i] = val; }
-	VectorVal(const Type a, const Type b, const Type c, const Type d, const Type e)
-	{
-		_val[0] = a; _val[1] = b; _val[2] = c; _val[3] = d; _val[4] = e;
-	}
-	VectorVal(const Type* data) { for (int i = 0; i < base + 1; i++) _val[i] = data[i]; }
-	VectorVal(const VectorVal& v) { for (int i = 0; i < base + 1; i++) _val[i] = v[i]; };
+	const Type d = W.d;
+	const Type Gamma = 1. / sqrt(1 - W.v.dot(W.v));
+	const Type h = 1 + gamma_g * W.p / d;
+	const Type dhGG = d * h * Gamma * Gamma;
 
-	VectorVal& operator=(const VectorVal& x)
-	{
-		for (int i = 0; i < base + 1; i++) _val[i] = x._val[i];
-		return *this;
-	}
-	Type operator [] (const int i) const { return _val[i]; }
-	Type operator () (const int i) const { return _val[i]; }
-	Type& operator [] (const int i) { return *(_val + i); }
-	Type& operator () (const int i) { return *(_val + i); }
+	U.d = Gamma * W.d;
+	U.v = dhGG * W.v;
+	U.p = dhGG - W.p;
 
-	VectorVal operator+(const VectorVal& val) const {
-		return VectorVal(
-			_val[0] + val[0],
-			_val[1] + val[1],
-			_val[2] + val[2],
-			_val[3] + val[3],
-			_val[4] + val[4]);
-	}
+	return 0;
+}
 
-	VectorVal operator-(const VectorVal& val) const {
-		return VectorVal(
-			_val[0] - val[0],
-			_val[1] - val[1],
-			_val[2] - val[2],
-			_val[3] - val[3],
-			_val[4] - val[4]);
-	}
-
-	VectorVal operator* (const Type x) const
-	{
-		return VectorVal(
-			_val[0] * x,
-			_val[1] * x,
-			_val[2] * x,
-			_val[3] * x,
-			_val[4] * x);
-	}
-
-	VectorVal operator/ (const Type x) const
-	{
-		return VectorVal(
-			_val[0] / x,
-			_val[1] / x,
-			_val[2] / x,
-			_val[3] / x,
-			_val[4] / x);
-	}
-
-	void operator+= (const Type x) { for (size_t i = 0; i < base + 1; i++) _val[i] += x; }
-	
-	void operator+= (const VectorVal& val) { for (size_t i = 0; i < base + 1; i++) _val[i] += val[i];	}
-
-	inline int size() { return base + 1; }
-	inline Type* data() { return _val; }
-	inline void zero() { for (size_t i = 0; i < base + 1; i++) _val[i] = 0; }
-
-	friend VectorVal operator*(const Type x, const VectorVal& val) 
-	{
-		return VectorVal(val[0] * x,
-			val[1] * x,
-			val[2] * x,
-			val[3] * x,
-			val[4] * x);
-	}
-
-	/// Да. Это жестко
-	friend VectorVal operator*(const Eigen::MatrixXd& T, const VectorVal& val)
-	{
-		VectorX loc(5); loc << val[0], val[1], val[2], val[3], val[4];
-		loc = T * loc;
-		return VectorVal(loc[0],
-			loc[1],
-			loc[2],
-			loc[3],
-			loc[4]);
-	}
-};
-
-void RHLLC_Flux(const VectorVal& W_R, const VectorVal& U_R, const VectorVal& W_L, const VectorVal& U_L, VectorVal& F) {
-
+static int flux_t_calc(const flux_t& conv_val_l, const flux_t& conv_val_r,
+	const flux_t& phys_val_l, const flux_t& phys_val_r,
+	face_t& f)
+{
 	/*
-	An HLLC Riemann solver for relativistic flows – I. Hydrodynamics
-	A. Mignone and G. Bodo
-	INAF Osservatorio Astronomico di Torino, 10025 Pino Torinese, Italy
-	Accepted 2005 August 22. Received 2005 August 16; in original form 2005 May 16
-	Mon. Not. R. Astron. Soc. 364, 126–136 (2005)
+An HLLC Riemann solver for relativistic flows – I. Hydrodynamics
+A. Mignone and G. Bodo
+INAF Osservatorio Astronomico di Torino, 10025 Pino Torinese, Italy
+Accepted 2005 August 22. Received 2005 August 16; in original form 2005 May 16
+Mon. Not. R. Astron. Soc. 364, 126–136 (2005)
 
-	https://github.com/PrincetonUniversity/Athena-Cversion/blob/master/src/rsolvers/hllc_sr.c
+https://github.com/PrincetonUniversity/Athena-Cversion/blob/master/src/rsolvers/hllc_sr.c
 
-	\note: комбинация кода из mignone 2005 и 2006. в части hllc
-	*/
+\note: комбинация кода из mignone 2005 и 2006. в части hllc
+*/
+
+	Matrix3 T;
+	MakeRotationMatrix(f.geo.n, T);
+
+	flux_t U_L = conv_val_l;
+	U_L.v = T * conv_val_l.v;
+
+	flux_t U_R = conv_val_r;
+	U_R.v = T * conv_val_r.v;
+
+	flux_t W_L = phys_val_l;
+	W_L.v = T * phys_val_l.v;
+
+	flux_t W_R = phys_val_r;
+	W_R.v = T * phys_val_r.v;
 
 	//==================== Кэшируем физические переменные слева и справа============================//
 	// нормальная сокорость
@@ -127,6 +72,7 @@ void RHLLC_Flux(const VectorVal& W_R, const VectorVal& U_R, const VectorVal& W_L
 	const Type VV_R = Vel_R.dot(Vel_R);
 
 	//========================================================================================//
+
 
 	//=========================Вычисляем релятивистикие параметры============================//				
 	const Type g_L = 1. / sqrt(1 - VV_L);	// фактор Лоренца
@@ -150,50 +96,53 @@ void RHLLC_Flux(const VectorVal& W_R, const VectorVal& U_R, const VectorVal& W_L
 	const Type lambda_L = min((Vel_L[0] - sqr_L) / (1 + sigmaS_L), (Vel_R[0] - sqr_R) / (1 + sigmaS_R));
 	const Type lambda_R = max((Vel_L[0] + sqr_L) / (1 + sigmaS_L), (Vel_R[0] + sqr_R) / (1 + sigmaS_R));
 
+	flux_t F;
 	if (lambda_R <= 0) // если верно выполнить всегда
 	{
-		F(0) = U_R[0] * Vel_R[0]; //D*v_x
-		F(1) = U_R[1] * Vel_R[0] + p_R; //mx*vx+p
-		F(2) = U_R[2] * Vel_R[0];
-		F(3) = U_R[3] * Vel_R[0];
-		F(4) = U_R[1];
+		F.d = U_R[0] * Vel_R[0]; //D*v_x
+		F.v(0) = U_R[1] * Vel_R[0] + p_R; //mx*vx+p
+		F.v(1) = U_R[2] * Vel_R[0];
+		F.v(2) = U_R[3] * Vel_R[0];
+		F.p = U_R[1];
 		//continue;			
 	}
 	else if (lambda_L >= 0) // выполнить либо по условию либо для всех границ
 	{
-		F(0) = U_L[0] * Vel_L[0]; //D*v_x
-		F(1) = U_L[1] * Vel_L[0] + p_L; //mx*vx+p
-		F(2) = U_L[2] * Vel_L[0];
-		F(3) = U_L[3] * Vel_L[0];
-		F(4) = U_L[1];
+		F.d = U_L[0] * Vel_L[0]; //D*v_x
+		F.v(0) = U_L[1] * Vel_L[0] + p_L; //mx*vx+p
+		F.v(1) = U_L[2] * Vel_L[0];
+		F.v(2) = U_L[3] * Vel_L[0];
+		F.p = U_L[1];
 		//continue;			
 	}
 	else
 	{
 		//====================Расчёт потоков и приближений hll=========================================//
-		VectorVal F_L(5);
-		VectorVal F_R(5);
-		VectorVal U_hll(5);
-		VectorVal F_hll(5);
+		flux_t F_L;
+		flux_t F_R;
+		flux_t U_hll;
+		flux_t F_hll;
 
-		F_R(0) = U_R[0] * Vel_R[0]; //D*v_x
-		F_R(1) = U_R[1] * Vel_R[0] + p_R; //mx*vx+p
-		F_R(2) = U_R[2] * Vel_R[0];
-		F_R(3) = U_R[3] * Vel_R[0];
-		F_R(4) = U_R[1];
+		F_R.d = U_R[0] * Vel_R[0]; //D*v_x
+		F_R.v(0) = U_R[1] * Vel_R[0] + p_R; //mx*vx+p
+		F_R.v(1) = U_R[2] * Vel_R[0];
+		F_R.v(2) = U_R[3] * Vel_R[0];
+		F_R.p = U_R[1];
 
-		F_L(0) = U_L[0] * Vel_L[0]; //D*v_x
-		F_L(1) = U_L[1] * Vel_L[0] + p_L; //mx*vx+p
-		F_L(2) = U_L[2] * Vel_L[0];
-		F_L(3) = U_L[3] * Vel_L[0];
-		F_L(4) = U_L[1];
+		F_L.d = U_L[0] * Vel_L[0]; //D*v_x
+		F_L.v(0) = U_L[1] * Vel_L[0] + p_L; //mx*vx+p
+		F_L.v(1) = U_L[2] * Vel_L[0];
+		F_L.v(2) = U_L[3] * Vel_L[0];
+		F_L.p = U_L[1];
 
-		//	cout << "F_L\n" << F_L << "\nF_R\n" << F_R << '\n';
-		//	cout << "U_L\n" << U_L << "\nU_R\n" << U_R << '\n';			
-		F_hll = (lambda_R * F_L - lambda_L * F_R + (lambda_R * lambda_L * (U_R - U_L))) / (lambda_R - lambda_L);
-		U_hll = (lambda_R * U_R - lambda_L * U_L + (F_L - F_R)) / (lambda_R - lambda_L);
+		for (int i = 0; i < base + 1; i++)
+		{
+			F_hll[i] = (F_L[i] * lambda_R - F_R[i] * lambda_L + ((U_R[i] - U_L[i]) * lambda_R * lambda_L)) / (lambda_R - lambda_L);
+			U_hll[i] = ((U_R[i] * lambda_R) - (U_L[i] * lambda_L) + (F_L[i] - F_R[i])) / (lambda_R - lambda_L);
+		}
+		/*F_hll = (F_L * lambda_R - F_R * lambda_L + ((U_R - U_L) * lambda_R * lambda_L)) / (lambda_R - lambda_L);
+		U_hll = ((U_R * lambda_R) - (U_L * lambda_L) + (F_L - F_R)) / (lambda_R - lambda_L);*/
 
-		//	cout << "F_hll\n" << F_hll << "\nU_hll\n" << U_hll << '\n';
 #ifdef ONLY_RHLL
 		F = F_hll;
 #endif
@@ -210,385 +159,526 @@ void RHLLC_Flux(const VectorVal& W_R, const VectorVal& U_R, const VectorVal& W_L
 		Type _lambda = c / quad;
 
 #endif		
-
-		if (_lambda >= 0.0)
 		{
-			//============================Поиск промежуточного давления ===================================//
-			const Type _p = -F_hll[4] * _lambda + F_hll[1];
-			//============================================================================================//
+			if (_lambda >= 0.0)
+			{
+				//============================Поиск промежуточного давления ===================================//
+				const Type _p = -F_hll[4] * _lambda + F_hll[1];
+				//============================================================================================//
 
-			//==========================Финальный поток HLLC=============================================//
-			VectorVal _U_L;
-			const Type dif_L = 1.0 / (lambda_L - _lambda);
+				//==========================Финальный поток HLLC=============================================//
+				flux_t _U_L;
+				const Type dif_L = 1.0 / (lambda_L - _lambda);
 
-			_U_L[0] = (U_L[0] * (lambda_L - Vel_L[0])) * dif_L;
-			_U_L[1] = (U_L[1] * (lambda_L - Vel_L[0]) + _p - p_L) * dif_L;
-			_U_L[2] = (U_L[2] * (lambda_L - Vel_L[0])) * dif_L;
-			_U_L[3] = (U_L[3] * (lambda_L - Vel_L[0])) * dif_L;
-			_U_L[4] = (U_L[4] * (lambda_L - Vel_L[0]) + _p * _lambda - p_L * Vel_L[0]) * dif_L;
+				_U_L.d = (U_L[0] * (lambda_L - Vel_L[0])) * dif_L;
+				_U_L.v[0] = (U_L[1] * (lambda_L - Vel_L[0]) + _p - p_L) * dif_L;
+				_U_L.v[1] = (U_L[2] * (lambda_L - Vel_L[0])) * dif_L;
+				_U_L.v[2] = (U_L[3] * (lambda_L - Vel_L[0])) * dif_L;
+				_U_L.p = (U_L[4] * (lambda_L - Vel_L[0]) + _p * _lambda - p_L * Vel_L[0]) * dif_L;
 
-			F = F_L + lambda_L * (_U_L - U_L);
+				F = F_L + (_U_L - U_L) * lambda_L;
 
-			//============================================================================================//
+				//============================================================================================//
+			}
+			else //(_S <= 0)
+			{
+				//============================Поиск промежуточного давления ===================================//
+				const Type _p = -F_hll[4] * _lambda + F_hll[1];
+				//============================================================================================//
+				flux_t _U_R;
+				const Type dif_R = 1.0 / (lambda_R - _lambda);
+
+				_U_R.d = (U_R[0] * (lambda_R - Vel_R[0])) * dif_R;
+				_U_R.v[0] = (U_R[1] * (lambda_R - Vel_R[0]) + _p - p_R) * dif_R;
+				_U_R.v[1] = (U_R[2] * (lambda_R - Vel_R[0])) * dif_R;
+				_U_R.v[2] = (U_R[3] * (lambda_R - Vel_R[0])) * dif_R;
+				_U_R.p = (U_R[4] * (lambda_R - Vel_R[0]) + _p * _lambda - p_R * Vel_R[0]) * dif_R;
+
+				F = F_R + (_U_R - U_R) * lambda_R;
+			}
 		}
-		else //(_S <= 0)
-		{
-			//============================Поиск промежуточного давления ===================================//
-			const Type _p = -F_hll[4] * _lambda + F_hll[1];
-			//============================================================================================//
-			VectorVal _U_R;
-			const Type dif_R = 1.0 / (lambda_R - _lambda);
-
-			_U_R[0] = (U_R[0] * (lambda_R - Vel_R[0])) * dif_R;
-			_U_R[1] = (U_R[1] * (lambda_R - Vel_R[0]) + _p - p_R) * dif_R;
-			_U_R[2] = (U_R[2] * (lambda_R - Vel_R[0])) * dif_R;
-			_U_R[3] = (U_R[3] * (lambda_R - Vel_R[0])) * dif_R;
-			_U_R[4] = (U_R[4] * (lambda_R - Vel_R[0]) + _p * _lambda - p_R * Vel_R[0]) * dif_R;
-
-			F = F_R + lambda_R * (_U_R - U_R);
-		}
-	}
 #endif
-	return;
+	}
+	//WRITE_LOG(" F0= " << F[0] << ' ' << F[1] << ' ' << F[2] << ' ' << F[3] << ' ' << F[4] << '\n');
+	f.f = F;
+	f.f.v = (T.transpose()) * F.v;
+	//WRITE_LOG(" F1= " << f.f[0] << ' ' << f.f[1] << ' ' << f.f[2] << ' ' << f.f[3] << ' ' << f.f[4] << '\n');
+	f.f = f.f * f.geo.S;
+
+	return 0;
 }
 
 
-inline int GetLocalId(const int neighb_glob, const int shift_node)
+static int rhllc_get_phys_value_ost1098(const flux_t& U, flux_t& W)
 {
-	return neighb_glob >= 0 ? (((neighb_glob / base) - shift_node) * base + neighb_glob % base) : neighb_glob;
+	int call_back_flag = 0;
+	Type Gamma0 = 1. / sqrt(1 - (W.v.dot(W.v)));
+	Type p = W.p;
 
-	//const int neigh = neighbours_id_faces_local[base * i + k];	
-	//if (neighb_glob >= 0)
-	//{
-	//	/*const int neigh_cell = neighb_glob / base;
-	//	const int new_idx_cell = neigh_cell - shift_node;
-	//	return new_idx_cell * base + neighb_glob % base;*/		
-	//	return ((neighb_glob / base) - shift_node) * base + neighb_glob % base;
-	//}
-	//else
-	//{
-	//	return neighb_glob;
-	//}
+	const Type h = 1 + gamma_g * p / W.d;
+
+	Type W0 = W.d * h * Gamma0 * Gamma0; //U[0] * Gamma0 * h;
+
+	Vector3 m = U.v;
+	Type mm = m.dot(m);
+
+
+	Vector3 v = W.v;
+
+	Type D = U.d;
+	Type E = U.p;
+
+	int  cc = 0;
+
+	Type err = 1;
+	do
+	{
+		err = W0;
+
+		//W.d * h * Gamma0 * Gamma0 - p - E;
+		Type fW = W0 - p - E;
+
+		Type dGdW = -(Gamma0 * Gamma0 * Gamma0) * mm / (2 * W0 * W0 * W0);
+		Type dFdW = 1 - ((Gamma0 * (1 + D * dGdW) - 2 * W0 * dGdW) / (Gamma0 * Gamma0 * Gamma0 * gamma_g));
+		W0 -= (fW / dFdW);
+
+		Gamma0 = 1. / sqrt(1 - mm / (W0 * W0));
+
+		p = (W0 - D * Gamma0) / (Gamma0 * Gamma0 * gamma_g);
+
+		v = m / W0;
+
+		err -= W0;
+		cc++;
+
+		if (p < 0 || U.d < 0 || std::isnan(p) || std::isnan(U.d))
+		{
+			//	EXIT(1);
+			//	p = max(sqrt(mm) - E, 1e-20);
+			//	if (std::isnan(p)) p = 1e-20;
+			//	v = m / (E + p);
+			//	if (v.norm() > 0.9999999995)
+			//	{
+			//		v /= 1.0005;
+			//	}
+			//	Gamma0 = 1. / sqrt(1 - v.dot(v));
+			////	printf("try resolve %.16lf\n", v.norm());
+			//	//printf("Error cell (p = %lf, d= %lf)", p, D / Gamma0);
+			//	//D_LD;
+			call_back_flag = 1;
+			break;
+		}
+
+	} while (fabs(err / W0) > 1e-14);
+
+	/*if (p < 0 || U.d < 0 || std::isnan(p) || std::isnan(U.d) || v.norm()>1)
+	{
+		printf("W= %lf,(%lf), %lf\n", W.d, W.v.norm(), W.p);
+		printf("Error cell (p = %lf, d= %lf, %lf)\n", p, D , Gamma0);
+		EXIT(1);
+		call_back_flag = 2;
+	}*/
+
+	W.d = D / Gamma0;
+	if (std::isnan(Gamma0) || std::isinf(Gamma0) || (D / Gamma0) < 1e-10)
+	{
+		W.d = 1e-10;
+		call_back_flag = 1;
+	}
+	W.v = v;
+
+	W.p = p;
+	if (std::isnan(p) || std::isinf(p) || p < 1e-20)
+	{
+		W.p = 1e-20;
+		call_back_flag = 1;
+	}
+
+	return call_back_flag;
 }
 
-int  RHLLC_MPI(std::string& main_dir,
-	std::vector<Vector3>& centerts, std::vector<int>& neighbours_id_faces,
-	std::vector<Normals>& normals, std::vector<Type>& squares_cell, std::vector<Type>& volume)
+
+static std::vector<flux_all_t> left_neig;
+static std::vector<flux_all_t> right_neig;
+std::vector<mpi_conf_t> mpi_conf;
+
+static std::vector<MPI_Request> send_rq_rhllc;
+static std::vector<MPI_Request> recv_rq_rhllc;
+
+int InitMPI_RHllc(const std::vector<elem_t>& cells)
 {
 	int np, myid;
-
-	MPI_Comm_size(MPI_COMM_WORLD, &np);
-	MPI_Comm_rank(MPI_COMM_WORLD, &myid);
-
-#ifdef WRITE_LOG
+	MPI_GET_INF(np, myid);
+	
+	if (myid == 0 || myid == np - 1)
 	{
-		remove((main_dir + "File_with_Logs_solve" + to_string(myid) + ".txt").c_str());
-	}
-#endif
-
-	MPI_Datatype MPI_VectorVal;
-	int len[2] = { base + 1, 1 };
-	MPI_Aint pos[2] = { 0 ,sizeof(VectorVal) };
-	MPI_Datatype typ[2] = { MPI_DOUBLE, MPI_UB };
-	MPI_Type_struct(2, len, pos, typ, &MPI_VectorVal);
-	MPI_Type_commit(&MPI_VectorVal);
-	//
-	printf("Run\n");
-
-	const int size_grid = centerts.size();
-
-	std::vector<VectorVal> W_full_3d;
-	std::vector<VectorVal> U_full_3d;
-	std::vector<VectorVal> U_full_3d_prev;
-
-	std::vector<VectorVal> W_full_3d_local;
-	std::vector<VectorVal> U_full_3d_local;
-	std::vector<VectorVal> U_full_3d_prev_local;
-
-	std::string name_file_bound_cur = main_dir + "bound_cells_mpi" + to_string(myid) + "_cur.bin";
-	std::string name_file_bound_next = main_dir + "bound_cells_mpi" + to_string(myid) + "_next.bin";
-	std::string name_file_cells = main_dir + "cells_node_mpi" + to_string(myid) + ".bin";
-
-	std::vector<int> id_cells_local;		 // регулярные ячейки на узле
-	std::vector<int> id_bound_cur_local;  // граница на этом узле
-	std::vector<int> id_bound_next_local; // граница c другого
-
-	ReadSimpleFileBin(name_file_cells, id_cells_local);
-	ReadSimpleFileBin(name_file_bound_cur, id_bound_cur_local);
-	ReadSimpleFileBin(name_file_bound_next, id_bound_next_local);
-	 int local_size = id_cells_local.size();
-	 int local_size_cur = id_bound_cur_local.size();
-
-	const int size = local_size + local_size_cur;
-	std::vector<int> neighbours_id_faces_local(base * size);
-	std::vector<Normals> normals_local(size);
-	std::vector<Type> squares_cell_local(base * size);
-	std::vector<Type> volume_local(size);
-
-#if 0
-	for (size_t i = 0; i < local_size; i++)
-	{
-		int id = id_cells_local[i];
-		volume_local[i] = volume[id];
-		normals_local[i] = normals[id];
-		for (size_t j = 0; j < base; j++)
-		{
-			squares_cell_local[i * base + j] = squares_cell[id * base + j];
-			neighbours_id_faces_local[i * base + j] = neighbours_id_faces[id * base + j];  // здесь пересчёт
-		}
-	}
-	for (size_t k = 0; k < local_size_cur; k++)
-	{
-		int i = k + local_size;// границу в конец
-
-		int id = id_bound_cur_local[i];
-		volume_local[i] = volume[id];
-		normals_local[i] = normals[id];
-		for (size_t j = 0; j < base; j++)
-		{
-			squares_cell_local[i * base + j] = squares_cell[id * base + j];
-			neighbours_id_faces_local[i * base + j] = neighbours_id_faces[id * base + j];  // здесь пересчёт
-		}
-	}
-	neighbours_id_faces.clear();
-	normals.clear();
-	squares_cell.clear();
-	volume.clear();
-
-	//re index
-	{
-		//*Здесь мы теряем связь с нумерацийе глобальной границы!!!!*//
-		int loc_id_cell = 0;
-		for (int i = 0; i < local_size/*+local_size_cur*/; i++)  //в рамках узла
-		{
-			auto min_el = std::min_element(id_bound_cur_local.begin(), id_bound_cur_local.end());
-			int shift_node = min(id_cells_local[0], (int)std::distance(id_bound_cur_local.begin(), min_el));//может не работать на с++11. Если что написать свой find_min
-			for (int k = 0; k < base; k++)
-			{
-				const int neigh = neighbours_id_faces_local[base * i + k];
-				const int neigh_cell = neigh / base;
-				if (neigh >= 0)
-				{
-					const int new_idx_cell = neigh_cell - shift_node;
-					const int new_idx_face = new_idx_cell * base + neigh % base;
-					neighbours_id_faces_local[base * i + k] = new_idx_face;
-				}
-				else
-				{
-					neighbours_id_faces_local[base * i + k] = neigh;
-				}
-			}
-		}
-	}
-
-
-	if (myid == 0)
-	{
-		// формируем массивы на управляющем узле
-
-		RHLLC_Init_3d(size_grid, centerts, W_full_3d);
-
-		U_full_3d.resize(size_grid);
-		U_full_3d_prev.resize(size_grid);
-
-		ReBuildConvValue_3d(W_full_3d, U_full_3d_prev);
-	}
-
-#endif
-
-	std::vector<int> send_count;
-	std::vector<int> disp;
-	GetSend(np, size_grid, send_count);
-	GetDisp(np, size_grid, disp);
-
-	local_size = send_count[myid];
-	const int local_disp = disp[myid];
-
-	std::vector<int> pairs_local(local_size * base);  // соседи на узле в глобальной нумерации
-
-	std::vector<int> pairs_local_reg(local_size * base);  // соседи на узле регулярные в лок
-	std::vector<int> pairs_local_irr_left;  // соседи на узле с другого узла в глоб
-	std::vector<int> pairs_local_irr_right;  // соседи на узле с другого узла в глоб
-
-	std::vector<int> irr_left_id;
-	std::vector<int> irr_right_id;
-
-	int left_s = 0;
-	int right_s = 0;
-	int reg_s = 0;
-
-	bool reg_cell = true;
-	bool irr_l_cell = false;
-	bool irr_r_cell = false;
-
-	for (size_t i = 0; i < local_size; i++)
-	{
-		reg_cell = true; irr_l_cell = false; irr_r_cell = false;
-
-		for (size_t j = 0; j < base; j++)
-		{
-			int neig = neighbours_id_faces[(local_disp + i) * base + j];
-			pairs_local[i * base + j] = neig;
-			if (neig < 0)
-			{
-				pairs_local_reg[i * base + j] = neig; // ГУ
-			}
-			else
-			{
-				int cell_id = neig / base;
-				if (cell_id >= local_disp && cell_id < local_disp + local_size)  // <= or <??
-				{
-					pairs_local_reg[i * base + j] = GetLocalId(neig, local_disp);
-				}
-				else
-				{
-					reg_cell = false;
-					if (cell_id < local_disp)
-					{
-						pairs_local_irr_left.push_back(neig);
-						pairs_local_reg[i * base + j] = -10; // признак на соседний узел
-						irr_l_cell = true;
-					}
-					else
-					{
-						pairs_local_irr_right.push_back(neig);
-						pairs_local_reg[i * base + j] = -20; // признак на соседний узел
-						irr_r_cell = true;
-					}
-				}
-			}
-		}
-
-		if (irr_l_cell)
-		{
-			irr_left_id.push_back(i);
-		}
-		if (irr_r_cell)
-		{
-			irr_right_id.push_back(i);
-		}
-	}
-
-	std::vector<VectorVal> U_prev_local_irr_left;
-	std::vector<VectorVal> W_local_irr_left;
-
-	std::vector<VectorVal> U_prev_local_irr_right;
-	std::vector<VectorVal> W_local_irr_right;
-
-
-	std::vector<VectorVal> W_local(local_size);  // в нем есть регулярные левые и правые
-	std::vector<VectorVal> U_local(local_size);  // в нем есть регулярные левые и правые
-	std::vector<VectorVal> U_prev_local(local_size);  // в нем есть регулярные левые и правые
-
-	Eigen::MatrixXd T(5, 5);
-	VectorVal tU;
-
-	VectorVal F;
-	VectorVal SumF;
-
-	VectorVal U, U_L, U_R;
-	VectorVal W, W_L, W_R;
-
-	int cnt_left = 0;
-	int cnt_right = 0;
-
-	Type tau = 0.1;
-	for (int num_cell = 0; num_cell < local_size; num_cell++)
-	{
-		SumF.zero();
-		U = U_prev_local[num_cell];
-		W = W_local[num_cell];
-
-		for (int i = 0; i < base; i++)
-		{
-			const int neig = pairs_local_reg[base * num_cell + i];
-
-			switch (neig)
-			{
-			case eBound_FreeBound:
-				U_R = U;
-				W_R = W;
-				break;
-
-			case -10:
-				U_R = U_prev_local_irr_left[cnt_left];
-				W_R = W_local_irr_left[cnt_left++];
-				break;
-
-			case -20:
-				U_R = U_prev_local_irr_right[cnt_right];
-				W_R = W_local_irr_right[cnt_right++];
-				break;
-
-			default:
-				if (neig < 0)
-				{
-					printf("Err bound in HLLC\n");
-					exit(1);
-				}
-
-				U_R = U_prev_local[neig / base];
-				W_R = W_local[neig / base];
-				break;
-			}
-
-			MakeRotationMatrix(normals_local[num_cell].n[i], T);
-
-			U_L = T * U;   U_R = T * U_R;
-			W_L = T * W;   W_R = T * W_R;
-
-			RHLLC_Flux(W_R, U_R, W_L, U_L, F);
-
-			F = (T.transpose()) * F;
-			SumF += (F * squares_cell_local[base * num_cell + i]);
-
-		}
-
-		U_local[num_cell] = (U - SumF * tau / volume_local[num_cell]);
-	}
-
-
-	if (myid == 0)
-	{
-		if (np > 1)
-		{
-			int i = 0;
-			W_local_irr_right.resize(irr_right_id.size());
-			U_prev_local_irr_right.resize(irr_right_id.size());
-			for (auto id : irr_right_id)
-			{
-				W_local_irr_right[i++] = W_local[id];
-				U_prev_local_irr_right[i++] = U_prev_local[id];
-			}
-
-			MPI_Send(W_local_irr_right.data(), W_local_irr_right.size(), MPI_VectorVal, myid + 1, 0, MPI_COMM_WORLD);
-		}
-	}
-	else if (myid == (np - 1))
-	{
-		int i = 0;
-		W_local_irr_left.resize(irr_left_id.size());
-		U_prev_local_irr_left.resize(irr_right_id.size());
-		for (auto id : irr_left_id)
-		{
-			W_local_irr_left[i++] = W_local[id];
-			U_prev_local_irr_left[i++] = U_prev_local[id];
-		}
-
-		MPI_Status st;
-		MPI_Recv(W_local_irr_left.data(), W_local_irr_left.size(), MPI_VectorVal, myid - 1, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
+		send_rq_rhllc.resize(1, MPI_REQUEST_NULL);
+		recv_rq_rhllc.resize(1, MPI_REQUEST_NULL);
 	}
 	else
 	{
-		MPI_Status st;
-		MPI_Sendrecv(W_local_irr_right.data(), W_local_irr_right.size(), MPI_VectorVal, myid + 1, 0,
-			W_local_irr_left.data(), W_local_irr_left.size(), MPI_VectorVal, myid - 1, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
+		send_rq_rhllc.resize(2, MPI_REQUEST_NULL);
+		recv_rq_rhllc.resize(2, MPI_REQUEST_NULL);
 	}
 
-	U_local.swap(U_prev_local);
-	MPI_RETURN(0);
+	int cc = 0;
+	if (myid != np - 1)
+	{
+		int size_l = mpi_conf[myid + 1].left_cell_max - mpi_conf[myid + 1].left_cell_min + 1;
+		MPI_Send_init(cells.data() + mpi_conf[myid + 1].left_cell_min, size_l, MPI_flux_elem_t, myid + 1, 0, MPI_COMM_WORLD, &send_rq_rhllc[cc]);
+		MPI_Recv_init(right_neig.data(), right_neig.size(), MPI_flux_all_t, myid + 1, 0, MPI_COMM_WORLD, &recv_rq_rhllc[cc++]);
+	}
 
-	//--------------------------------------------до while(T)_--------------------
+	if (myid != 0)
+	{
+		int size_r = mpi_conf[myid - 1].right_cell_max - mpi_conf[myid - 1].right_cell_min + 1;
+		MPI_Send_init(cells.data() + mpi_conf[myid - 1].right_cell_min, size_r, MPI_flux_elem_t, myid - 1, 0, MPI_COMM_WORLD, &send_rq_rhllc[cc]);
+		MPI_Recv_init(left_neig.data(), left_neig.size(), MPI_flux_all_t, myid - 1, 0, MPI_COMM_WORLD, &recv_rq_rhllc[cc++]);
+	}
+
+	return 0;
 }
 
+int ReadMpiConf(const std::string& file, int myid, int np)
+{
+	std::ifstream ifile;
+	OPEN_FSTREAM(ifile, file.c_str());
+
+	int size;
+	ifile >> size;
+
+	if (np != size)
+	{
+		printf("Bad size conf file. Need %d nodes\n", size);
+		D_LD;
+	}
+
+	mpi_conf.resize(np);
+	int id = 0;
+
+	for (int i = 0; i <= np; i++)
+	{
+		ifile >> id;
+
+		ifile >> mpi_conf[id].left;
+		ifile >> mpi_conf[id].right;
+
+		ifile >> mpi_conf[id].left_cell_min;
+		ifile >> mpi_conf[id].left_cell_max;
+
+		ifile >> mpi_conf[id].right_cell_min;
+		ifile >> mpi_conf[id].right_cell_max;
+	}
+	ifile.close();
+
+	if(mpi_conf[myid].left_cell_max != -1)
+	left_neig.resize(mpi_conf[myid].left_cell_max - mpi_conf[myid].left_cell_min + 1);
+
+	if (mpi_conf[myid].right_cell_max != -1)
+	right_neig.resize(mpi_conf[myid].right_cell_max - mpi_conf[myid].right_cell_min + 1);
+}
+
+int RHLLC_3d_MPI(const Type tau, grid_t& grid)
+{
+	const int size_grid = grid.size;
+
+	int np, myid;
+	MPI_GET_INF(np, myid);
+
+#ifdef ILLUM
+
+#pragma omp parallel default(none) shared(tau,myid, grid, glb_files, mpi_conf)
+	{
+		const int left = mpi_conf[myid].left;
+		const int right = mpi_conf[myid].right;
+		// востановление физических переменных
+#pragma omp for
+		for (int i = left; i < right; i++)
+		{
+			int back = rhllc_get_phys_value_ost1098(grid.cells[i].conv_val, grid.cells[i].phys_val);
+			if (back)
+			{
+				if (back == 2)
+				{
+					D_LD;
+				}
+				else
+				{
+					//printf("try id= %d\n", i);
+				}
+				// если был пернсчёт
+				rhllc_get_conv_value_ost1098(grid.cells[i].phys_val, grid.cells[i].conv_val);
+			}
+		}
+	}
 #endif
+
+	MPI_Startall(recv_rq_rhllc.size(), recv_rq_rhllc.data());
+
+	MPI_Waitall(send_rq_rhllc.size(), send_rq_rhllc.data(), MPI_STATUSES_IGNORE);
+	MPI_Startall(send_rq_rhllc.size(), send_rq_rhllc.data());
+	
+
+#pragma omp parallel default(none) shared(tau, grid, glb_files, mpi_conf, myid)
+	{
+		flux_t bound_val;
+		flux_t phys_bound_val;
+		Matrix3 T;
+		Matrix3 TT;
+		elem_t* cell;
+		const int size_face = grid.faces.size();
+
+#pragma omp for
+		for (int i = 0; i < size_face; i++)
+		{
+			face_t& f = grid.faces[i];
+
+			if (f.geo.id_l < mpi_conf[myid].left || f.geo.id_l >= mpi_conf[myid].right)
+			{
+				continue;
+			}
+
+			cell = &grid.cells[f.geo.id_l];
+			switch (f.geo.id_r)// id соседа она же признак ГУ
+			{
+			case eBound_FreeBound:
+				bound_val = cell->conv_val;
+				phys_bound_val = cell->phys_val;
+				break;
+			case eBound_InnerSource:
+#ifdef Sphere
+				phys_bound_val.d = 0.1; phys_bound_val.v << 0, 0, 0; phys_bound_val.p = 0.1;
+				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
+#elif defined Cone_JET
+				//phys_bound_val.d = 0.1; // (3 * 1e-8 + 1e-12) / DENSITY;
+				//phys_bound_val.p = 1; // (100 + (1e-2)) / PRESSURE;
+				//phys_bound_val.v = Vector3(1e-4, 0, 0);// (Vector3(1e4, 0, 0)) / VELOCITY;
+
+				//phys_bound_val.d = Density(Vector3::Zero()) / DENSITY;
+				//phys_bound_val.p = Pressure(Vector3::Zero()) / PRESSURE;
+				//phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;
+
+				bound_val = cell->conv_val;
+				phys_bound_val = cell->phys_val;
+				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
+#else
+				bound_val = cell->conv_val;
+				phys_bound_val = cell->phys_val;
+#endif
+				break;
+			case eBound_OutSource:
+#if defined Cylinder 
+				phys_bound_val.d = 0.1;
+				phys_bound_val.v << 0.99, 0, 0;
+				phys_bound_val.p = 0.01;
+				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
+#elif defined Cone
+				//phys_bound_val.d = 0.1; // (3 * 1e-8 + 1e-12) / DENSITY;
+				//phys_bound_val.p = 1; // (100 + (1e-2)) / PRESSURE;
+				//phys_bound_val.v = Vector3(1e-4, 0, 0);// (Vector3(1e4, 0, 0)) / VELOCITY;
+
+				//phys_bound_val.d = Density(Vector3::Zero()) / DENSITY;
+				//phys_bound_val.p = Pressure(Vector3::Zero()) / PRESSURE;
+				//phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;
+
+				phys_bound_val.d = 0.1;
+				phys_bound_val.v << 0.99, 0, 0;
+				phys_bound_val.p = 0.01;
+				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
+#else
+				bound_val = cell->conv_val;
+				phys_bound_val = cell->phys_val;
+#endif	
+				break;
+			case eBound_LockBound:
+#if 1
+				bound_val = cell->conv_val;
+				phys_bound_val = cell->phys_val;
+				MakeRotationMatrix(f.geo.n, T);
+
+				bound_val.v = T * bound_val.v;
+				phys_bound_val.v = T * phys_bound_val.v;
+
+				bound_val.v[0] = -bound_val.v[0];
+				phys_bound_val.v[0] = -phys_bound_val.v[0];
+
+				TT = T.transpose();
+
+				bound_val.v = TT * bound_val.v;
+				phys_bound_val.v = TT * phys_bound_val.v;
+#else
+				bound_val = cell->conv_val;
+				phys_bound_val = cell->phys_val;
+#endif
+				break;
+
+			default:
+				DIE_IF(f.geo.id_r < 0); //Err bound in RHLLC_3d
+
+				if (f.geo.id_r < mpi_conf[myid].left || f.geo.id_r >= mpi_conf[myid].right)
+				{
+					continue;
+				}
+
+				bound_val = grid.cells[f.geo.id_r].conv_val;
+				phys_bound_val = grid.cells[f.geo.id_r].phys_val;
+				break;
+			}
+
+			flux_t_calc(grid.cells[f.geo.id_l].conv_val, bound_val, grid.cells[f.geo.id_l].phys_val, phys_bound_val, f);
+		}
+
+		//#pragma omp barrier
+	}
+
+	MPI_Waitall(recv_rq_rhllc.size(), recv_rq_rhllc.data(), MPI_STATUSES_IGNORE);
+	int flags[2];
+	MPI_Testall(send_rq_rhllc.size(), send_rq_rhllc.data(), flags, MPI_STATUSES_IGNORE);
+
+#pragma omp parallel default(none) shared(tau, grid, glb_files, mpi_conf, myid, right_neig, left_neig)
+	{
+		// after mpi
+		flux_t bound_val;
+		flux_t phys_bound_val;
+		const int size_face = grid.faces.size();
+		int r_id = 0;
+		int l_id = 0;
+
+		if (right_neig.size() != 0)//(myid == 0)
+		{
+#pragma omp for
+			for (int i = 0; i < size_face; i++)
+			{
+				face_t& f = grid.faces[i];
+
+				if (f.geo.id_r < 0) continue;
+
+				if (f.geo.id_l < mpi_conf[myid].left || f.geo.id_l >= mpi_conf[myid].right)//текущий узел
+				{
+					continue;
+				}
+
+				if (f.geo.id_r >= mpi_conf[myid].right_cell_min && f.geo.id_r <= mpi_conf[myid].right_cell_max)
+				{
+					r_id = f.geo.id_r - mpi_conf[myid].right_cell_min;
+					bound_val = right_neig[r_id].conv_val;
+					phys_bound_val = right_neig[r_id].phys_val;
+				}
+				else
+				{
+					continue;
+				}
+
+				flux_t_calc(grid.cells[f.geo.id_l].conv_val, bound_val, grid.cells[f.geo.id_l].phys_val, phys_bound_val, f);
+			}
+		}
+
+		if (left_neig.size() != 0)
+		{
+
+#pragma omp for
+			for (int i = 0; i < size_face; i++)
+			{
+				face_t& f = grid.faces[i];
+
+				if (f.geo.id_r < 0) continue;
+
+				if (f.geo.id_r < mpi_conf[myid].left || f.geo.id_r >= mpi_conf[myid].right)//текущий узел
+				{
+					continue;
+				}
+
+				if (f.geo.id_l >= mpi_conf[myid].left_cell_min && f.geo.id_l <= mpi_conf[myid].left_cell_max)
+				{
+					l_id = f.geo.id_l - mpi_conf[myid].left_cell_min;
+					bound_val = left_neig[l_id].conv_val;
+					phys_bound_val = left_neig[l_id].phys_val;
+					//l_id++;
+				}
+				else
+				{
+					continue;
+				}
+
+				flux_t_calc(bound_val, grid.cells[f.geo.id_r].conv_val, phys_bound_val, grid.cells[f.geo.id_r].phys_val, f);
+			}
+		}
+	}
+
+
+#ifdef ILLUM
+	auto calc{ [&grid, myid, tau](const int left, const int right)
+	{
+#pragma omp for
+		for (int i = left; i < right; i++)
+		{
+			elem_t& el = grid.cells[i];
+			flux_t sumF;
+			for (int j = 0; j < base; j++)
+			{
+				if (el.geo.sign_n[j])
+				{
+					sumF += grid.faces[el.geo.id_faces[j]].f;
+				}
+				else
+				{
+					sumF -= grid.faces[el.geo.id_faces[j]].f;
+				}
+			}
+			el.conv_val -= sumF * (tau / el.geo.V);
+
+			rhllc_get_phys_value_ost1098(el.conv_val, el.phys_val); // востановление физических переменных
+			phys_local[i] = el.phys_val;
+		}
+	}};
+	
+	const int left = mpi_conf[myid].left;
+
+	for (int i = 0; i < disp_hllc.size(); i++)
+	{
+#pragma omp parallel default(none)firstprivate(i,tau, left) shared(grid, send_hllc, disp_hllc, phys_local, calc)
+		{
+			calc(left + disp_hllc[i], left + disp_hllc[i] + send_hllc[i]);
+		}
+
+//#pragma omp single
+		{
+			SendPhysValue(phys_local.data() + left + disp_hllc[i], send_hllc[i], i);
+		}
+	}
+
+#else
+
+#pragma omp parallel default(none) shared(tau, grid, glb_files, mpi_conf, myid)
+	{
+		const int size_grid = grid.size;
+
+#pragma omp for
+		for (int i = mpi_conf[myid].left; i < mpi_conf[myid].right; i++)//for (int i = 0; i < size_grid; i++)
+		{
+			elem_t& el = grid.cells[i];
+			flux_t sumF;
+			for (int j = 0; j < base; j++)
+			{
+				if (el.geo.sign_n[j])
+				{
+					sumF += grid.faces[el.geo.id_faces[j]].f;
+				}
+				else
+				{
+					sumF -= grid.faces[el.geo.id_faces[j]].f;
+				}
+			}
+			el.conv_val -= sumF * (tau / el.geo.V);
+
+			rhllc_get_phys_value_ost1098(el.conv_val, el.phys_val); // востановление физических переменных
+		}
+	} //omp
+
+#endif
+
+	return 0;
+}
+
+#endif 
+#endif // SOLVE && USE_MPI

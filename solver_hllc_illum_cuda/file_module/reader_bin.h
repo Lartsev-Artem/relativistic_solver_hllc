@@ -5,8 +5,14 @@
 #define READER_BIN
 
 #include "../global_def.h"
+#include "../global_value.h"
+#include "../solve_module/solve_global_struct.h"
+
+int ReadStartSettings(global_files_t& glb_files, solve_mode_t& solve_mode);
+
 template<typename T>
-size_t ReadSimpleFileBin(file_name name_file, std::vector<T>& data_array) {
+size_t ReadSimpleFileBin(file_name name_file, std::vector<T>& data_array) 
+{
 	// Файл должен содержать в первой строке число элементов. Далее последовательные данные
 
 	FILE* f;
@@ -47,14 +53,13 @@ int ReadDataArray(const size_t class_file_vtk, const std::string& main_dir,
 	std::vector<Type>& density, std::vector<Type>& absorp_coef, std::vector<Type>& rad_en_loose_rate,
 	std::vector<Vector3>& velocity, std::vector<Type>& pressure, const bool is_print=false);
 
+int ReadGeometryGrid(const std::string& file_cells, const std::string& file_faces, grid_t& grid);
 #ifdef SOLVE
 #include "../solve_module/solve_global_struct.h"
 int ReadDataArray(const solve_mode_t& mode, file_name main_dir, grid_t& grid);
 
-int ReadGeometryGrid(const std::string& file_cells, const std::string& file_faces, grid_t& grid);
 int ReadValueGrid(const std::string& main_dir, grid_t& grid);
-int ReadIllumGeometry(const int count_dir,
-	file_name file_x, file_name file_state, file_name file_x0, file_name file_graph, file_name file_res,
+int ReadIllumGeometry(const int count_dir, const global_files_t& gbl_files,
 	std::vector<BasePointTetra>& vec_x,
 	std::vector <std::vector<int>>& face_states,
 	std::vector <std::vector<cell_local>>& vec_x0,

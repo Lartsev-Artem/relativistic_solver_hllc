@@ -471,11 +471,11 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 	std::vector<VectorX> U_full;
 	std::vector<VectorX> W_full;
 
-	const std::string name_file_id_neighbors = BASE_ADRESS + "pairs.bin";
-	const std::string name_file_normals = BASE_ADRESS + "normals.bin";
-	const std::string name_file_centers = BASE_ADRESS + "centers.bin";
-	const std::string name_file_squares = BASE_ADRESS + "squares.bin";
-	const std::string name_file_volume = BASE_ADRESS + "volume.bin";
+	const std::string name_file_id_neighbors = glb_files.base_adress + "pairs.bin";
+	const std::string name_file_normals = glb_files.base_adress + "normals.bin";
+	const std::string name_file_centers = glb_files.base_adress + "centers.bin";
+	const std::string name_file_squares = glb_files.base_adress + "squares.bin";
+	const std::string name_file_volume = glb_files.base_adress + "volume.bin";
 
 	if (ReadSimpleFileBin(name_file_id_neighbors, neighbours_id_faces)) RETURN_ERR("Error reading file neighbours\n");
 	if (ReadNormalFile(name_file_normals, normals)) RETURN_ERR("Error reading file normals\n");
@@ -791,7 +791,7 @@ static int rhllc_get_phys_value_ost1098(const flux_t& U, flux_t& W)
 
 int RHLLC_3d(const Type tau, grid_t& grid)
 {
-#pragma omp parallel default(none) shared(tau, grid, BASE_ADRESS)
+#pragma omp parallel default(none) shared(tau, grid, glb_files)
 	{
 		const int size_grid = grid.size;	
 
@@ -819,7 +819,7 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 #endif
 	}
 
-#pragma omp parallel default(none) shared(tau, grid, BASE_ADRESS)
+#pragma omp parallel default(none) shared(tau, grid, glb_files)
 	{
 		flux_t bound_val;
 		flux_t phys_bound_val;
@@ -868,9 +868,14 @@ int RHLLC_3d(const Type tau, grid_t& grid)
 				phys_bound_val.p = Pressure(Vector3::Zero()) / PRESSURE;
 				phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;*/
 
-				phys_bound_val.d = Density(Vector3::Zero()) / DENSITY;
-				phys_bound_val.p = /*Pressure(Vector3::Zero())*/5000. / PRESSURE;
-				phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;
+				//phys_bound_val.d = Density(Vector3::Zero()) / DENSITY;
+				//phys_bound_val.p = /*Pressure(Vector3::Zero())*/5000. / PRESSURE;
+				//phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;
+
+				phys_bound_val.d = 1;
+				phys_bound_val.p = 1;
+				phys_bound_val.v = Vector3(1e-2, 0, 0);
+
 				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #else
 				bound_val = cell->conv_val;
@@ -952,7 +957,7 @@ int MPI_RHLLC_3d(const int myid, const Type tau, grid_t& grid)
 
 	if (myid == 0)
 	{
-#pragma omp parallel default(none) shared(tau, grid, BASE_ADRESS)
+#pragma omp parallel default(none) shared(tau, grid, glb_files)
 		{
 			const int size_grid = grid.size;
 #ifdef ILLUM
@@ -978,7 +983,7 @@ int MPI_RHLLC_3d(const int myid, const Type tau, grid_t& grid)
 #endif
 		}
 
-#pragma omp parallel default(none) shared(tau, grid, BASE_ADRESS)
+#pragma omp parallel default(none) shared(tau, grid, glb_files)
 		{
 			flux_t bound_val;
 			flux_t phys_bound_val;
@@ -1126,7 +1131,7 @@ int MPI_RHLLC_3d(const int myid, const Type tau, grid_t& grid)
 	
 
 #else
-	D_LD;
+#pragma error "bad prj config"
 #endif //USE_MPI
 
 

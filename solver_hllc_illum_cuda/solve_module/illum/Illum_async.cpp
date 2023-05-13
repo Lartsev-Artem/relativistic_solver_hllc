@@ -22,7 +22,7 @@ static std::vector<int> disp_illum;
 std::vector<flux_t> phys_local;
 static std::vector<std::vector<Vector3>> inter_coef_all;
 
-static std::vector<MPI_Request> requests_hllc; //все запросы сообщений отпраки и принятия	
+static std::vector<std::vector<MPI_Request>> requests_hllc; //все запросы сообщений отпраки и принятия	
 std::vector<int> send_hllc;
 std::vector<int> disp_hllc;
 
@@ -45,22 +45,35 @@ int InitPhysOmpMpi(const int count_cells)
 	int nthr = 1;   //не делим массив, если только один узел
 	int np, id;
 	MPI_GET_INF(np, id);
+#ifdef RHLLC_MPI
 	if (np != 1)
 	{
 		nthr = 6;  //разделим иходный массив на 6 равных куска
-		requests_hllc.resize(nthr);
+		requests_hllc.resize(np, std::vector<MPI_Request>(nthr)); 	
+	}
+
+	int n = mpi_conf[id].right - mpi_conf[id].left;
+	
+	GetSend(nthr, n, send_hllc);
+	GetDisp(nthr, n, disp_hllc);
+#else
+	if (np != 1)
+	{
+		nthr = 6;  //разделим иходный массив на 6 равных куска
+		requests_hllc.resize(1, std::vector<MPI_Request>(nthr));
 	}
 
 	GetSend(nthr, count_cells, send_hllc);
 	GetDisp(nthr, count_cells, disp_hllc);
+#endif
 	
 	return 0;
 }
 void SendPhysValue(flux_t* phys, const int size, const int msg_id)
-{
-	if (requests_hllc.size())
+{	
+	for (int i = 0; i < requests_hllc.size(); i++)
 	{
-		MPI_Ibcast(phys, size, MPI_flux_t, 0, MPI_COMM_WORLD, &requests_hllc[msg_id]);
+		MPI_Ibcast(phys, size, MPI_flux_t, 0, MPI_COMM_WORLD, &requests_hllc[i][msg_id]);
 	}
 }
 
@@ -74,15 +87,6 @@ int InitSendDispIllumArray(const int myid, const int np, const int count_directi
 	{	
 		disp_illum[i] = disp[i] * base * count_cells;	
 	}
-
-	{
-		int len[3 + 1] = { 1,3,1,  1 };
-		MPI_Aint pos[4] = { offsetof(flux_t, d), offsetof(flux_t, v),offsetof(flux_t, p) ,sizeof(flux_t) };
-		MPI_Datatype typ[4] = { MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE, MPI_UB };
-		MPI_Type_struct(4, len, pos, typ, &MPI_flux_t);
-		MPI_Type_commit(&MPI_flux_t);
-	}
-
 	
 	phys_local.resize(count_cells);
 
@@ -466,7 +470,7 @@ static Type GetCurIllum(const Vector3 x, const Type s, const Type I_0, const Typ
 }
 
 static Type ReCalcIllum(const int num_dir, const std::vector<Vector3>& inter_coef, Type* Illum)
-{
+{	
 	Type norm = -1;
 	//#pragma omp parallel default(none) shared(num_dir, cells, Illum, norm)
 	{
@@ -508,7 +512,30 @@ static Type ReCalcIllum(const int num_dir, const std::vector<Vector3>& inter_coe
 #ifndef USE_CUDA
 static Type ReCalcIllumGlobal(const int dir_size, grid_t& grid)
 {
-
+#ifdef RHLLC_MPI
+	int id, np;
+	MPI_GET_INF(np, id);
+	int left = mpi_conf[id].left;
+	int right = mpi_conf[id].right;
+	
+#pragma omp parallel default(none) firstprivate (left, right) shared(dir_size, grid)
+	{
+		const int size = grid.size;
+#pragma omp for
+		for (int num_dir = 0; num_dir < dir_size; num_dir++)
+		{
+			const int shift_dir = num_dir * size;
+			for (int num_cell = left; num_cell < right; num_cell++)
+			{
+				for (int i = 0; i < base; i++)
+				{
+					const int id = base * (shift_dir + num_cell) + i;
+					grid.cells[num_cell].illum_val.illum[num_dir * base + i] = grid.Illum[id]; //на каждой грани по направлениям
+				}
+			}
+		}
+	}
+#else
 #pragma omp parallel default(none) shared(dir_size, grid)
 	{
 		const int size = grid.size;
@@ -526,6 +553,8 @@ static Type ReCalcIllumGlobal(const int dir_size, grid_t& grid)
 			}
 		}
 	}
+#endif	
+
 	return 0;
 }
 #endif
@@ -624,7 +653,10 @@ int MPI_CalculateIllumAsync(const grid_directions_t& grid_direction, const std::
 	}timer;
 
 	timer.phys_time = -omp_get_wtime();
-	MPI_Waitall(requests_hllc.size(), requests_hllc.data(), MPI_STATUSES_IGNORE); //ждём сообщнения с газовым расчётом			
+	for (int i = 0; i < requests_hllc.size(); i++)
+	{
+		MPI_Waitall(requests_hllc[i].size(), requests_hllc[i].data(), MPI_STATUSES_IGNORE); //ждём сообщнения с газовым расчётом			
+	}
 	timer.phys_time += omp_get_wtime();
 
 
@@ -670,7 +702,7 @@ int MPI_CalculateIllumAsync(const grid_directions_t& grid_direction, const std::
 #pragma omp parallel default(none) firstprivate(local_size, np, n_illum, myid, size_1_section, local_disp) \
 		shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, \
 		norm, inter_coef_all, phys_local, disp_illum,\
- BASE_ADRESS,timer, \
+ glb_files,timer, \
 flags_send_to_gpu_1_section, requests_rcv_1_section, status_rcv_1_section, requests_send_1_section,\
 flags_send_to_gpu_2_section, requests_rcv_2_section, status_rcv_2_section, requests_send_2_section)
 		{
@@ -1029,10 +1061,12 @@ flags_send_to_gpu_2_section, requests_rcv_2_section, status_rcv_2_section, reque
 
 
 #ifndef USE_CUDA
+#ifndef RHLLC_MPI
 	if (myid == 0) // это уйдет, когда все интегралы перейдут в cuda
+#endif
 	{
 		ReCalcIllumGlobal(grid_direction.size, grid);
-		//WriteFileSolution(BASE_ADRESS + "Illum_result.txt", Illum);
+		//WriteFileSolution(glb_files.base_adress + "Illum_result.txt", Illum);
 	}
 #else
 	CudaSyncStream(eCuda_params);
@@ -1052,11 +1086,11 @@ flags_send_to_gpu_2_section, requests_rcv_2_section, status_rcv_2_section, reque
 		}
 		scat_last[i] = grid.scattering[(count_directions - 1) * count_cells + i];
 	}
-	WriteSimpleFileBin(BASE_ADRESS + "scatter_int.bin", int_scat);
-	WriteSimpleFileTxt(BASE_ADRESS + "scatter_all.txt", scat);
-	WriteSimpleFileTxt(BASE_ADRESS + "scatter_last.txt", scat_last);
+	WriteSimpleFileBin(glb_files.base_adress + "scatter_int.bin", int_scat);
+	WriteSimpleFileTxt(glb_files.base_adress + "scatter_all.txt", scat);
+	WriteSimpleFileTxt(glb_files.base_adress + "scatter_last.txt", scat_last);
 
-	WRITE_FILE((BASE_ADRESS + "scatter.bin").c_str(), grid.scattering, count_cells);
+	WRITE_FILE((glb_files.base_adress + "scatter.bin").c_str(), grid.scattering, count_cells);
 #endif
 
 	return 0;
@@ -1088,7 +1122,24 @@ static Type IntegarteDirection(const vector<Type>& Illum, const grid_directions_
 }
 static int MakeEnergy(const grid_directions_t& grid_direction, std::vector<elem_t>& cells) {
 
-	//for (auto &el : cells)
+#ifdef RHLLC_MPI	
+
+	int id, np;
+	MPI_GET_INF(np, id);
+	int left = mpi_conf[id].left;
+	int right = mpi_conf[id].right;
+
+#pragma omp parallel  default(none) firstprivate(left, right) shared(grid_direction, cells) 
+	{
+#pragma omp for
+		for (int i = left; i < right; i++)//for (int i = 0; i < cells.size(); i++)
+		{
+			elem_t& el = cells[i];
+			el.illum_val.energy = IntegarteDirection(el.illum_val.illum, grid_direction);
+		}
+	}
+#else
+
 #pragma omp parallel  default(none) shared(grid_direction, cells) 
 	{
 #pragma omp for
@@ -1098,6 +1149,7 @@ static int MakeEnergy(const grid_directions_t& grid_direction, std::vector<elem_
 			el.illum_val.energy = IntegarteDirection(el.illum_val.illum, grid_direction);
 		}
 	}
+#endif
 	return 0;
 }
 
@@ -1126,6 +1178,42 @@ static int IntegarteDirection3(const vector<Type>& Illum, const grid_directions_
 }
 static int MakeStream(const grid_directions_t& grid_direction, grid_t& grid)
 {
+#ifdef RHLLC_MPI	
+
+	int id, np;
+	MPI_GET_INF(np, id);
+	int left = mpi_conf[id].left;
+	int right = mpi_conf[id].right;
+#pragma omp parallel  default(none) firstprivate(left, right) shared(grid_direction, grid) 
+	{
+#pragma omp for
+		for (int i = left; i < right; i++)
+		{
+			elem_t& el = grid.cells[i];
+
+			Vector3 Stream[base];
+			IntegarteDirection3(el.illum_val.illum, grid_direction, Stream);
+
+			GET_FACE_TO_CELL(el.illum_val.stream, Stream, Vector3::Zero());
+
+			el.illum_val.div_stream = 0;
+			for (int j = 0; j < base; j++)
+			{
+				geo_face_t* geo_f = &grid.faces[el.geo.id_faces[j]].geo;
+				if (el.geo.sign_n[j])
+				{
+					el.illum_val.div_stream += Stream[j].dot(geo_f->n) * geo_f->S;
+				}
+				else
+				{
+					el.illum_val.div_stream -= Stream[j].dot(geo_f->n) * geo_f->S;
+				}
+			}
+			el.illum_val.div_stream /= el.geo.V;
+		}
+	}
+
+#else
 #pragma omp parallel  default(none) shared(grid_direction, grid) 
 	{
 #pragma omp for
@@ -1154,6 +1242,7 @@ static int MakeStream(const grid_directions_t& grid_direction, grid_t& grid)
 			el.illum_val.div_stream /= el.geo.V;
 		}
 	}
+#endif
 	return 0;
 }
 
@@ -1188,6 +1277,44 @@ static int IntegarteDirection9(const vector<Type>& Illum, const grid_directions_
 }
 static int MakeDivImpuls(const grid_directions_t& grid_direction, grid_t& grid)
 {
+#ifdef RHLLC_MPI	
+
+	int id, np;
+	MPI_GET_INF(np, id);
+	int left = mpi_conf[id].left;
+	int right = mpi_conf[id].right;
+
+#pragma omp parallel  default(none) firstprivate(left, right) shared(grid_direction, grid) 
+	{
+#pragma omp for
+		for (int i = left; i < right; i++)
+		{
+			elem_t& el = grid.cells[i];
+
+			Matrix3 Impuls[base];
+			IntegarteDirection9(el.illum_val.illum, grid_direction, Impuls);
+
+			GET_FACE_TO_CELL(el.illum_val.impuls, Impuls, Matrix3::Zero());
+
+			el.illum_val.div_impuls = Vector3::Zero();
+			for (int j = 0; j < base; j++)
+			{
+				geo_face_t* geo_f = &grid.faces[el.geo.id_faces[j]].geo;
+				if (el.geo.sign_n[j])
+				{
+					el.illum_val.div_impuls += Impuls[j] * (geo_f->n) * geo_f->S;
+				}
+				else
+				{
+					el.illum_val.div_impuls += Impuls[j] * (-geo_f->n) * geo_f->S;
+				}
+			}
+			el.illum_val.div_impuls /= el.geo.V;
+		}
+
+	}
+
+#else
 #pragma omp parallel  default(none) shared(grid_direction, grid) 
 	{
 #pragma omp for
@@ -1217,6 +1344,7 @@ static int MakeDivImpuls(const grid_directions_t& grid_direction, grid_t& grid)
 		}
 
 	}
+#endif
 	return 0;
 }
 

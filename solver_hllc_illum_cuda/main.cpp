@@ -3,7 +3,7 @@
 #include "global_value.h"
 #include "global_headers.h"
 
-std::string BASE_ADRESS;
+global_files_t glb_files;
 int main(int argc, char* argv[])
 {	
 	MPI_START(argc, argv);	
@@ -13,7 +13,7 @@ int main(int argc, char* argv[])
 	{
 		name_file_settings = "D:\\Desktop\\FilesCourse\\settings_file.txt";
 		std::string foo; int a;
-		if (ReadStartSettings(name_file_settings, a, foo, foo, foo, foo, BASE_ADRESS, foo, a))
+		if (ReadStartSettings(name_file_settings, a, foo, foo, foo, foo, glb_files.base_adress, foo, a))
 		{
 			RETURN_ERR("Err reading default settings file\n");
 		}		
@@ -36,7 +36,7 @@ int main(int argc, char* argv[])
 #endif //MAKE
 
 #if defined SOLVE	
-	RunSolveModule(name_file_settings);
+	RunSolveModule(argc, argv, name_file_settings);
 #endif //SOLVE
 
 #if defined UTILS	

@@ -94,7 +94,7 @@ int InitSendDispIllumArray(const int myid, const int np, const int count_directi
 		disp_illum[i] = disp[i] * base * count_cells;
 		disp_scattering[i] = disp[i] * count_cells;
 	}
-
+#if 0
 	{
 		int len[3 + 1] = { 1,3,1,  1 };
 		MPI_Aint pos[4] = { offsetof(flux_t, d), offsetof(flux_t, v),offsetof(flux_t, p) ,sizeof(flux_t) };
@@ -102,6 +102,7 @@ int InitSendDispIllumArray(const int myid, const int np, const int count_directi
 		MPI_Type_struct(4, len, pos, typ, &MPI_flux_t);
 		MPI_Type_commit(&MPI_flux_t);
 	}
+#endif
 
 	const int local_size = send_count[myid];
 
@@ -721,7 +722,7 @@ int MPI_CalculateIllum(const grid_directions_t& grid_direction, const std::vecto
 	if (myid == 0) // это уйдет, когда все интегралы перейдут в cuda
 	{		
 		ReCalcIllumGlobal(grid_direction.size, grid);		
-		//WriteFileSolution(BASE_ADRESS + "Illum_result.txt", Illum);
+		//WriteFileSolution(glb_files.base_adress + "Illum_result.txt", Illum);
 	}	
 #endif
 		
@@ -813,7 +814,7 @@ int MPI_CalculateIllumAsync(const grid_directions_t& grid_direction, const std::
 
 #pragma omp parallel default(none) shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, \
 		norm, inter_coef_all,local_size, int_scattering_local, phys_local, loc_illum, disp, myid, np, \
-requests, status,flags_send_to_gpu, BASE_ADRESS,send_count,requests_send,disp_illum,timer, \
+requests, status,flags_send_to_gpu, glb_files.base_adress,send_count,requests_send,disp_illum,timer, \
 		size_first_section, requests_first_section, status_first_section,flags_send_to_gpu_first_section,\
  requests_second_section, status_second_section,flags_send_to_gpu_second_section,\
 		requests_send_first_section, requests_send_second_section, sizes_first_section,rq_first_section,first_flag)
@@ -958,7 +959,7 @@ requests, status,flags_send_to_gpu, BASE_ADRESS,send_count,requests_send,disp_il
 //#pragma omp barrier
 ////#pragma omp parallel default(none) shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, \
 ////		norm, inter_coef_all,local_size, int_scattering_local, phys_local, loc_illum, disp, myid, np, \
-////requests, status,flags_send_to_gpu, BASE_ADRESS,send_count,requests_send,disp_illum,timer, \
+////requests, status,flags_send_to_gpu, glb_files.base_adress,send_count,requests_send,disp_illum,timer, \
 ////		size_first_section, requests_first_section, status_first_section,flags_send_to_gpu_first_section,\
 //// requests_second_section, status_second_section,flags_send_to_gpu_second_section,\
 ////		requests_send_first_section, requests_send_second_section)
@@ -1222,7 +1223,7 @@ requests, status,flags_send_to_gpu, BASE_ADRESS,send_count,requests_send,disp_il
 	if (myid == 0) // это уйдет, когда все интегралы перейдут в cuda
 	{
 		ReCalcIllumGlobal(grid_direction.size, grid);
-		//WriteFileSolution(BASE_ADRESS + "Illum_result.txt", Illum);
+		//WriteFileSolution(glb_files.base_adress + "Illum_result.txt", Illum);
 	}
 #endif
 
@@ -1490,7 +1491,7 @@ int MPI_CalculateIllumAsyncTask(const grid_directions_t& grid_direction, const s
 	//MPIWAITPHYS
 #pragma omp parallel default(none) shared(sorted_id_cell, pairs, face_states, vec_x0, vec_x, grid, \
 		norm, inter_coef_all,local_size, int_scattering_local, phys_local, loc_illum, disp, myid, np, \
-requests, status,flags_send_to_gpu, BASE_ADRESS, count,timer,grid_direction,status_hllc,requests_hllc, \
+requests, status,flags_send_to_gpu, glb_files.base_adress, count,timer,grid_direction,status_hllc,requests_hllc, \
 send_count_scattering,disp_scattering, norms, solve_mode)
 	{
 #pragma omp single
@@ -1709,7 +1710,7 @@ send_count_scattering,disp_scattering, norms, solve_mode)
 	if (myid == 0) // это уйдет, когда все интегралы перейдут в cuda
 	{
 		ReCalcIllumGlobal(grid_direction.size, grid);
-		//WriteFileSolution(BASE_ADRESS + "Illum_result.txt", Illum);
+		//WriteFileSolution(glb_files.base_adress + "Illum_result.txt", Illum);
 	}
 #endif
 

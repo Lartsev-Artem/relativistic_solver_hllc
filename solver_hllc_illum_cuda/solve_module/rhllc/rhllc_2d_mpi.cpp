@@ -333,7 +333,7 @@ int MPI_RHLLC(std::string& solve_dir,
 
 #ifdef WRITE_LOG
 	{		
-		remove((BASE_ADRESS + "File_with_Logs_solve" + to_string(myid) + ".txt").c_str());
+		remove((glb_files.base_adress + "File_with_Logs_solve" + to_string(myid) + ".txt").c_str());
 	}
 #endif
 
@@ -546,7 +546,7 @@ int MPI_RHLLC(std::string& solve_dir,
 #ifdef WRITE_LOG
 	 {
 		 ofstream ofile;
-		 ofile.open(BASE_ADRESS + "File_with_Logs_solve" + to_string(myid) + ".txt", std::ios::app);
+		 ofile.open(glb_files.base_adress + "File_with_Logs_solve" + to_string(myid) + ".txt", std::ios::app);
 
 		 if (myid == 0)
 		 {
@@ -675,7 +675,7 @@ int MPI_RHLLC(std::string& solve_dir,
 #ifdef WRITE_LOG
 				 {
 					 ofstream ofile;
-					 ofile.open(BASE_ADRESS + "File_with_Logs_solve.txt", std::ios::app);
+					 ofile.open(glb_files.base_adress + "File_with_Logs_solve.txt", std::ios::app);
 
 					 ofile << "t= " << t << " sol_cnt= " << sol_cnt << '\n';
 					 ofile.close();
@@ -697,7 +697,7 @@ int MPI_RHLLC(std::string& solve_dir,
 #ifdef WRITE_LOG
 					 {
 						 ofstream ofile;
-						 ofile.open(BASE_ADRESS + "File_with_Logs_solve" + to_string(myid) + ".txt", std::ios::app);
+						 ofile.open(glb_files.base_adress + "File_with_Logs_solve" + to_string(myid) + ".txt", std::ios::app);
 						 ofile << "Err cell " << i << '\n';
 						 ofile.close();
 					 }
@@ -729,7 +729,7 @@ int MPI_RHLLC(std::string& solve_dir,
 #ifdef WRITE_LOG
 					 {
 						 ofstream ofile;
-						 ofile.open(BASE_ADRESS + "File_with_Logs_solve" + to_string(myid) + ".txt", std::ios::app);
+						 ofile.open(glb_files.base_adress + "File_with_Logs_solve" + to_string(myid) + ".txt", std::ios::app);
 						 ofile << "Err cell " << i << '\n';
 						 ofile.close();
 					 }

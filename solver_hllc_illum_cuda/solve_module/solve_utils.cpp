@@ -1,102 +1,6 @@
 #ifdef SOLVE
 #include "solve_utils.h"
-
-
-#if NUMBER_OF_MEASUREMENTS == 3 
-void ReBuildNeighStruct(
-	std::vector<int>& neighbours_id_faces, 
-	std::vector<Normals>& normals, 
-	std::vector<Type>& squares_faces,
-	std::vector<Type>& volume,
-	std::vector<Vector3>& centers,
-	std::vector<face_t>& faces, std::vector<elem_t>& cells)
-{	
-	const int N = centers.size();
-	cells.resize(N);	
-
-	int cc = 0;
-	for (int i = 0; i < N * base; i++)
-	{
-		int idx = neighbours_id_faces[i];
-
-		if (idx != -10)
-		{
-			face_t f;
-			f.geo.id_l = i / base; //ячейка
-
-			f.geo.n = normals[i / base].n[i % base];
-			f.geo.S = squares_faces[i];
-
-			cells[i / base].geo.sign_n[i % base] = true;
-			cells[i / base].geo.id_faces[i % base] = cc;
-
-			neighbours_id_faces[i] = -10;
-			if (idx >= 0)
-			{
-				f.geo.id_r = idx / base; //сосед
-
-				cells[idx / base].geo.sign_n[idx % base] = false;
-				cells[idx / base].geo.id_faces[idx % base] = cc;
-
-				neighbours_id_faces[idx] = -10;
-			}
-			else
-			{
-				f.geo.id_r = idx; // код границы
-			}
-
-			faces.push_back(f); // как потом искать с ячейками?
-			cc++;
-		}
-	}
-
-	neighbours_id_faces.clear();
-	normals.clear();
-	squares_faces.clear();
-
-	for (int i = 0; i < N; i++)
-	{
-		cells[i].geo.center = centers[i];
-		cells[i].geo.V = volume[i];
-
-	}
-	
-	volume.clear();
-	centers.clear();
-
-	return;
-}
-#endif //3d
-
-#include "../file_module/reader_bin.h"
-#include "../file_module/writer_bin.h"
-int ReWriteGeoFiles(file_name name_file_geometry_faces, file_name name_file_geometry_cells)
-{
-	grid_t grid;
-	WRITE_LOG("Error reading grid, try read parts geo\n");
-	const std::string name_file_id_neighbors = BASE_ADRESS + "pairs.bin";
-	const std::string name_file_normals = BASE_ADRESS + "normals.bin";
-	const std::string name_file_centers = BASE_ADRESS + "centers.bin";
-	const std::string name_file_squares = BASE_ADRESS + "squares.bin";
-	const std::string name_file_volume = BASE_ADRESS + "volume.bin";
-
-	std::vector<int> neighbours_id_faces;
-	std::vector<Normals> normals;
-	std::vector<Type> squares_faces;
-	std::vector<Type> volume;
-	std::vector<Vector3> centers;
-
-	if (ReadSimpleFileBin(name_file_id_neighbors, neighbours_id_faces)) RETURN_ERR("Error reading file neighbours\n");
-	if (ReadNormalFile(name_file_normals, normals)) RETURN_ERR("Error reading file normals\n");
-	if (ReadSimpleFileBin(name_file_squares, squares_faces)) RETURN_ERR("Error reading file squares_faces\n");
-	if (ReadSimpleFileBin(name_file_volume, volume)) RETURN_ERR("Error reading file volume\n");
-	if (ReadSimpleFileBin(name_file_centers, centers)) RETURN_ERR("Error reading file centers\n");
-
-	ReBuildNeighStruct(neighbours_id_faces, normals, squares_faces, volume, centers, grid.faces, grid.cells);
-	grid.size = grid.cells.size();
-
-	return WriteGeometryGrid(name_file_geometry_cells, name_file_geometry_faces, grid);
-}
+#include "../global_def.h"
 
 
 #include "hllc/hllc_utils.h"
@@ -113,6 +17,17 @@ int HLLC_INIT(file_name file_settings_hllc, hllc_value_t& hllc_set,
 #endif
 
 #else //!USE_MPI
+#if defined RHLLC&& NUMBER_OF_MEASUREMENTS == 3
+		
+	if (InitRHLLC(file_settings_hllc, hllc_set, file_init_value, cells))
+	{
+		D_LD;
+	}
+
+	InitMPI_RHllc(cells);
+
+	return 0;
+#endif
 	return 0;
 #endif//USE_MPI
 	return 0;
@@ -151,11 +66,11 @@ int GetTimeStep(hllc_value_t& hllc_cfg, const grid_t& grid)
 
 int StartLowDimensionTask(file_name main_dir)
 {
-	const std::string name_file_id_neighbors = BASE_ADRESS + "pairs.bin";
-	const std::string name_file_normals = BASE_ADRESS + "normals.bin";
-	const std::string name_file_centers = BASE_ADRESS + "centers.bin";
-	const std::string name_file_squares = BASE_ADRESS + "squares.bin";
-	const std::string name_file_volume = BASE_ADRESS + "volume.bin";
+	const std::string name_file_id_neighbors = glb_files.base_adress + "pairs.bin";
+	const std::string name_file_normals = glb_files.base_adress + "normals.bin";
+	const std::string name_file_centers = glb_files.base_adress + "centers.bin";
+	const std::string name_file_squares = glb_files.base_adress + "squares.bin";
+	const std::string name_file_volume = glb_files.base_adress + "volume.bin";
 
 #if NUMBER_OF_MEASUREMENTS == 3
 	return 0;
@@ -204,11 +119,11 @@ int StartLowDimensionTask(file_name main_dir)
 }
 
 #ifdef RUN_TEST
-int TestDivStream(file_name BASE_ADRESS)
+int TestDivStream(file_name glb_files.base_adress)
 {
-	const std::string name_file_geometry_faces = BASE_ADRESS + "geo_faces.bin";
-	const std::string name_file_geometry_cells = BASE_ADRESS + "geo_cells.bin";
-	const std::string name_file_centers_faces = BASE_ADRESS + "center_face.bin";
+	const std::string name_file_geometry_faces = glb_files.base_adress + "geo_faces.bin";
+	const std::string name_file_geometry_cells = glb_files.base_adress + "geo_cells.bin";
+	const std::string name_file_centers_faces = glb_files.base_adress + "center_face.bin";
 
 	grid_t grid;
 	if (ReadGeometryGrid(name_file_geometry_cells, name_file_geometry_faces, grid))
@@ -225,7 +140,7 @@ int TestDivStream(file_name BASE_ADRESS)
 	std::vector<Vector3> center_cells;
 	ReadSimpleFileBin(name_file_centers_faces, center_cells);
 	TestDivStream(center_cells, grid);
-	WriteFileSolution(BASE_ADRESS+"Solve\\Solve0", std::vector<Type>(), grid.cells); //печать начальной сетки
+	WriteFileSolution(glb_files.base_adress+"Solve\\Solve0", std::vector<Type>(), grid.cells); //печать начальной сетки
 
 	return 0;
 }
@@ -283,6 +198,53 @@ void GetDisp(const int np, const int n, std::vector<int>& disp)
 		for (int i = 1; i < a; i++) // смещения для процессов за ними увеличивается начиная со второго
 			disp[a - i] -= i;
 	}
+}
+
+
+void Init_MPI()
+{
+	// структура потоков
+	{
+		int len[3 + 1] = { 1,3,1,  1 };
+		MPI_Aint pos[4] = { offsetof(flux_t, d), offsetof(flux_t, v),offsetof(flux_t, p) ,sizeof(flux_t) };
+		MPI_Datatype typ[4] = { MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE, MPI_UB };
+		MPI_Type_struct(4, len, pos, typ, &MPI_flux_t);
+		MPI_Type_commit(&MPI_flux_t);
+	}
+
+	// перессылка потоков из ячейки
+	{
+		int len[2 + 1] = { 1,1,1 };
+		MPI_Aint pos[3] = { offsetof(elem_t, phys_val), offsetof(elem_t, conv_val) ,sizeof(elem_t) };
+		MPI_Datatype typ[3] = { MPI_flux_t,MPI_flux_t , MPI_UB };
+		MPI_Type_struct(3, len, pos, typ, &MPI_flux_elem_t);
+		MPI_Type_commit(&MPI_flux_elem_t);
+	}
+
+	// физические и консервативные потоки
+	{
+		int len[2 + 1] = { 1,1,1 };
+		MPI_Aint pos[3] = { offsetof(flux_all_t, phys_val), offsetof(flux_all_t, conv_val) ,sizeof(flux_all_t) };
+		MPI_Datatype typ[3] = { MPI_flux_t,MPI_flux_t , MPI_UB };
+		MPI_Type_struct(3, len, pos, typ, &MPI_flux_all_t);
+		MPI_Type_commit(&MPI_flux_all_t);
+	}
+
+	//настройки динамического расчета
+	{
+		int len[5 + 1] = { 1,1,1,1,1,  1 };
+		MPI_Aint pos[6] = { offsetof(hllc_value_t,T),offsetof(hllc_value_t,CFL),offsetof(hllc_value_t,h)
+			,offsetof(hllc_value_t,print_timer) ,offsetof(hllc_value_t,tau) ,sizeof(hllc_value_t) };
+		MPI_Datatype typ[6] = { MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE, MPI_UB };
+		MPI_Type_struct(6, len, pos, typ, &MPI_hllc_value_t);
+		MPI_Type_commit(&MPI_hllc_value_t);
+	}
+
+	int np, myid;
+	MPI_GET_INF(np, myid);
+	ReadMpiConf(glb_files.base_adress + F_MPI_CONF, myid, np);
+
+	return;
 }
 
 #endif //USE_MP

@@ -14,6 +14,37 @@
 #include "../solve_module/solve_utils.h"
 #endif
 
+int ReadStartSettings(global_files_t& glb_files, solve_mode_t& solve_mode)
+{
+	std::ifstream ifile(glb_files.name_file_settings);
+	if (!ifile.is_open())
+	{
+		RETURN_ERRS("Error : file %s is not open\n", glb_files.name_file_settings.c_str());		
+	}
+
+	std::string str; // переменная для перевода строки при чтении из файла
+
+	ifile >> solve_mode.class_vtk;
+	std::getline(ifile, str);
+
+	std::getline(ifile, glb_files.name_file_vtk);
+	std::getline(ifile, glb_files.name_file_sphere_direction);
+	std::getline(ifile, glb_files.graph_adress);
+	std::getline(ifile, glb_files.illum_geo_adress);
+	std::getline(ifile, glb_files.base_adress);
+	std::getline(ifile, glb_files.solve_adress);
+	ifile >> solve_mode.max_number_of_iter; std::getline(ifile, str);
+	std::getline(ifile, glb_files.hllc_init_value);
+
+	ifile.close();
+
+	glb_files.Build();
+
+#ifdef DEBUG
+	glb_files.print();
+#endif
+	return 0;
+}
 
 int ReadNormalFile(const std::string& name_file_normals, std::vector<Normals>& normals) {
 
@@ -88,7 +119,13 @@ int ReadDataArray(const size_t class_file_vtk, const std::string& main_dir,
 	return 1;
 }
 
-
+int ReadGeometryGrid(const std::string& file_cells, const std::string& file_faces, grid_t& grid)
+{
+	READ_FILE(file_faces.c_str(), grid.faces, geo);
+	READ_FILE(file_cells.c_str(), grid.cells, geo);
+	grid.size = grid.cells.size();
+	return 0;
+}
 #ifdef SOLVE
 #ifdef ILLUM
 int ReadDataArray(const solve_mode_t& mode, file_name main_dir, grid_t& grid)
@@ -122,24 +159,17 @@ int ReadDataArray(const solve_mode_t& mode, file_name main_dir, grid_t& grid)
 	return 0;
 }
 #endif //ILLUM
-int ReadGeometryGrid(const std::string& file_cells, const std::string& file_faces, grid_t& grid)
-{
-	READ_FILE(file_faces.c_str(), grid.faces, geo);
-	READ_FILE(file_cells.c_str(), grid.cells, geo);	
-	grid.size = grid.cells.size();
-	return 0;
-}
 
-int ReadIllumGeometry(const int count_dir,
-	file_name file_x, file_name file_state, file_name file_x0, file_name file_graph, file_name file_res,
+
+int ReadIllumGeometry(const int count_dir, const global_files_t& gbl_files,
 	std::vector<BasePointTetra>& vec_x,
 	std::vector <std::vector<int>>& face_states,
 	std::vector <std::vector<cell_local>>& vec_x0,
 	std::vector < std::vector<int>>& sorted_id_cell,
 	std::vector<Type>& vec_res_bound)
 {
-	if (ReadSimpleFileBin(file_x, vec_x)) return 1;
-	if (ReadSimpleFileBin(file_res, vec_res_bound)) return 1;
+	if (ReadSimpleFileBin(gbl_files.name_file_x, vec_x)) return 1;
+	if (ReadSimpleFileBin(gbl_files.name_file_res, vec_res_bound)) return 1;
 
 	std::vector<int> disp;
 	std::vector<int> send;
@@ -164,9 +194,9 @@ int ReadIllumGeometry(const int count_dir,
 
 	for (int i = 0; i < send[myid]; i++)	
 	{
-		if (ReadSimpleFileBin(file_x0 + std::to_string(disp[myid]+i) + ".bin", vec_x0[i])) return 1;
-		if (ReadSimpleFileBin(file_graph + std::to_string(disp[myid]+i) + ".bin", sorted_id_cell[i])) return 1;
-		if (ReadSimpleFileBin(file_state + std::to_string(disp[myid]+i) + ".bin", face_states[i])) return 1;
+		if (ReadSimpleFileBin(gbl_files.name_file_x0_loc + std::to_string(disp[myid]+i) + ".bin", vec_x0[i])) return 1;
+		if (ReadSimpleFileBin(gbl_files.graph_adress + std::to_string(disp[myid]+i) + ".bin", sorted_id_cell[i])) return 1;
+		if (ReadSimpleFileBin(gbl_files.name_file_state_face + std::to_string(disp[myid]+i) + ".bin", face_states[i])) return 1;
 	}
 
 	return 0;

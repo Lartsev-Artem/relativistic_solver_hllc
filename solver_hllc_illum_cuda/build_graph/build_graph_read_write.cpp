@@ -481,7 +481,7 @@ int WriteFileGraph(const int i, const std::string& name_file_graph, const std::v
 	fclose(file_graph.get());
 
 
-	std::unique_ptr<FILE, int(*)(FILE*)> file_id(fopen((std::string(BASE_ADRESS) + "id_defining_faces" + std::to_string(i) + ".bin").c_str(), "wb"), fclose);
+	std::unique_ptr<FILE, int(*)(FILE*)> file_id(fopen((std::string(glb_files.base_adress) + "id_defining_faces" + std::to_string(i) + ".bin").c_str(), "wb"), fclose);
 	if (!file_id) { printf("file_id is not opened for writing\n"); return 1; }
 
 	int size = id_try_surface.size();
@@ -491,7 +491,7 @@ int WriteFileGraph(const int i, const std::string& name_file_graph, const std::v
 	fclose(file_id.get());
 
 
-	std::unique_ptr<FILE, int(*)(FILE*)> file_dist(fopen((std::string(BASE_ADRESS) + "dist_defining_faces" + std::to_string(i) + ".bin").c_str(), "wb"), fclose);
+	std::unique_ptr<FILE, int(*)(FILE*)> file_dist(fopen((std::string(glb_files.base_adress) + "dist_defining_faces" + std::to_string(i) + ".bin").c_str(), "wb"), fclose);
 	if (!file_dist) { printf("file_dist is not opened for writing\n"); return 1; }
 
 	size = dist_try_surface.size();
@@ -500,7 +500,7 @@ int WriteFileGraph(const int i, const std::string& name_file_graph, const std::v
 
 	fclose(file_dist.get());
 
-	std::unique_ptr<FILE, int(*)(FILE*)> file_x(fopen((std::string(BASE_ADRESS) + "x_defining_faces" + std::to_string(i) + ".bin").c_str(), "wb"), fclose);
+	std::unique_ptr<FILE, int(*)(FILE*)> file_x(fopen((std::string(glb_files.base_adress) + "x_defining_faces" + std::to_string(i) + ".bin").c_str(), "wb"), fclose);
 	if (!file_x) { printf("file_x is not opened for writing\n"); return 1; }
 
 	size = x_try_surface.size();

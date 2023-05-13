@@ -20,20 +20,20 @@ int RunMakeModule(std::string name_file_settings, int a, int b)
 	std::string out_file_grid_vtk;
 	std::string str; int class_vtk; int iter;
 
-	if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, name_file_sphere_direction, name_file_graph, name_file_Illum_geo, BASE_ADRESS, str, iter))
+	if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, name_file_sphere_direction, name_file_graph, name_file_Illum_geo, glb_files.base_adress, str, iter))
 	{
 		RETURN_ERR("Error reading the start settings\n");
 	}
 
 	//-----------файлы с данными сетки. ѕостроены здесь на метки USE_VTK-----------------------
-	const std::string name_file_normals = BASE_ADRESS + "normals.bin";
-	const std::string name_file_cells = BASE_ADRESS + "grid.bin";
-	const std::string name_file_vertex = BASE_ADRESS + "vertex.bin";
-	const std::string name_file_pairs = BASE_ADRESS + "pairs.bin";
+	const std::string name_file_normals = glb_files.base_adress + "normals.bin";
+	const std::string name_file_cells = glb_files.base_adress + "grid.bin";
+	const std::string name_file_vertex = glb_files.base_adress + "vertex.bin";
+	const std::string name_file_pairs = glb_files.base_adress + "pairs.bin";
 	//-------------------читающиес€ файлы, построенные в build_graph---------------------------	
-	const std::string name_file_id_defining_faces = BASE_ADRESS + "pairs.bin";
-	const std::string name_file_x_defining_faces = BASE_ADRESS + "x_defining_faces.bin";
-	const std::string name_file_size = BASE_ADRESS + "Size.txt";  // на ƒќ«јѕ»—№
+	const std::string name_file_id_defining_faces = glb_files.base_adress + "pairs.bin";
+	const std::string name_file_x_defining_faces = glb_files.base_adress + "x_defining_faces.bin";
+	const std::string name_file_size = glb_files.base_adress + "Size.txt";  // на ƒќ«јѕ»—№
 	//--------------------------------создающиес€ файлы----------------------------------------
 	const std::string name_file_state_face = name_file_Illum_geo + "state_face";
 	const std::string name_file_x = name_file_Illum_geo + "X.bin";

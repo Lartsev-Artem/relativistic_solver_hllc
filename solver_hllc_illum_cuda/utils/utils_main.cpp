@@ -8,24 +8,34 @@
 
 int RunUtilsModule(int argc, char* argv[], const std::string& settings)
 {		
+	//MakeSimpleTxtFromData(argc, argv);
+	//WriteGeoFiles(argc, argv);
+
 	//DeleteSolveFiles(argc, argv);
 	//ReduceNameSolveFiles(argc, argv);
 	//CopySolveFiles(argc, argv);
 
-//  CompareFiles(argc, argv);
+	//CompareFiles(argc, argv);
 
-//	ReNumberingGrid(argc, argv);
+	//ReNumberingGrid(argc, argv);
+
+	//GetReNumberGraphMetisToMPI(argc, argv);
+	
+	//RenumberNodesMetis(argc, argv);
+	//GetMpiConfToHLLC(argc, argv);
+
+	//GetReNumberGraphMetis(argc, argv);
 	
 //	ReBuildNetgenToMetis(argc, argv);
 
 //	GetPhysScale();
 
-//	MakeHllcInitFile(BASE_ADRESS);
+//	MakeHllcInitFile(glb_files.base_adress);
 
 #ifdef USE_VTK
 
 //	recalc_grid_data(argc, argv);
-//  MakeHllcInitFromGrid(argc, argv, settings);
+//  MakeHllcInitFromGrid(argc, argv);
 
 //	rebuild_solve(argc, argv, settings);
 //	rebuild_solve(argc, argv);
@@ -36,7 +46,7 @@ int RunUtilsModule(int argc, char* argv[], const std::string& settings)
 
 //	rewrite_vtk_array(argc, argv, settings);
 
-	SetScalarDataVtkFromFile(argc, argv);
+//	SetScalarDataVtkFromFile(argc, argv);
 
 #if NUMBER_OF_MEASUREMENTS == 2
 	// Trace2D(argc, argv);

@@ -45,7 +45,7 @@ size_t WriteFileSolution(const std::string& main_dir, const grid_t& grid)
 
 #if defined HLLC || defined RHLLC
 
-#ifdef Cone	
+#if 0 //def Cone	
 	WRITE_FILE_PHYS((main_dir + "density.bin").c_str(), grid.cells, phys_val.d, Type, DENSITY);
 
 	WRITE_FILE_PHYS((main_dir + "pressure.bin").c_str(), grid.cells, phys_val.p, Type, PRESSURE);

@@ -34,7 +34,7 @@
 #endif
 
 #ifdef RHLLC
-//#define RHLLC_MPI
+#define RHLLC_MPI
 #endif
 
 #endif

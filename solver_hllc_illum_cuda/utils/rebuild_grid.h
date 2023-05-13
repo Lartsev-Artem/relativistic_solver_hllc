@@ -6,6 +6,13 @@
 
 int ReBuildNetgenToVTK2d(int argc, char* argv[]);
 int ReNumberingGrid(int argc, char* argv[]);
+int GetReNumberGraphMetis(int argc, char* argv[]);
+int GetReNumberGraphMetisToMPI(int argc, char* argv[]);
+int GetMpiConfToHLLC(int argc, char* argv[]);
+int WriteGeoFiles(int argc, char* argv[]);
+
+int RenumberNodesMetis(int argc, char* argv[]);
+
 int ReBuildNetgenToMetis(int argc, char* argv[]);
 void GenerateMeshSizeFileNetgen();
 

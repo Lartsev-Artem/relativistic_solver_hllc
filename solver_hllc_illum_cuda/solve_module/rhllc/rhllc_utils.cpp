@@ -110,7 +110,7 @@ Vector3 Velocity(const Vector3& p)
 static int SetRHllcValueDefault(std::vector<elem_t>& cells)
 {
 	std::vector<Vector3> centers;
-	if (ReadSimpleFileBin(BASE_ADRESS + "centers.bin", centers)) RETURN_ERR("Default rhllc value not set\n");
+	if (ReadSimpleFileBin(glb_files.base_adress + "centers.bin", centers)) RETURN_ERR("Default rhllc value not set\n");
 
 	int i = 0;
 	for (auto& el : cells)
@@ -144,18 +144,25 @@ static int SetRHllcValueDefault(std::vector<elem_t>& cells)
 			el.phys_val.v = Vector3(0, 0, 0);
 		}
 #elif defined Cone
-		/*const Type betta = 0.01;
-		const Type a = 1;
-		const Type b = 0.001;
-		Type x = centers[i][0];
-		el.phys_val.d = (3*1e-8 * exp(-x * x / betta) + 1e-12) / DENSITY;
-		el.phys_val.p = (100 * exp(-x * x / betta) + (1e-2)) / PRESSURE;
-		el.phys_val.v = (Vector3(1e4, 0, 0)) / VELOCITY;*/
+		Vector3 x = centers[i];
+		if (Vector2(x[1], x[2]).norm() < 0.01 && x[0] < 0.05)
+		{
+			el.phys_val.d = 0.1;
+			el.phys_val.p = 0.01;
+			el.phys_val.v = Vector3(0.99, 0, 0);
+		}
+		else
+		{
+			el.phys_val.d = 10;
+			el.phys_val.p = 0.01;
+			el.phys_val.v = Vector3(0, 0, 0);
+		}
 
-		const Vector3 x = centers[i];
-		el.phys_val.d = Density(x) / DENSITY;
-		el.phys_val.p = Pressure(x) / PRESSURE;
-		el.phys_val.v = Velocity(x) / VELOCITY;
+		//const Vector3 x = centers[i];
+		//el.phys_val.d = Density(x) / DENSITY;
+		//el.phys_val.p = Pressure(x) / PRESSURE;
+		//el.phys_val.v = Velocity(x) / VELOCITY;
+
 #elif defined Sphere
 		el.phys_val.d = 0.1;
 		el.phys_val.p = 0.1;
@@ -180,14 +187,15 @@ static int SetHllcSettingDefault(hllc_value_t& hllc_set)
 	///hllc_set.h = 0.0007166575761593; //jet
 	hllc_set.tau = 1e-7;
 	hllc_set.CFL = 0.01;
-	hllc_set.print_timer = 0.05;
-	hllc_set.T = 1;
+	hllc_set.print_timer = 0.0001;
+	hllc_set.T = 0.0002;// 1;
 #else //ILUM
 
+	hllc_set.h = 0.0005369329546790;
 	hllc_set.tau = 1e-5;
-	hllc_set.CFL = 0.007;
-	hllc_set.print_timer = 1;
-	hllc_set.T = 50;
+	hllc_set.CFL = 0.01;
+	hllc_set.print_timer = 0.005;
+	hllc_set.T = 0.05;
 
 #if defined Cube
 	//const Type h = 0.0007123669658939; // Soda1d_2

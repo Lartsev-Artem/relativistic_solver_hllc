@@ -15,9 +15,9 @@ int  RunMake1d(int argc, char* argv[]);
 int BuildHLLC_1dTime(int argc, char* argv[]);
 
 int GetPhysScale();
-int MakeHllcInitFile(file_name BASE_ADRESS);
+int MakeHllcInitFile(file_name base_adress);
 
-int MakeHllcInitFromGrid(int argc, char* argv[], file_name name_file_settings);
+int MakeHllcInitFromGrid(int argc, char* argv[]);
 
 int CompareFiles(int argc, char* argv[]);
 #endif

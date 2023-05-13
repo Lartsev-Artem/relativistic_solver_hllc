@@ -77,7 +77,7 @@
 #endif //MAKE
 
 #if defined SOLVE
-	int RunSolveModule(const std::string& name_file_settings);
+	int RunSolveModule(int argc, char* argv[], const std::string& name_file_settings);
 #endif //SOLVE
 
 #if defined UTILS
@@ -145,5 +145,4 @@ int ReadStartSettings(const std::string& name_file_settings, int& class_file_vtk
 	ifile.close();
 	return 0;
 }
-
 #endif //GLOBAL_HEADERS

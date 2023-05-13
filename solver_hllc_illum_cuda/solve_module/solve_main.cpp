@@ -12,6 +12,7 @@
 #include "../file_module/writer_bin.h"
 
 #include "../utils/grid_geometry/geometry_solve.h"
+#include "../utils/grid_geometry/geometry_data.h"
 
 #include "solve_utils.h"
 
@@ -19,6 +20,8 @@
 #include "hllc/hllc_utils.h"  //сделать общий для rhllc и hllc
 
 #include "../cuda/cuda_solve.h"
+
+#include "MPI_utils.h"
 
 solve_mode_t solve_mode;
 
@@ -39,76 +42,52 @@ solve_mode_t solve_mode;
 
 */
 
-int RunSolveModule(const std::string& name_file_settings)
+int RunSolveModule(int argc, char* argv[], const std::string& name_file_settings)
 {
 	int np, myid;
 	MPI_GET_INF(np, myid);
 
-	std::string name_file_vtk;
-	std::string name_file_sphere_direction;
-	std::string adress_graph_file;
-	std::string adress_illum_geo_file;
-	std::string adress_solve;
-	std::string name_file_value_init = BASE_ADRESS + "hllc_init_value.bin";
+	int res_count = 0; // счётчик решений	
+	if (argc > 1)
+	{
+		glb_files.name_file_settings = argv[1];
+		if (argc > 2) res_count = std::stoi(argv[2]);
+	}
+	else
+	{
+		glb_files.name_file_settings = name_file_settings;
+	}
 
-	if (ReadStartSettings(name_file_settings, solve_mode.class_vtk, name_file_vtk, name_file_sphere_direction, adress_graph_file,
-		adress_illum_geo_file, BASE_ADRESS, adress_solve, solve_mode.max_number_of_iter,
-		name_file_value_init))
+	if (ReadStartSettings(glb_files, solve_mode))
 	{
 		RETURN_ERR("Error reading solve settings\n");
 	}
+
 	WRITE_LOG_ERR("start solve module " << myid << "\n");
 
-#if defined HLLC || defined RHLLC
-	StartLowDimensionTask(BASE_ADRESS);
+#if (defined HLLC || defined RHLLC) &&  NUMBER_OF_MEASUREMENTS < 3
+	StartLowDimensionTask(glb_files.glb_files.base_adress);
+	WRITE_LOG_ERR("end low dimension task\n");
+	return 0;
 #endif
 
 #ifdef RUN_TEST
-	TestDivStream(BASE_ADRESS);
+	TestDivStream(glb_files.base_adress);
 	return 0;
 #endif // RUN_TEST
 
-	const std::string name_file_hllc_set = BASE_ADRESS + "hllc_settings.txt";
-
-	//--------------------------Файлы расчётных данных(отдельные файлы по направлениям)-----------------------------------//
-	const std::string name_file_state_face = adress_illum_geo_file + "state_face";
-	const std::string name_file_x0_loc = adress_illum_geo_file + "LocX0";
-	const std::string name_file_x = adress_illum_geo_file + "X.bin";
-
-	//--------------------------Файлы трассировки сквозь внутреннюю границу----------------------------------------//
-	const std::string name_file_dist_try = BASE_ADRESS + "dist_defining_faces";
-	const std::string name_file_id_try = BASE_ADRESS + "id_defining_faces";
-	const std::string name_file_res = adress_illum_geo_file + "ResBound";
-	const std::string name_file_neib = BASE_ADRESS + "pairs.bin";
-
-#if 0
-	//--------------------------Файлы сдвигов по направлениям в расчётных файлах-----------------------------------//
-	const std::string name_file_shift_out = BASE_ADRESS + "ShiftOut";
-	const std::string name_file_shift_res = BASE_ADRESS + "ShiftRes";
-	const std::string name_file_shift_x0 = BASE_ADRESS + "ShiftX0";
-	const std::string name_file_shift_try = BASE_ADRESS + "ShiftTry";
-#endif
-
-	//--------------------------Файлы геометрии--------------------------------------------------------------------//
-	const std::string name_file_geometry_faces = BASE_ADRESS + "geo_faces.bin";
-	const std::string name_file_geometry_cells = BASE_ADRESS + "geo_cells.bin";
-
 	grid_t grid;
-	if (myid == 0)
+
+	if (ReadGeometryGrid(glb_files.name_file_geometry_cells, glb_files.name_file_geometry_faces, grid))
 	{
-		if (ReadGeometryGrid(name_file_geometry_cells, name_file_geometry_faces, grid))
-		{
-			WRITE_LOG("Error reading grid, try read parts geo\n");
-
-			ReWriteGeoFiles(name_file_geometry_faces, name_file_geometry_cells);
-
-			if (ReadGeometryGrid(name_file_geometry_cells, name_file_geometry_faces, grid)) RETURN_ERR("Error reading grid\n");
-		}
-		WRITE_LOG("Reading geometry grid\n");
+#pragma warning "grid on each nodes!"
+		WRITE_LOG_ERR("Error reading grid, try read parts geo\n");
 	}
+	WRITE_LOG("Reading geometry grid\n");
 
 #ifdef USE_MPI
-	MPI_Bcast(&grid.size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	Init_MPI();
+	//MPI_Bcast(&grid.size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 #endif // USE_MPI
 
 	double _clock;
@@ -119,7 +98,7 @@ int RunSolveModule(const std::string& name_file_settings)
 
 #ifdef ILLUM
 	grid_directions_t grid_direction;
-	if (ReadSphereDirectionDecartToSpherical(name_file_sphere_direction, grid_direction)) RETURN_ERR("Error reading the sphere direction\n");
+	if (ReadSphereDirectionDecartToSpherical(glb_files.name_file_sphere_direction, grid_direction)) RETURN_ERR("Error reading the sphere direction\n");
 
 	WRITE_LOG("reading sphere_direction\n");
 
@@ -133,33 +112,31 @@ int RunSolveModule(const std::string& name_file_settings)
 	std::vector < std::vector<int>> sorted_id_cell; 	// Упорядоченные индексы ячеек по данному направлению	
 
 	_clock = -omp_get_wtime();
-	if (ReadIllumGeometry(count_dir, name_file_x, name_file_state_face, name_file_x0_loc,
-		adress_graph_file, name_file_res,
-		vec_x, face_states, vec_x0, sorted_id_cell, vec_res_bound))
+	if (ReadIllumGeometry(count_dir, glb_files, vec_x, face_states, vec_x0, sorted_id_cell, vec_res_bound))
+	{
 		RETURN_ERR("Error fast reading the data grid vtk\n");
-
+	}
 	_clock += omp_get_wtime();
 
 	WRITE_LOG("Reading time of the Illum Geometry file : " << _clock << "\n");
 
-	ReadSimpleFileBin(name_file_neib, pairs);
+	ReadSimpleFileBin(glb_files.name_file_neib, pairs);
 
 	WRITE_LOG_MPI("start Init illum\n", myid);
 
 #ifdef USE_MPI
-	InitSendDispIllumArray(myid, np, grid_direction.size, grid.size);
-
+	InitSendDispIllumArray(myid, np, grid_direction.size, grid.size);	
 	InitPhysOmpMpi(grid.size);
 #endif
 
 	{
-#ifdef USE_CUDA //пока только на основном узле		
+#ifdef USE_CUDA 	
 		SetDevice(0);
 		InitDevice(grid_direction, grid, GetDisp(myid), GetDisp(myid) + GetSend(myid));
 #else
-		grid.InitMemory(grid_direction.size);
+		grid.InitMemory(grid_direction.size);		
 #endif			
-		if (myid == 0) InitIllum(BASE_ADRESS, grid);
+		if (myid == 0) InitIllum(glb_files.base_adress, grid);
 	}
 
 	MPI_INIT(myid, np, grid_direction.size, grid);
@@ -167,72 +144,47 @@ int RunSolveModule(const std::string& name_file_settings)
 #endif //ILLUM
 	//------------------------------------------------------------------------------------------------------------
 
-	//---------------------------------------Solve section--------------------------------------------------------------
-	int res_count = 0; // счётчик решений	
+	//---------------------------------------Solve section--------------------------------------------------------------	
 
 
 #if defined HLLC || defined RHLLC
 	hllc_value_t hllc_cfg;
-	Type t = 0.0;
-	Type cur_timer = 0;
 
-	if (myid == 0)
-	{
-		if (HLLC_INIT(name_file_hllc_set, hllc_cfg, name_file_value_init, grid.cells)) RETURN_ERR("Bad init hllc\n");  //Начальные данные для HLLC
+	if (HLLC_INIT(glb_files.name_file_hllc_set, hllc_cfg, glb_files.hllc_init_value, grid.cells)) RETURN_ERR("Bad init hllc\n");  //Начальные данные для HLLC
 
-#if 0 //def ILLUM		//INIT ILLUM 
-#ifdef USE_MPI
-		MPI_Barrier(MPI_COMM_WORLD); //ждем газодинамического расчёта
-		MPI_CalculateIllumAsync(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid);
-		MPI_Barrier(MPI_COMM_WORLD); //ждем  расчёта излучения
-#else
-		CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
-#endif // USE_MPI
-		CalculateIllumParam(grid_direction, grid);
-#endif
-
-		CREATE_DIR(adress_solve);
-
-		WriteFileSolution(adress_solve + std::to_string(res_count++), grid); //печать начальной сетки
-
-		WRITE_LOG_ERR("Start main task\n");
-	}
-
-	Type full_time = -omp_get_wtime();
-	struct
-	{
-		Type full_time;
-		Type hllc_time;
-		Type illum_time;
-		Type illum_param_time;
-		Type solve_hllc_time;
-		Type step;
-	}timer;
-#ifdef USE_MPI
-	{
-		int len[5 + 1] = { 1,1,1,1,1,  1 };
-		MPI_Aint pos[6] = { offsetof(hllc_value_t,T),offsetof(hllc_value_t,CFL),offsetof(hllc_value_t,h)
-			,offsetof(hllc_value_t,print_timer) ,offsetof(hllc_value_t,tau) ,sizeof(hllc_value_t) };
-		MPI_Datatype typ[6] = { MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE, MPI_UB };
-		MPI_Type_struct(6, len, pos, typ, &MPI_hllc_value_t);
-		MPI_Type_commit(&MPI_hllc_value_t);
-	}
+#ifdef USE_MPI	
 	MPI_Bcast(&hllc_cfg, 1, MPI_hllc_value_t, 0, MPI_COMM_WORLD);
 #endif // USE_MPI
 
+	if (myid == 0)
+	{
+		WriteFileSolution(glb_files.solve_adress + std::to_string(res_count++), grid); //печать начальной сетки
+		WRITE_LOG_ERR("Start main task\n");
+	}
+
+#ifdef DEBUG	
+	CREATE_STRUCT(timer_t, Type, full_time, hllc_time, illum_time, illum_param_time, solve_hllc_time, step) timer;
 	timer.full_time = -omp_get_wtime();
+#endif
 
 	MPI_Barrier(MPI_COMM_WORLD); // ждем пока все считается с дисков
 
 	int skip_count = 0;
-	const int skip_size = solve_mode.class_vtk != 10 ? 10 : 1e10; //10-стационарное излучение (пропускаем всегда)
+	const int skip_size = solve_mode.class_vtk != e_class_grid_static_illum ? 10 : 1e10; //10-стационарное излучение (пропускаем всегда)
+
+	Type t = 0.0;
+	Type cur_timer = 0;
 
 	while (t < hllc_cfg.T)
 	{
-		Type time_step = -omp_get_wtime();
+#ifdef DEBUG		
 		timer.step = -omp_get_wtime();
-
 		timer.hllc_time = -omp_get_wtime();
+#endif
+
+#ifdef RHLLC_MPI
+		RHLLC_3d_MPI(hllc_cfg.tau, grid);
+#else
 #ifdef ILLUM
 		MPI_RHLLC_3d(myid, hllc_cfg.tau, grid);
 #else
@@ -241,65 +193,94 @@ int RunSolveModule(const std::string& name_file_settings)
 			HLLC_STEP(hllc_cfg.tau, grid);
 		}
 #endif
+#endif //RHLLC_MPI
+
+#ifdef DEBUG
 		if (myid == 0)
 		{
-			WRITE_LOG("\n hllc time= " << time_step + omp_get_wtime() << " c\n");
+			WRITE_LOG("\n hllc time= " << timer.step + omp_get_wtime() << " c\n");
 		}
-
 		timer.hllc_time += omp_get_wtime();
+#endif
 
 #ifdef ILLUM
+#ifdef DEBUG
 		timer.illum_time = -omp_get_wtime();
+#endif
 
 		if (skip_count++ % skip_size == 0)
 		{
 #ifdef USE_MPI			
 			MPI_CalculateIllumAsync(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid);
 #ifndef USE_CUDA
+
+			WRITE_LOG_MPI("CalculateIllumParam 1\n", myid);
 			CalculateIllumParam(grid_direction, grid);
+			WRITE_LOG_MPI("CalculateIllumParam 2\n", myid);
 #endif		
 #else
 			CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
 #endif // USE_MPI
 		}
-
+#ifdef DEBUG
 		timer.illum_time += omp_get_wtime();
+		timer.solve_hllc_time = -omp_get_wtime();
+#endif
 
+		
+#ifndef RHLLC_MPI
 		if (myid == 0)
-		{
-			timer.solve_hllc_time = -omp_get_wtime();
+#else
+		{			
 			if (SolveIllumAndHLLC(hllc_cfg.tau, grid) == 1)
 			{
 				WRITE_LOG_ERR("bad illum solve\n");
 				D_LD;
 				//non phys conv value -> continue(надо учесть mpi)
-			}
-			timer.solve_hllc_time += omp_get_wtime();
+			}			
 
 			//energy.swap(prev_energy);
 			//stream.swap(prev_stream);
 		}
+#endif
 #endif //iLLUM
+#ifdef DEBUG
+		timer.solve_hllc_time += omp_get_wtime();
+#endif
 
 		t += hllc_cfg.tau;
+		cur_timer += hllc_cfg.tau;
 
-		if (myid == 0)
+		//GetTimeStep(hllc_cfg, grid); //формирование шага по времени
+
+		if (cur_timer >= hllc_cfg.print_timer)
 		{
-			cur_timer += hllc_cfg.tau;
+#ifdef RHLLC_MPI
 
-			GetTimeStep(hllc_cfg, grid); //формирование шага по времени
-
-			if (cur_timer >= hllc_cfg.print_timer)
+			if (myid != 0)
 			{
-				WriteFileSolution(adress_solve + std::to_string(res_count++), grid);
-
-				WRITE_LOG_ERR("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << " time_step= " << time_step + omp_get_wtime() << " c, time" << full_time + omp_get_wtime() << " c\n");
-				printf("\n t= %f,  tau= %lf,  res_step= %d\n", t, hllc_cfg.tau, res_count);
-				cur_timer = 0;
+				MPI_Send(grid.cells.data() + mpi_conf[myid].left, mpi_conf[myid].right - mpi_conf[myid].left, MPI_flux_elem_t, 0, myid, MPI_COMM_WORLD);
 			}
+			else
+			{
+				for (int tag = 1; tag < np; tag++)
+				{
+					MPI_Recv(grid.cells.data() + mpi_conf[tag].left, mpi_conf[tag].right - mpi_conf[tag].left,
+						MPI_flux_elem_t, tag, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				}
+			}
+#endif
+			if (myid == 0)
+			{
+				GetTimeStep(hllc_cfg, grid); //формирование шага по времени
 
-			time_step += omp_get_wtime();
-			WRITE_LOG("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << " time= " << time_step << " c\n");
+				WriteFileSolution(glb_files.solve_adress + std::to_string(res_count++), grid);
+
+				WRITE_LOG_ERR("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << " time_step= " << timer.step + omp_get_wtime() << " c, time" << timer.full_time + omp_get_wtime() << " c\n");
+				printf("\n t= %f,  tau= %lf,  res_step= %d\n", t, hllc_cfg.tau, res_count);
+
+			}
+			cur_timer = 0;						
 		}
 
 		timer.step += omp_get_wtime();
@@ -312,7 +293,7 @@ int RunSolveModule(const std::string& name_file_settings)
 			<< ", illum_param " << timer.illum_param_time
 			<< ", solve " << timer.solve_hllc_time
 			<< ", step " << timer.step << "\n\n", myid);
-		
+
 	}// while(t < T)
 
 #elif defined ILLUM
@@ -324,7 +305,6 @@ int RunSolveModule(const std::string& name_file_settings)
 	CalculateIllum(grid_direction, face_states, pairs, vec_x0, vec_x, sorted_id_cell, grid, Illum, int_scattering);
 #endif
 
-
 	if (myid == 0)
 	{
 		CalculateIllumParam(grid_direction, grid);
@@ -334,24 +314,20 @@ int RunSolveModule(const std::string& name_file_settings)
 	RETURN_ERR("No solve. Bad config\n");
 #endif
 
+#ifdef DEBUG
 	timer.full_time += omp_get_wtime();
 	WRITE_LOG_MPI("full time= " << timer.full_time << '\n', myid);
-
-
-	full_time += omp_get_wtime();
-
+	printf("Time while(): %f\n", timer.full_time);
+#endif
 
 #ifdef USE_CUDA // только на главном узле		
 	ClearDevice();
 #endif
 
 	if (myid == 0)
-	{
-		printf("Time while(): %f\n", full_time);
-		WriteFileSolution(adress_solve + std::to_string(res_count), grid);
-
+	{		
+		WriteFileSolution(glb_files.solve_adress + std::to_string(res_count), grid);
 		WRITE_LOG_ERR("End solve module\n");
-
 	}
 	return EXIT_SUCCESS;
 }

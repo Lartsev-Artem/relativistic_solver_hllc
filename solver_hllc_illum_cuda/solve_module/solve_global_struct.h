@@ -31,8 +31,7 @@ struct solve_mode_t
 	int max_number_of_iter;
 	Type accuracy;
 	bool use_cuda;
-	int cuda_mod; //1 - все массивы, 0 - min
-	std::string name_file_solve;
+	int cuda_mod; //1 - все массивы, 0 - min	
 	
 	solve_mode_t()
 	{
@@ -41,8 +40,7 @@ struct solve_mode_t
 		max_number_of_iter = 1;
 		accuracy = 1e-5;
 		use_cuda = true;
-		cuda_mod = 1; //1 - все массивы, 0 - min
-		name_file_solve = "Solve";
+		cuda_mod = 1; //1 - все массивы, 0 - min		
 	}
 };
 
@@ -71,6 +69,19 @@ public:
 //private:
 	flux_t(const flux_t& f);
 };
+
+struct flux_all_t
+{
+	flux_t  phys_val;
+	flux_t  conv_val;
+};
+struct mpi_conf_t
+{
+	int left = 0, right = 0;
+	int left_cell_min = 0, left_cell_max = 0;
+	int right_cell_min = 0, right_cell_max = 0;
+};
+extern std::vector<mpi_conf_t> mpi_conf;
 
 struct geo_face_t
 {
@@ -178,9 +189,14 @@ struct grid_t
 		impuls = new Matrix3[size];
 #endif
 #else
-		if (id == 0)
+#ifndef RHLLC_MPI
+		if (id == 0) //если rhllc_mpi, то illum на всех узлах
 		{
 			for (int i = 0; i < size; i++)
+#else
+		{				
+			for (int i = mpi_conf[id].left; i < mpi_conf[id].right; i++)
+#endif
 			{
 				cells[i].illum_val.illum.resize(M * base, 0);
 			}

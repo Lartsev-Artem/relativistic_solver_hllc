@@ -1,5 +1,7 @@
 #if defined UTILS
 #include "rebuild_grid.h"
+#include <algorithm>
+#include <numeric> //iota
 
 #include "../file_module/reader_bin.h"
 #include "../file_module/reader_vtk.h"
@@ -256,6 +258,571 @@ void GenerateMeshSizeFileNetgen()
 	return;
 }
 
+int GetReNumberGraphMetis(int argc, char* argv[])
+{
+	if (argc != 3)
+	{
+		printf("Error input data!\n");
+		printf("Input:\n");
+		printf("path\\metis_file.txt (simple_format)\n");
+		printf("path\\graph.bin\n");		
+		return 1;
+	}
+
+	const std::string metis_file = argv[1];
+	const std::string graph_file = argv[2];
+
+	std::vector<int> metis_nodes;
+	std::vector<int> new_graph; // на i-ой позиции новый номер i-й ячейки
+
+	if (ReadSimpleFileTxt(metis_file, metis_nodes)) RETURN_ERR("Metis file not open\n");
+
+	const int N = metis_nodes.size();
+	new_graph.resize(N, -1);
+
+	int max = *std::max_element(metis_nodes.begin(), metis_nodes.end()) + 1;
+	printf("Number of nodes: %d\n", max);
+	
+	int pos = 0;
+	for (int id = 0; id < max; id++)
+	{
+		for (int i = 0; i < N; i++)
+		{
+			if (metis_nodes[i] == id)
+			{
+				new_graph[pos++] = i;
+			}
+		}
+	}
+
+	if (WriteSimpleFileBin(graph_file, new_graph)) RETURN_ERR("graph not written");
+	if (WriteSimpleFileTxt(graph_file+".txt", new_graph)) RETURN_ERR("graph not written");
+	return 0;
+}
+
+int GetReNumberGraphMetisToMPI(int argc, char* argv[])
+{
+	if (argc != 4)
+	{
+		printf("Error input data!\n");
+		printf("Input:\n");
+		printf("path\\metis_file.txt (simple_format)\n");
+		printf("path\\pairs.bin (after first rebuild!!!) \n");
+		printf("path\\graph.bin\n");
+		return 1;
+	}
+
+	const std::string metis_file = argv[1];
+	const std::string pairs_file = argv[2];
+	const std::string graph_file = argv[3];
+
+	/*std::string metis_file = "D:\\Desktop\\FilesCourse\\Test\\metis\\cone_metis.txt.epart.2.txt";
+	std::string pairs_file = "D:\\Desktop\\FilesCourse\\Test\\metis\\pairs.bin";
+	std::string graph_file = "D:\\Desktop\\FilesCourse\\Test\\metis\\graph_mpi.bin";*/
+
+	std::vector<int> metis_nodes;
+	std::vector<int> pairs;	
+
+	if (ReadSimpleFileTxt(metis_file, metis_nodes)) RETURN_ERR("Metis file not open\n");
+	if (ReadSimpleFileBin(pairs_file, pairs)) RETURN_ERR("pairs file not open\n");
+
+	const int N = metis_nodes.size();	
+
+	int max = *std::max_element(metis_nodes.begin(), metis_nodes.end()) + 1;
+	printf("Number of nodes: %d\n", max);
+
+	int pos = 0;
+
+	std::vector<int> size_claster(max, 0);
+
+	for (int i = 0; i < N; i++)
+	{
+		size_claster[metis_nodes[i]]++;
+	}
+
+	
+	std::vector<int> graph(N, 0);
+	for (int i = 0; i < N; i++) graph[i] = i; // инициализация
+
+	int left = 0;
+	int right = 0;
+	for (int id = 0; id < max; id++)
+	{
+		left = right;
+		right += size_claster[id];
+		
+		int end_id = right - 1;
+		int start_id = left;
+
+		for (int i = left; i < right; i++)
+		{
+			for (int j = 0; j < base; j++)
+			{
+				int neig = pairs[graph[i] * base + j];
+				if (neig / base > N) D_LD;
+
+				if (neig >= 0)
+				{
+					int cell = neig / base;
+					if (cell >= right)
+					{
+						if (end_id< 0) 
+							D_LD;
+						if (i < 0) D_LD;
+						std::swap(graph[end_id--], graph[i--]);						
+						break; // ячейка уже перестроена, пропускаем её
+					}
+
+					if (cell < left)
+					{
+						if (start_id >= N) D_LD;
+						if (i < 0)
+						{
+							D_LD;
+						}
+						std::swap(graph[start_id++], graph[i--]);
+						break; // ячейка уже перестроена, пропускаем её
+					}
+				}
+			}
+		}		
+	}	
+
+	if (WriteSimpleFileBin(graph_file, graph)) RETURN_ERR("graph not written");	
+
+	printf("SUCCESS\n");
+	return 0;
+}
+
+int RenumberNodesMetis(int argc, char* argv[])
+{
+	if (argc != 3)
+	{
+		printf("Error input data!\n");
+		printf("Input:\n");
+		printf("path\\metis_file.txt (simple_format)\n");
+		printf("path\\centers.bin \n");		
+		return 1;
+	}
+	std::string  file_metis = argv[1];
+	std::string  file_centers = argv[2];
+
+	/*std::string  file_metis = "D:\\Desktop\\FilesCourse\\ConeCyl\\conecyl_m_epart_3.txt";
+	std::string  file_centers = "D:\\Desktop\\FilesCourse\\ConeCyl\\centers.bin";*/
+
+	std::vector<int> metis_id; // i-cells, a[i] - id
+	std::vector<Vector3> centers;
+
+	if (ReadSimpleFileTxt(file_metis, metis_id)) RETURN_ERR("error reading metis\n");
+	if (ReadSimpleFileBin(file_centers, centers)) RETURN_ERR("error reading centers\n");
+	
+	int max = *std::max_element(metis_id.begin(), metis_id.end()) + 1;
+	printf("Number of nodes: %d\n", max);
+
+	std::vector<std::pair<Type, Type>> pos(max, std::make_pair(metis_id.size() + 1, -1));
+	Vector3 base_point(0, 0, 0);
+	
+	for (int i = 0; i < metis_id.size(); i++)
+	{
+		int id = metis_id[i];
+		Type r = centers[i][0] - base_point[0];
+
+		pos[id].first = std::min(r, pos[id].first);
+		pos[id].second = std::max(r, pos[id].second);
+	}
+	centers.clear();
+
+	std::vector<std::pair<int, Type>> node_center_point(max);
+	std::pair<int, Type> n(-1, 0);
+	std::generate(node_center_point.begin(), node_center_point.end(), 
+		[&n, &pos] { n.first++; n.second= (pos[n.first].first + pos[n.first].second)/2; return n; });
+
+	std::sort(node_center_point.begin(), node_center_point.end(),
+		[](std::pair<int, Type> l, std::pair<int, Type> r) { return l.second < r.second; });
+
+	
+	std::vector<int> metis_id_new(metis_id.size(), -1);
+	for (int i = 0; i < metis_id.size(); i++)
+	{
+		metis_id_new[i] = node_center_point[metis_id[i]].first;		
+	}
+	
+	WriteSimpleFileTxt(file_metis, metis_id_new);
+
+	for (int i = 0; i < max; i++)
+	{
+		printf("renum nodes %d -> %d\n",i,node_center_point[i].first);
+	}
+
+	return 0;
+}
+
+
+// узлы должны иметь одного соседа. При соседстве  с разными узлами результат не гарантируется
+int GetMpiConfToHLLC(int argc, char* argv[])
+{
+	/*
+	Пока делаем так
+	for(0,N){if face in node -> do, else continue}
+
+	wait mpi rcv
+
+	for(0,N){if cell in node, face not -> do}, else continue
+
+	Да, грани гоняем дважды и по всему диапазону. Но зато это не требует пересортировки граней, а ячейки уже отсортированы
+
+	0 и N можно сократить до min_max on node
+
+	*/
+	if (argc != 4)
+	{
+		printf("Error input data!\n");
+		printf("Input:\n");
+		printf("path\\file_geometry_faces\n");
+		printf("path\\metis.txt file\n");
+		printf("path\\out_file.txt\n");
+
+		printf("path\\FORMAT:\nnp \nid_i \nleft_i \nright_i \nleft_min_i \nleft_max_i \nright_min_i \nright_max_i\n");
+	//	return 1;
+	}
+
+	//std::string file_geometry_faces = argv[1];
+	//std::string  file_metis = argv[2]; // "D:\\Desktop\\FilesCourse\\Test\\metis\\cone_metis.txt.epart.2.txt";
+	//std::string	file_output = argv[3];
+
+	std::string file_geometry_faces = "D:\\Desktop\\FilesCourse\\ConeCyl\\geo_faces.bin";
+	std::string  file_metis = "D:\\Desktop\\FilesCourse\\ConeCyl\\conecyl_m_epart_3.txt";
+	std::string	file_output = "D:\\Desktop\\FilesCourse\\ConeCyl\\mpi_conf.txt";
+
+	grid_t grid;
+	READ_FILE(file_geometry_faces.c_str(), grid.faces, geo);
+
+	std::vector<int> metis_id; // i-cells, a[i] - id
+	if (ReadSimpleFileTxt(file_metis, metis_id)) RETURN_ERR("error reading metis\n");
+
+	int np = *std::max_element(metis_id.begin(), metis_id.end()) + 1;
+
+	std::vector<int> size_claster(np, 0);
+	for (int i = 0; i < metis_id.size(); i++)
+	{
+		size_claster[metis_id[i]]++;
+	}
+
+	metis_id.assign(metis_id.size(), -1);
+	int k = 0;
+	for (int id = 0; id < np; id++)
+	{
+		for (int j = 0; j < size_claster[id]; j++)
+		{
+			metis_id[k++] = id; // new id-cell chain
+		}
+	}
+#ifdef DEBUG
+	{
+		auto res = std::min_element(metis_id.begin(), metis_id.end());
+		if (*res < 0)
+		{
+			RETURN_ERR("Bad new config\n");
+		}
+	}
+#endif
+//	metis_id.clear();
+
+	std::ofstream ofile;
+	OPEN_FSTREAM(ofile, file_output.c_str());
+
+	ofile << np << '\n';
+
+	int disp = 0;
+	for (int id = 0; id < np; id++)
+	{
+		std::vector<int> neig_cells_left;
+		std::vector<int> neig_cells_right;
+		int neig_r = -1;
+		int neig_l = -1;
+
+		int left = disp;
+		int right = left + size_claster[id];
+
+		for (auto& f : grid.faces)
+		{
+			if (f.geo.id_l >= left && f.geo.id_l < right) //текущий узел
+			{
+				if ((f.geo.id_r < left || f.geo.id_r >= right) && f.geo.id_r >= 0) //сосед на другом узле
+				{
+					if(neig_r==-1) neig_r = metis_id[f.geo.id_r];
+					else if (neig_r != metis_id[f.geo.id_r])
+					{
+						RETURN_ERR("bad config neig right\n");
+					}
+											
+					if (metis_id[f.geo.id_r] != id + 1)
+					{
+					//	RETURN_ERR("bad config neig right\n");
+					}
+					neig_cells_right.push_back(f.geo.id_r); //id соседей в глобальной нумерации					
+				}
+			}
+
+			if (f.geo.id_r >= left && f.geo.id_r < right) //текущий узел
+			{
+				if ((f.geo.id_l < left || f.geo.id_l >= right) && f.geo.id_l >= 0) //сосед на другом узле
+				{
+					int buf = metis_id[f.geo.id_l];
+					if (neig_l == -1) neig_l = metis_id[f.geo.id_l];
+					else if (neig_l != metis_id[f.geo.id_l])
+					{
+						RETURN_ERR("bad config neig left\n");
+					}
+
+					
+					if (metis_id[f.geo.id_l] != id - 1)
+					{
+					//	RETURN_ERR("bad config neig left\n");
+					}
+					neig_cells_left.push_back(f.geo.id_l); //id соседей в глобальной нумерации					
+				}
+			}
+		}
+
+		std::sort(neig_cells_left.begin(), neig_cells_left.end());
+		std::sort(neig_cells_right.begin(), neig_cells_right.end());
+
+		auto last = std::unique(neig_cells_left.begin(), neig_cells_left.end());
+		neig_cells_left.erase(last, neig_cells_left.end());
+
+		last = std::unique(neig_cells_right.begin(), neig_cells_right.end());
+		neig_cells_right.erase(last, neig_cells_right.end());
+
+		ofile << id << '\n';
+
+		ofile << left << '\n';
+		ofile << right << '\n';
+
+		{
+			if (neig_cells_left.size())
+			{
+				ofile << *std::min_element(neig_cells_left.begin(), neig_cells_left.end()) << '\n';
+				ofile << *std::max_element(neig_cells_left.begin(), neig_cells_left.end()) << '\n';
+			}
+			else
+			{
+				ofile << -1 << '\n' << -1 << '\n';
+			}
+
+			if (neig_cells_right.size())
+			{
+				ofile << *std::min_element(neig_cells_right.begin(), neig_cells_right.end()) << '\n';
+				ofile << *std::max_element(neig_cells_right.begin(), neig_cells_right.end()) << '\n';
+			}
+			else
+			{
+				ofile << -1 << '\n' << -1 << '\n';
+			}
+		}
+
+		//ofile << neig_cells_left.size() << '\n';
+		//ofile << neig_cells_right.size() << '\n';
+
+		disp += size_claster[id];
+	}
+
+	ofile.close();
+	return 0;
+}
+
+int GetMpiConfToHLLC_debug_manual(int argc, char* argv[])
+{
+	/*
+	Пока делаем так
+	for(0,N){if face in node -> do, else continue}
+
+	wait mpi rcv
+
+	for(0,N){if cell in node, face not -> do}, else continue
+
+	Да, грани гоняем дважды и по всему диапазону. Но зато это не требует пересортировки граней, а ячейки уже отсортированы
+
+	0 и N можно сократить до min_max on node
+
+	*/
+	if (argc != 4)
+	{
+		printf("Error input data!\n");
+		printf("Input:\n");
+		printf("path\\file_geometry_faces\n");
+		printf("path\\metis.txt file\n");
+		printf("path\\out_file.txt\n");
+
+		printf("path\\FORMAT:\nnp \nid_i \nleft_i \nright_i \nleft_min_i \nleft_max_i \nright_min_i \nright_max_i\n");
+		//	return 1;
+	}
+
+	//std::string file_geometry_faces = argv[1];
+	//std::string  file_metis = argv[2]; // "D:\\Desktop\\FilesCourse\\Test\\metis\\cone_metis.txt.epart.2.txt";
+	//std::string	file_output = argv[3];
+
+	std::string file_geometry_faces = "D:\\Desktop\\FilesCourse\\ConeCyl\\geo_faces.bin";
+	std::string  file_metis = "D:\\Desktop\\FilesCourse\\ConeCyl\\conecyl_m_epart_3.txt";
+	std::string	file_output = "D:\\Desktop\\FilesCourse\\ConeCyl\\mpi_conf.txt";
+
+	grid_t grid;
+	READ_FILE(file_geometry_faces.c_str(), grid.faces, geo);
+
+	std::vector<int> metis_id; // i-cells, a[i] - id
+	if (ReadSimpleFileTxt(file_metis, metis_id)) RETURN_ERR("error reading metis\n");
+
+	int np = *std::max_element(metis_id.begin(), metis_id.end()) + 1;
+
+	std::vector<int> size_claster(np, 0);
+	for (int i = 0; i < metis_id.size(); i++)
+	{
+		size_claster[metis_id[i]]++;
+	}
+
+	metis_id.assign(metis_id.size(), -1);
+	int k = 0;
+	for (int id = 0; id < np; id++)
+	{
+		for (int j = 0; j < size_claster[id]; j++)
+		{
+			metis_id[k++] = id; // new id-cell chain
+		}
+	}
+#ifdef DEBUG
+	{
+		auto res = std::min_element(metis_id.begin(), metis_id.end());
+		if (*res < 0)
+		{
+			RETURN_ERR("Bad new config\n");
+		}
+	}
+#endif
+	//	metis_id.clear();
+
+	std::ofstream ofile;
+	OPEN_FSTREAM(ofile, file_output.c_str());
+
+	ofile << np << '\n';
+
+	int disp = 0;
+	for (int id = 0; id < np; id++)
+	{
+		/*std::vector<int> neig_cells_left;
+		std::vector<int> neig_cells_right;*/
+		std::vector < std::vector<int>> neig_cells_left(np);
+		std::vector < std::vector<int>> neig_cells_right(np);
+		int neig_r = -1;
+		int neig_l = -1;
+
+		int left = disp;
+		int right = left + size_claster[id];
+
+		for (auto& f : grid.faces)
+		{
+			if (f.geo.id_l >= left && f.geo.id_l < right) //текущий узел
+			{
+				if ((f.geo.id_r < left || f.geo.id_r >= right) && f.geo.id_r >= 0) //сосед на другом узле
+				{
+					if (neig_r == -1) neig_r = metis_id[f.geo.id_r];
+					else if (neig_r != metis_id[f.geo.id_r])
+					{
+						//RETURN_ERR("bad config neig right\n");
+					}
+
+					if (metis_id[f.geo.id_r] != id + 1)
+					{
+						//	RETURN_ERR("bad config neig right\n");
+					}
+					neig_cells_right[metis_id[f.geo.id_r]].push_back(f.geo.id_r); //id соседей в глобальной нумерации					
+				}
+			}
+
+			if (f.geo.id_r >= left && f.geo.id_r < right) //текущий узел
+			{
+				if ((f.geo.id_l < left || f.geo.id_l >= right) && f.geo.id_l >= 0) //сосед на другом узле
+				{
+					int buf = metis_id[f.geo.id_l];
+					if (neig_l == -1) neig_l = metis_id[f.geo.id_l];
+					else if (neig_l != metis_id[f.geo.id_l])
+					{
+						//RETURN_ERR("bad config neig left\n");
+					}
+
+
+					if (metis_id[f.geo.id_l] != id - 1)
+					{
+						//	RETURN_ERR("bad config neig left\n");
+					}
+					neig_cells_left[metis_id[f.geo.id_l]].push_back(f.geo.id_l); //id соседей в глобальной нумерации					
+				}
+			}
+		}
+
+		std::sort(neig_cells_left.begin(), neig_cells_left.end());
+		std::sort(neig_cells_right.begin(), neig_cells_right.end());
+
+		auto last = std::unique(neig_cells_left.begin(), neig_cells_left.end());
+		neig_cells_left.erase(last, neig_cells_left.end());
+
+		last = std::unique(neig_cells_right.begin(), neig_cells_right.end());
+		neig_cells_right.erase(last, neig_cells_right.end());
+
+		ofile << id << '\n';
+
+		ofile << left << '\n';
+		ofile << right << '\n';
+
+		{
+			if (neig_cells_left[id].size())
+			{
+				ofile << *std::min_element(neig_cells_left[id].begin(), neig_cells_left[id].end()) << '\n';
+				ofile << *std::max_element(neig_cells_left[id].begin(), neig_cells_left[id].end()) << '\n';
+			}
+			else
+			{
+				ofile << -1 << '\n' << -1 << '\n';
+			}
+
+			if (neig_cells_right[id].size())
+			{
+				ofile << *std::min_element(neig_cells_right[id].begin(), neig_cells_right[id].end()) << '\n';
+				ofile << *std::max_element(neig_cells_right[id].begin(), neig_cells_right[id].end()) << '\n';
+			}
+			else
+			{
+				ofile << -1 << '\n' << -1 << '\n';
+			}
+		}
+
+		//ofile << neig_cells_left.size() << '\n';
+		//ofile << neig_cells_right.size() << '\n';
+
+		disp += size_claster[id];
+	}
+
+	ofile.close();
+	return 0;
+}
+
+#include "grid_geometry/geometry_data.h"
+int WriteGeoFiles(int argc, char* argv[])
+{
+	if (argc != 2)
+	{
+		printf("Error input data!\n");
+		printf("Input:\n");
+		printf("path\\base_adress\n");		
+		return 1;
+	}
+	glb_files.base_adress = argv[1];
+	std::string name_file_geometry_faces = glb_files.base_adress + F_GEO_FACES;
+	std::string name_file_geometry_cells = glb_files.base_adress + F_GEO_CELLS;
+
+	ReWriteGeoFiles(name_file_geometry_faces, name_file_geometry_cells);
+
+	return 0;
+}
 
 #ifdef USE_VTK
 static int WriteDataToGrid(file_name name_file_grid, file_name name_file_data, file_name name_file_output, file_name name_data) 
@@ -269,6 +836,7 @@ static int WriteDataToGrid(file_name name_file_grid, file_name name_file_data, f
 	vtkSmartPointer<vtkDoubleArray> DataArray = vtkSmartPointer<vtkDoubleArray>::New();
 
 	std::vector<Type> vector_data;
+	//std::vector<int> vector_data;
 
 	std::string formats = name_file_data.substr(name_file_data.find(".") + 1, 3);
 	if (formats == "txt")

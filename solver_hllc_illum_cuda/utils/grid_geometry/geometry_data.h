@@ -27,5 +27,6 @@ int SetVertexMatrix(const size_t number_cell, const vtkSmartPointer<vtkUnstructu
 #endif //USE_VTK
 
 int SetTypeOfBound(const std::vector<Vector3>& centers, const std::vector<Normals>& normals, std::vector<int>& all_pairs_face);
+int ReWriteGeoFiles(file_name name_file_geometry_faces, file_name name_file_geometry_cells);
 
 #endif // !GEOMETRY_DATA

@@ -134,9 +134,9 @@ static int grid_clear_device(grid_device_t*& grid_device)
 static int InitDevice(grid_directions_device_t*& grid_dir_device, grid_device_t*& grid_device, 
     const grid_directions_t& grid_dir_host, grid_t& grid_host, const int start, const int end)
 {    
-    const std::string name_file_normals = BASE_ADRESS + "normals.bin";
-    const std::string name_file_squares = BASE_ADRESS + "squares.bin";
-    const std::string name_file_volume = BASE_ADRESS + "volume.bin";
+    const std::string name_file_normals = glb_files.base_adress + "normals.bin";
+    const std::string name_file_squares = glb_files.base_adress + "squares.bin";
+    const std::string name_file_volume = glb_files.base_adress + "volume.bin";
 
     std::vector<Normals> normals;
     std::vector<Type> squares_faces;

@@ -3,8 +3,6 @@
 #include "solve_global_struct.h"
 #include "solve_config.h"
 
-extern std::string BASE_ADRESS;
-
 flux_t::flux_t()
 {
 	d = 0;
@@ -148,6 +146,8 @@ grid_t::~grid_t()
 #ifdef  USE_MPI
 MPI_Datatype MPI_flux_t;
 MPI_Datatype MPI_hllc_value_t;
+MPI_Datatype MPI_flux_all_t;
+MPI_Datatype MPI_flux_elem_t;
 #endif //  USE_MPI
 
 #endif //SOVLE

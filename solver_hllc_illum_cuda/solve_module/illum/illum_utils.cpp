@@ -307,6 +307,42 @@ int SolveIllumAndHLLC(const Type tau, grid_t& grid)
 		}				
 	}	
 #endif
+
+#ifdef RHLLC_MPI
+	Type min = 1;
+	int ret_flag = 0;
+
+	int id, np;
+	MPI_GET_INF(np, id);
+	int left = mpi_conf[id].left;
+	int right = mpi_conf[id].right;
+
+#pragma omp parallel  default(none) firstprivate(tau, left, right) shared(ret_flag, grid) 
+	{		
+#pragma omp for schedule(static, 200) //почему это хуже??
+		for (int i = left; i < right; i++)
+		{
+			elem_t& el = grid.cells[i];
+
+#ifdef USE_CUDA
+			el.conv_val.v += tau * (-grid.divimpuls[i] * 1);  //- tau*(stream[i][0] - prev_stream[i][0]) / tau / c / c);  // +F_g //vx
+			el.conv_val.p += tau * (-grid.divstream[i]); //  tau*(-(energy[i] - prev_energy[i]) / tau / c)  //+F_g.dot(vel)  //e			
+
+#else
+			el.conv_val.v += tau * (-el.illum_val.div_impuls * 1);  //- tau*(stream[i][0] - prev_stream[i][0]) / tau / c / c);  // +F_g //vx
+			el.conv_val.p += tau * (-el.illum_val.div_stream); //  tau*(-(energy[i] - prev_energy[i]) / tau / c)  //+F_g.dot(vel)  //e			
+#endif
+#ifdef DEBUG
+			if (el.conv_val.p - sqrt(el.conv_val.d * el.conv_val.d + el.conv_val.v.dot(el.conv_val.v)) < 0)
+			{
+				ret_flag = 1;// return 1;
+			}
+#endif
+		}
+	}
+	return ret_flag;
+#else
+
 	Type min = 1;	
 	int ret_flag = 0;
 
@@ -335,6 +371,9 @@ int SolveIllumAndHLLC(const Type tau, grid_t& grid)
 		}
 	}
 	return ret_flag;
+#endif
+
+	return 0;
 }
 
 int InitIllum(file_name main_dir, grid_t& grid)

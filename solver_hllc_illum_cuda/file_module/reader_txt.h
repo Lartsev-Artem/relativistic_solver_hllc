@@ -11,7 +11,7 @@ size_t ReadSimpleFileTxt(const Str_Type name_file, std::vector<T>& data_array) {
 	// Файл должен содержать в первой строке число элементов. Далее последовательные данные
 
 	std::ifstream ifile;
-	OPEN_FSTREAM(ifile, name_file.c_str());
+	OPEN_FSTREAM(ifile, name_file);
 
 	int size;
 	ifile >> size;

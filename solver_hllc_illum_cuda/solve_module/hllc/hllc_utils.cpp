@@ -56,7 +56,7 @@ int HllcGetTimeStep(hllc_value_t& hllc_set, const std::vector<elem_t>& cells) {
 static int SetHllcValueDefault(std::vector<elem_t>& cells)
 {
 	std::vector<Vector3> centers;
-	if (ReadSimpleFileBin(BASE_ADRESS + "centers.bin", centers)) RETURN_ERR("Default hllc value not set\n");
+	if (ReadSimpleFileBin(glb_files.base_adress + "centers.bin", centers)) RETURN_ERR("Default hllc value not set\n");
 
 	int i = 0;
 	for (auto& el : cells)

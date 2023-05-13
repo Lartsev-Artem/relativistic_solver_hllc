@@ -47,25 +47,25 @@ int RunBuildModule(const std::string& name_file_settings)
 	std::string str;
 	int iter;
 
-	if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, name_file_sphere_direction, name_file_graph, str, BASE_ADRESS, str, iter))
+	if (ReadStartSettings(name_file_settings, class_vtk, name_file_vtk, name_file_sphere_direction, name_file_graph, str, glb_files.base_adress, str, iter))
 	{
 		RETURN_ERR("Error reading build settings\n");
 	}
-	std::remove((BASE_ADRESS + "File_Logs.txt").c_str());
+	std::remove((glb_files.base_adress + "File_Logs.txt").c_str());
 
-	std::string name_file_normals = BASE_ADRESS + "normals.bin";
-	std::string name_file_pairs = BASE_ADRESS + "pairs.bin";
-	std::string name_file_inner_boundary = BASE_ADRESS + "inner_bound.txt";
-	std::string name_file_init_boundary = BASE_ADRESS + "init_boundary.txt";
-	std::string name_file_face_and_id = BASE_ADRESS + "faceId.txt";
+	std::string name_file_normals = glb_files.base_adress + "normals.bin";
+	std::string name_file_pairs = glb_files.base_adress + "pairs.bin";
+	std::string name_file_inner_boundary = glb_files.base_adress + "inner_bound.txt";
+	std::string name_file_init_boundary = glb_files.base_adress + "init_boundary.txt";
+	std::string name_file_face_and_id = glb_files.base_adress + "faceId.txt";
 
-	std::string name_file_squares = BASE_ADRESS + "squares.bin";
-	std::string name_file_volume = BASE_ADRESS + "volume.bin";
-	std::string name_file_centers = BASE_ADRESS + "centers.bin";
+	std::string name_file_squares = glb_files.base_adress + "squares.bin";
+	std::string name_file_volume = glb_files.base_adress + "volume.bin";
+	std::string name_file_centers = glb_files.base_adress + "centers.bin";
 
-	std::string name_file_centers_face = BASE_ADRESS + "center_face.bin";
+	std::string name_file_centers_face = glb_files.base_adress + "center_face.bin";
 
-	remove((std::string(BASE_ADRESS) + "File_Logs.txt").c_str());
+	remove((std::string(glb_files.base_adress) + "File_Logs.txt").c_str());
 
 	double t = 0;
 #ifdef WriteFiles
@@ -140,17 +140,17 @@ int RunBuildModule(const std::string& name_file_settings)
 #endif // USE_OMP
 
 
-		//	std::unique_ptr<FILE, int(*)(FILE*)> file_id(fopen((std::string(BASE_ADRESS) + "id_defining_faces" + ".bin").c_str(), "wb"), fclose);
+		//	std::unique_ptr<FILE, int(*)(FILE*)> file_id(fopen((std::string(glb_files.base_adress) + "id_defining_faces" + ".bin").c_str(), "wb"), fclose);
 		//	if (!file_id) { printf("file_id is not opened for writing\n"); return 1; }
 
-		//	std::unique_ptr<FILE, int(*)(FILE*)> file_dist(fopen((std::string(BASE_ADRESS) + "dist_defining_faces" + ".bin").c_str(), "wb"), fclose);
+		//	std::unique_ptr<FILE, int(*)(FILE*)> file_dist(fopen((std::string(glb_files.base_adress) + "dist_defining_faces" + ".bin").c_str(), "wb"), fclose);
 		//	if (!file_dist) { printf("file_dist is not opened for writing\n"); return 1; }
 
 
-		//	std::unique_ptr<FILE, int(*)(FILE*)> file_x(fopen((std::string(BASE_ADRESS) + "x_defining_faces" + ".bin").c_str(), "wb"), fclose);
+		//	std::unique_ptr<FILE, int(*)(FILE*)> file_x(fopen((std::string(glb_files.base_adress) + "x_defining_faces" + ".bin").c_str(), "wb"), fclose);
 		//	if (!file_x) { printf("file_x is not opened for writing\n"); return 1; }
 
-		//	std::unique_ptr<FILE, int(*)(FILE*)> file_shift_try(fopen((std::string(BASE_ADRESS) + "ShiftTry" + ".bin").c_str(), "wb"), fclose);
+		//	std::unique_ptr<FILE, int(*)(FILE*)> file_shift_try(fopen((std::string(glb_files.base_adress) + "ShiftTry" + ".bin").c_str(), "wb"), fclose);
 		//	if (!file_x) { printf("file_x is not opened for writing\n"); return 1; }
 
 
@@ -320,7 +320,7 @@ int RunBuildModule(const std::string& name_file_settings)
 		//	fclose(file_x.get());
 		//	fclose(file_shift_try.get());
 
-		std::ofstream ofile2(std::string(BASE_ADRESS) + "Size.txt");
+		std::ofstream ofile2(std::string(glb_files.base_adress) + "Size.txt");
 		ofile2 << id_try_size << '\n';
 		// "id_try_size: " << id_try_size;
 		/*ofile2 << "\ndist_try_size: " << dist_try_size;
