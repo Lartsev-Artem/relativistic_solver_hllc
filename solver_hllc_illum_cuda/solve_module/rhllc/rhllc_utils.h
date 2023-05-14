@@ -31,6 +31,7 @@ Vector3 Velocity(const Vector3& p);
 #if NUMBER_OF_MEASUREMENTS == 3 && defined RHLLC_MPI
 int ReadMpiConf(const std::string& file, int myid, int np);
 int InitMPI_RHllc(const std::vector<elem_t>& cells);
+int GatherRhllc(int myid, int np, std::vector<elem_t>& cells);
 #endif
 
 #endif //RHLLC

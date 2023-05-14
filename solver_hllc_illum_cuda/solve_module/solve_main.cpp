@@ -18,6 +18,7 @@
 
 #include"illum/illum_utils.h"
 #include "hllc/hllc_utils.h"  //сделать общий для rhllc и hllc
+#include "rhllc/rhllc_utils.h"  //сделать общий для rhllc и hllc
 
 #include "../cuda/cuda_solve.h"
 
@@ -251,29 +252,17 @@ int RunSolveModule(int argc, char* argv[], const std::string& name_file_settings
 		t += hllc_cfg.tau;
 		cur_timer += hllc_cfg.tau;
 
-		//GetTimeStep(hllc_cfg, grid); //формирование шага по времени
+#ifdef HLLC
+		GetTimeStep(hllc_cfg, grid); //формирование шага по времени
+#endif
 
 		if (cur_timer >= hllc_cfg.print_timer)
 		{
-#ifdef RHLLC_MPI
-
-			if (myid != 0)
-			{
-				MPI_Send(grid.cells.data() + mpi_conf[myid].left, mpi_conf[myid].right - mpi_conf[myid].left, MPI_flux_elem_t, 0, myid, MPI_COMM_WORLD);
-			}
-			else
-			{
-				for (int tag = 1; tag < np; tag++)
-				{
-					MPI_Recv(grid.cells.data() + mpi_conf[tag].left, mpi_conf[tag].right - mpi_conf[tag].left,
-						MPI_flux_elem_t, tag, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-				}
-			}
+#ifdef RHLLC_MPI			
+			GatherRhllc(myid, np, grid.cells);
 #endif
 			if (myid == 0)
-			{
-				GetTimeStep(hllc_cfg, grid); //формирование шага по времени
-
+			{				
 				WriteFileSolution(glb_files.solve_adress + std::to_string(res_count++), grid);
 
 				WRITE_LOG_ERR("\nt= " << t << "; tau= " << hllc_cfg.tau << "; step= " << res_count << " time_step= " << timer.step + omp_get_wtime() << " c, time" << timer.full_time + omp_get_wtime() << " c\n");
@@ -285,9 +274,11 @@ int RunSolveModule(int argc, char* argv[], const std::string& name_file_settings
 
 		timer.step += omp_get_wtime();
 
-#ifdef USE_MPI		
+#if defined USE_MPI	&& !defined RHLLC_MPI
 		MPI_Bcast(&hllc_cfg, 1, MPI_hllc_value_t, 0, MPI_COMM_WORLD);
 #endif
+
+		MPI_Barrier(MPI_COMM_WORLD);
 
 		WRITE_LOG_MPI("t= " << t << ", hllc= " << timer.hllc_time << ", illum " << timer.illum_time
 			<< ", illum_param " << timer.illum_param_time
@@ -322,6 +313,10 @@ int RunSolveModule(int argc, char* argv[], const std::string& name_file_settings
 
 #ifdef USE_CUDA // только на главном узле		
 	ClearDevice();
+#endif
+
+#ifdef RHLLC_MPI			
+	GatherRhllc(myid, np, grid.cells);
 #endif
 
 	if (myid == 0)

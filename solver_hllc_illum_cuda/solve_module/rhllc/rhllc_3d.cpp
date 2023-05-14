@@ -1033,9 +1033,14 @@ int MPI_RHLLC_3d(const int myid, const Type tau, grid_t& grid)
 					//phys_bound_val.p = 1; // (100 + (1e-2)) / PRESSURE;
 					//phys_bound_val.v = Vector3(1e-4, 0, 0);// (Vector3(1e4, 0, 0)) / VELOCITY;
 					
-					phys_bound_val.d = Density(Vector3::Zero()) / DENSITY;
+					/*phys_bound_val.d = Density(Vector3::Zero()) / DENSITY;
 					phys_bound_val.p = Pressure(Vector3::Zero()) / PRESSURE;
-					phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;
+					phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;*/
+
+					phys_bound_val.d = 1;
+					phys_bound_val.p = 1;
+					phys_bound_val.v = Vector3(1e-2, 0, 0);
+
 					rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #else
 					bound_val = cell->conv_val;

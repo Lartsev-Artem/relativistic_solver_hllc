@@ -9,6 +9,9 @@ int RHllcGetTimeStep(hllc_value_t& hllc_set, const std::vector<elem_t>& cells)
 
 	hllc_set.tau = hllc_set.CFL * hllc_set.h;
 
+	hllc_set.print_timer = hllc_set.tau*0.1;
+	hllc_set.T = hllc_set.tau * 3;
+
 	if (hllc_set.tau < 0)
 	{
 		EXIT_ERRS("Error tau = %lf\n", hllc_set.tau);
@@ -143,7 +146,7 @@ static int SetRHllcValueDefault(std::vector<elem_t>& cells)
 			el.phys_val.p = 10;
 			el.phys_val.v = Vector3(0, 0, 0);
 		}
-#elif defined Cone
+#elif defined Cone_JET
 		Vector3 x = centers[i];
 		if (Vector2(x[1], x[2]).norm() < 0.01 && x[0] < 0.05)
 		{
@@ -162,6 +165,13 @@ static int SetRHllcValueDefault(std::vector<elem_t>& cells)
 		//el.phys_val.d = Density(x) / DENSITY;
 		//el.phys_val.p = Pressure(x) / PRESSURE;
 		//el.phys_val.v = Velocity(x) / VELOCITY;
+#elif defined Cone
+
+		{
+			el.phys_val.d = 1;
+			el.phys_val.p = 0.1;
+			el.phys_val.v = Vector3(0, 0, 0);
+		}
 
 #elif defined Sphere
 		el.phys_val.d = 0.1;
@@ -194,8 +204,8 @@ static int SetHllcSettingDefault(hllc_value_t& hllc_set)
 	hllc_set.h = 0.0005369329546790;
 	hllc_set.tau = 1e-5;
 	hllc_set.CFL = 0.01;
-	hllc_set.print_timer = 0.005;
-	hllc_set.T = 0.05;
+	hllc_set.print_timer = 1e-5;
+	hllc_set.T = 1e-5*2-1e-6;
 
 #if defined Cube
 	//const Type h = 0.0007123669658939; // Soda1d_2

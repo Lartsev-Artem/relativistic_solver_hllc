@@ -145,6 +145,7 @@ grid_t::~grid_t()
 
 #ifdef  USE_MPI
 MPI_Datatype MPI_flux_t;
+MPI_Datatype MPI_flux_illum_elem_t;
 MPI_Datatype MPI_hllc_value_t;
 MPI_Datatype MPI_flux_all_t;
 MPI_Datatype MPI_flux_elem_t;

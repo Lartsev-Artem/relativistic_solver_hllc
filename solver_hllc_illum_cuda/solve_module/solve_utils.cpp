@@ -58,7 +58,8 @@ int GetTimeStep(hllc_value_t& hllc_cfg, const grid_t& grid)
 #endif	
 
 #else //!USE_MPI
-	return 0;
+	return RHllcGetTimeStep(hllc_cfg, grid.cells);
+	
 #endif//USE_MPI
 	return 0;
 }
@@ -240,9 +241,43 @@ void Init_MPI()
 		MPI_Type_commit(&MPI_hllc_value_t);
 	}
 
+
+#if !defined USE_CUDA && defined RHLLC_MPI
+#ifdef ILLUM
+	static MPI_Datatype MPI_illum_val_t;
+	{
+		int len[5 + 1] = { 1,3,9,1,3, 1 };
+		MPI_Aint pos[6] = { offsetof(illum_value_t, energy), offsetof(illum_value_t, stream),offsetof(illum_value_t, impuls),
+			offsetof(illum_value_t, div_stream), offsetof(illum_value_t, div_impuls), sizeof(illum_value_t) };
+
+		MPI_Datatype typ[6] = { MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE,MPI_DOUBLE, MPI_UB };
+		MPI_Type_struct(6, len, pos, typ, &MPI_illum_val_t);
+		MPI_Type_commit(&MPI_illum_val_t);
+}
+
+	// сборка всей сетки
+	{
+		int len[2 + 1] = { 1,1,1 };
+		MPI_Aint pos[3] = { offsetof(elem_t, phys_val), offsetof(elem_t, illum_val), sizeof(elem_t) };
+		MPI_Datatype typ[3] = { MPI_flux_t,MPI_illum_val_t , MPI_UB };
+		MPI_Type_struct(3, len, pos, typ, &MPI_flux_illum_elem_t);
+		MPI_Type_commit(&MPI_flux_illum_elem_t);
+	}
+#else
+	// сборка всей сетки
+	{
+		int len[1 + 1] = { 1,1 };
+		MPI_Aint pos[2] = { offsetof(elem_t, phys_val),  sizeof(elem_t) };
+		MPI_Datatype typ[2] = { MPI_flux_t , MPI_UB };
+		MPI_Type_struct(2, len, pos, typ, &MPI_flux_illum_elem_t);
+		MPI_Type_commit(&MPI_flux_illum_elem_t);
+	}
+#endif
+
 	int np, myid;
 	MPI_GET_INF(np, myid);
 	ReadMpiConf(glb_files.base_adress + F_MPI_CONF, myid, np);
+#endif
 
 	return;
 }

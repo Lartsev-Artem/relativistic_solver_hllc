@@ -249,6 +249,7 @@ fclose(f); \
 
 #ifdef  USE_MPI
 extern MPI_Datatype MPI_flux_t;
+extern MPI_Datatype MPI_flux_illum_elem_t;
 extern MPI_Datatype MPI_hllc_value_t;
 extern MPI_Datatype MPI_flux_all_t;
 extern MPI_Datatype MPI_flux_elem_t;

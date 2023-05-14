@@ -305,10 +305,43 @@ std::vector<mpi_conf_t> mpi_conf;
 static std::vector<MPI_Request> send_rq_rhllc;
 static std::vector<MPI_Request> recv_rq_rhllc;
 
+static std::vector<int> disp_gather;
+static std::vector<int> count_gather;
+
+int GatherRhllc(int myid, int np, std::vector<elem_t>& cells)
+{
+#if 0
+	MPI_Gatherv(cells.data() + disp_gather[myid], count_gather[myid], MPI_flux_illum_elem_t, cells.data(), count_gather.data(), disp_gather.data(),
+		MPI_flux_illum_elem_t, 0, MPI_COMM_WORLD);
+#else
+	if (myid != 0)
+	{
+		MPI_Send(cells.data() + mpi_conf[myid].left, mpi_conf[myid].right - mpi_conf[myid].left, MPI_flux_illum_elem_t, 0, myid, MPI_COMM_WORLD);
+	}
+	else
+	{
+		for (int tag = 1; tag < np; tag++)
+		{
+			MPI_Recv(cells.data() + mpi_conf[tag].left, mpi_conf[tag].right - mpi_conf[tag].left,
+				MPI_flux_illum_elem_t, tag, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		}
+	}
+#endif
+	return 0;
+}
+
 int InitMPI_RHllc(const std::vector<elem_t>& cells)
 {
 	int np, myid;
 	MPI_GET_INF(np, myid);
+
+	disp_gather.resize(np, 0);
+	count_gather.resize(np, 0);
+	for (int i = 0; i < np; i++)
+	{
+		count_gather[i] = mpi_conf[i].right - mpi_conf[i].left;
+		disp_gather[i] = mpi_conf[i].left;
+	}
 	
 	if (myid == 0 || myid == np - 1)
 	{
@@ -473,17 +506,19 @@ int RHLLC_3d_MPI(const Type tau, grid_t& grid)
 				phys_bound_val.p = 0.01;
 				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #elif defined Cone
-				//phys_bound_val.d = 0.1; // (3 * 1e-8 + 1e-12) / DENSITY;
-				//phys_bound_val.p = 1; // (100 + (1e-2)) / PRESSURE;
-				//phys_bound_val.v = Vector3(1e-4, 0, 0);// (Vector3(1e4, 0, 0)) / VELOCITY;
 
 				//phys_bound_val.d = Density(Vector3::Zero()) / DENSITY;
 				//phys_bound_val.p = Pressure(Vector3::Zero()) / PRESSURE;
 				//phys_bound_val.v = Velocity(Vector3::Zero()) / VELOCITY;
 
-				phys_bound_val.d = 0.1;
+				/*phys_bound_val.d = 0.1;
 				phys_bound_val.v << 0.99, 0, 0;
-				phys_bound_val.p = 0.01;
+				phys_bound_val.p = 0.01;*/
+				
+				phys_bound_val.d = 1;
+				phys_bound_val.p = 1;
+				phys_bound_val.v = Vector3(1e-2, 0, 0);
+
 				rhllc_get_conv_value_ost1098(phys_bound_val, bound_val);
 #else
 				bound_val = cell->conv_val;
